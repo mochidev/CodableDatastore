@@ -16,7 +16,7 @@ A pure-Swift implementation of a database-like persistent store for use in apps 
 
 ## Installation
 
-Add CodableDatastore as a dependency in your `Package.swift` file to start using it. Then, add `import CodableDatastore` to any file you wish to use the library in.
+Add `CodableDatastore` as a dependency in your `Package.swift` file to start using it. Then, add `import CodableDatastore` to any file you wish to use the library in.
 
 Please check the [releases](https://github.com/mochidev/CodableDatastore/releases) for recommended versions.
 
@@ -37,99 +37,67 @@ targets: [
 
 ## What is `CodableDatastore`?
 
-`CodableDatastore` is a collection of types that make it easy to interface with large datastores of independent types without loading the entire datastore in memory.
+`CodableDatastore` is a collection of types that make it easy to interface with large data stores of independent types without loading the entire data store in memory.
 
 ### Goals
 
 <details open>
-<summary>
-
-#### Use Codable and Identifiable to as the only requirements for types saved to the Datastore.
-
-</summary>
+<summary><strong>Use Codable and Identifiable to as the only requirements for types saved to the data store.</strong></summary>
 
 Having types conform to Codable and Identifiable as their only requirements means that many types won't need additional conformances or transformations to be used in other layers of the app, including at the view and network layers. Types must however conform to Identifiable so they can be updated when indexes require.
 
 </details>
 
 <details open>
-<summary>
-
-#### Allow the user to specify the Data-conforming Coder to use.
-
-</summary>
+<summary><strong>Allow the user to specify the Data-conforming Coder to use.</strong></summary>
 
 Since `CodableDatastore` works with Codable types, it can flexibly support different types of coders. Out of the box, we plan on supporting both JSON and Property List coders as they provide an easy way for users to investigate the data saved to the store should they require doing so.
 
 </details>
 
 <details open>
-<summary>
-
-#### Guarantee consistency across writes, using the filesystem to snapshot and make operations atomic.
-
-</summary>
+<summary><strong>Guarantee consistency across writes, using the filesystem to snapshot and make operations atomic.</strong></summary>
 
 All file operations will operate on copies of the files being modified, ultimately being persisted by updating the root file with a pointer to the updated set of files, and deleting the old file references once they are no longer referenced. This means that if the process is interrupted for any reason, data integrity is maintained and consistent.
 
-Additionally, if any unreferenced filed are identified, they could be placed in a Recovered Files directory allowing the developer of an app to help their users recover data should catastrophy arrise.
+Additionally, if any unreferenced filed are identified, they could be placed in a Recovered Files directory allowing the developer of an app to help their users recover data should catastrophe arise.
 
 </details>
 
 <details open>
-<summary>
+<summary><strong>Enable other processes to concurrently read from the data store.</strong></summary>
 
-#### Enable other processes to concurrently read from the Datastore.
+A common pattern is for App Extensions to need to read data from the main app, but not write to it. In this case, the data store can safely be opened as read only at the time of initialization, allowing the contents of that data store to be read by the app extension.
 
-</summary>
-
-A common pattern is for App Extensions to need to read data from the main app, but not write to it. In this case, the datastore can safely be opened as read only at the time of initialization, allowing the contents of that datastore to be read by the app extension.
-
-For cases where the Extension needs to write data for the app, it is suggested a separate datastore be used to communicate that flow of data, as datastores do not support multiple writting processes.
+For cases where the Extension needs to write data for the app, it is suggested a separate data store be used to communicate that flow of data, as data stores do not support multiple writing processes.
 
 </details>
 
 <details open>
-<summary>
+<summary><strong>Offer an API than can make performance promises.</strong></summary>
 
-#### Offer an API than can make performance promises.
-
-</summary>
-
-As the `CodableDatastore` is configured directly with indexes that the user specified, `CodableDatastore` can make performance guarantees without any hidden gatchas, as data can only be accessed via one of those indexes, and data cannot be loaded by a non-indexed key.
+As the `CodableDatastore` is configured directly with indexes that the user specified, `CodableDatastore` can make performance guarantees without any hidden gotchas, as data can only be accessed via one of those indexes, and data cannot be loaded by a non-indexed key.
 
 </details>
 
 <details open>
-<summary>
-
-#### Build on existing paradigms of the Swift language, using Swift concurrency to make operations async, and offer loading large amounts of data via Async Sequences.
-
-</summary>
+<summary><strong>Build on existing paradigms of the Swift language, using Swift concurrency to make operations async, and offer loading large amounts of data via Async Sequences.</strong></summary>
 
 `CodableDatastore` makes liberal use of Swift's concurrency APIs, with all reads and writes being async operations that can fail in a way the user can do something about, and offers streams to data being loaded via AsyncSequences, allowing data to be loaded efficiently at the rate the consumer expects it.
 
 </details>
 
 <details open>
-<summary>
-
-#### Allow re-indexing at any time, even for an existing datastore.
-
-</summary>
+<summary><strong>Allow re-indexing at any time, even for an existing data store.</strong></summary>
 
 Apps change how they access data during development, and indexes evolve as a result of that. Since indexes are configured in code, they can change between builds or releases, so `CodableDatastore` supports re-indexing data should it determine that indexes have been re-configured. A method is provided to allow the app to await the re-indexing process with progress so a user interface can be shown to the user while this is happening.
 
 </details>
 
 <details open>
-<summary>
+<summary><strong>Allow type-safe migrations for evolving datasets.</strong></summary>
 
-#### Allow type-safe migrations for evolving datasets.
-
-</summary>
-
-As apps evolve, the type of data they store evolves along with it. `CodableDatastore` provides no hasle migrations between older types and newer ones with typed versions to help you make sure you are covering all your bases. All you need to do is make sure to version older types and provide a translation between them and the type you expect.
+As apps evolve, the type of data they store evolves along with it. `CodableDatastore` provides no hassle migrations between older types and newer ones with typed versions to help you make sure you are covering all your bases. All you need to do is make sure to version older types and provide a translation between them and the type you expect.
 
 This migration can even be done on save if desired, meaning the user doesn't need to wait to perform a migration so long as the types are supported and indexes don't need to be re-calculated.
 
@@ -138,109 +106,73 @@ Additionally, we aim to make sure that testing migrations against data snapshots
 </details>
 
 <details open>
-<summary>
+<summary><strong>Allow transactional reads and writes.</strong></summary>
 
-#### Allow transactional reads and writes.
-
-</summary>
-
-Supporting atomic transactions is important when consistency between multiple data models is key to an app functioning correctly. A transaction being in progress means the objects updated by that transaction are locked for the duration of that transaction (other transactions will wait for this one to complete), and that all data is written to disk in a single final atomic write before returning that the transaction was complete. Importantly, this is done across datastores that share a common configuration, allowing the user to save independent types together. This also means that if a transaction fails, any updates it made will be reverted in the process.
+Supporting atomic transactions is important when consistency between multiple data models is key to an app functioning correctly. A transaction being in progress means the objects updated by that transaction are locked for the duration of that transaction (other transactions will wait for this one to complete), and that all data is written to disk in a single final atomic write before returning that the transaction was complete. Importantly, this is done across data stores that share a common configuration, allowing the user to save independent types together. This also means that if a transaction fails, any updates it made will be reverted in the process.
 
 </details>
 
 <details open>
-<summary>
-
-#### Have all configuration be described in code.
-
-</summary>
+<summary><strong>Have all configuration be described in code.</strong></summary>
 
 Instead of spreading the configuration across multiple different types or files, `CodableDatastore` aims to allow users of the library to have all configuration be defined in code, ideally in one place in an app.
 
 </details>
 
 <details open>
-<summary>
+<summary><strong>Enable easy testing with out-of-the-box mocks.</strong></summary>
 
-#### Enable easy testing with out-of-the-box mocks.
-
-</summary>
-
-A configuration can describe either an on-disk persistence or an in-memory persistence, allowing app-based tests to be written against the in-memory version with little reconfiguration necessary. Additionally, since all access to the Datastore is made through a common actor, stubbing a new datastore with compatible types should be easily attainable.
+A configuration can describe either an on-disk persistence or an in-memory persistence, allowing app-based tests to be written against the in-memory version with little reconfiguration necessary. Additionally, since all access to the data store is made through a common actor, stubbing a new data store with compatible types should be easily attainable.
 
 </details>
 
 ### Future Goals
 
 <details open>
-<summary>
+<summary><strong>Allow indexing to be described using variadic generics.</strong></summary>
 
-#### Allow indexing to be described using variadic generics.
-
-</summary>
-
-Swift 5.9 will introduce variadic generics allowing multiple indexes with different key paths to be described on the same Datastore. For now, we'll hard-code them as needed.
+Swift 5.9 will introduce variadic generics allowing multiple indexes with different key paths to be described on the same data store. For now, we'll hard-code them as needed.
 
 </details>
 
 <details open>
-<summary>
-
-#### Snapshotting and backups.
-
-</summary>
+<summary><strong>Snapshotting and backups.</strong></summary>
 
 Although not planned for 1.0, this system should support light-weight snapshotting fairly easily by duplicating the file structure, making use of APFS snapshots to make sure data is not actually duplicated. Support for doing this via the API will be coming soon.
 
 </details>
 
 <details open>
-<summary>
+<summary><strong>Data integrity.</strong></summary>
 
-#### Data integrity.
-
-</summary>
-
-Although CodableDatasource aims to maintain consistency for what is saved to the filesystem, it does nothing to maintain that the filesystem has not corrupted the data in the interrim. This can be solved using additional Error-Correcting Codes saved along-side every file to correct bit errors should they ever occur.
+Although `CodableDatastore` aims to maintain consistency for what is saved to the filesystem, it does nothing to maintain that the filesystem has not corrupted the data in the interim. This can be solved using additional Error-Correcting Codes saved along-side every file to correct bit errors should they ever occur.
 
 </details>
 
 <details open>
-<summary>
+<summary><strong>Encryption.</strong></summary>
 
-#### Encryption.
-
-</summary>
-
-Encrypting the datastore on disk could be supported in the future.
+Encrypting the data store on disk could be supported in the future.
 
 </details>
 
 ### Non-goals
 
 <details open>
-<summary>
+<summary><strong>Describe inter-dependencies between types.</strong></summary>
 
-#### Describe interdependencies between types.
+This usually dramatically increases the complexity of index structures and allows users of the API to not understand the performance implications of creating inter-dependent relationships between disparate types.
 
-</summary>
-
-This usually dramatically increates the complexity of index structures and allows users of the API to not understand the performance implications of creating inter-dependent relationships between disparate types.
-
-Instead, `CodableDatastore` aims to provide robust transactions between different Datastores with the same configuration, allowing the user to build their own relationships by updating two or more Datastores instead of these relationships being automatically built.
+Instead, `CodableDatastore` aims to provide robust transactions between different data stores with the same configuration, allowing the user to build their own relationships by updating two or more data stores instead of these relationships being automatically built.
 
 </details>
 
 <details open>
-<summary>
-
-#### Safely allow multiple writting processes.
-
-</summary>
+<summary><strong>Safely allow multiple writing processes.</strong></summary>
 
 Although multiple readers are supported, `CodableDatastore` intends a single process to write to disk persistence at once. This means that behavior is undefined if multiple writes happen from different processes. Ordinarily, this would be a problem in server-based deployments since server applications are traditionally run on multiple processes on a single machine, but most Swift-based server apps use a single process and multiple threads to achieve better performance, and would thus be compatible.
 
-If you are designing a scalable system that runs multiple processes, consider setting up a single instance with the Datastore, or multiple instances with their own independent Datastores to maintain these promises. Although not impossible, sharding and other strategies to keep multiple independent datastores in sync are left as an excersise to the user of this library.
+If you are designing a scalable system that runs multiple processes, consider setting up a single instance with the data store, or multiple instances with their own independent data stores to maintain these promises. Although not impossible, sharding and other strategies to keep multiple independent data stores in sync are left as an exercise to the user of this library.
 
 </details>
 
