@@ -6,7 +6,7 @@ on:
     - main
 
 jobs:
-  Test Release:
+  Test-Release:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -19,7 +19,7 @@ jobs:
       run: |
         swift test --skip-build --configuration release
 
-  Test Debug:
+  Test-Debug:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
