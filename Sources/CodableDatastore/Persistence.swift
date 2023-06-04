@@ -7,7 +7,7 @@
 //
 
 /// A persistence used to group multiple data stores into a common store.
-public protocol Persistence {
+public protocol Persistence: _Persistence {
     func perform(_ transaction: (_ persistence: Self) -> ()) async throws
 }
 
@@ -15,7 +15,7 @@ public protocol Persistence {
 ///
 /// Although this type is provided so other packages can implement their own persistences,
 /// none of these methods should be called directly.
-public protocol _Persistence: Persistence {
+public protocol _Persistence {
     func withTransaction(_ transaction: (_ persistence: Self) -> ()) async throws
 }
 

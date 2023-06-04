@@ -14,6 +14,7 @@ public struct Datastore<
     IdentifierType: Indexable
 > {
     public init(
+        persistence: any Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -66,6 +67,7 @@ extension Datastore {
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
     public init(
+        persistence: any Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -76,6 +78,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         configuration: Configuration = .init()
     ) {
         self.init(
+            persistence: persistence,
             key: key,
             version: version,
             codedType: codedType,
@@ -103,6 +106,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
 
 extension Datastore {
     static func jsonStore(
+        persistence: any Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -115,6 +119,7 @@ extension Datastore {
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
+            persistence: persistence,
             key: key,
             version: version,
             codedType: codedType,
@@ -122,7 +127,7 @@ extension Datastore {
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues({ migration in
                 return { data in
-                   return try await migration(data, decoder)
+                    return try await migration(data, decoder)
                 }
             }),
             directIndexes: directIndexes,
@@ -132,6 +137,7 @@ extension Datastore {
     }
     
     static func plistStore(
+        persistence: any Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -148,6 +154,7 @@ extension Datastore {
         let decoder = PropertyListDecoder()
         
         return self.init(
+            persistence: persistence,
             key: key,
             version: version,
             codedType: codedType,
@@ -167,6 +174,7 @@ extension Datastore {
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
     static func jsonStore(
+        persistence: any Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -178,6 +186,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         configuration: Configuration = .init()
     ) -> Self {
         self.jsonStore(
+            persistence: persistence,
             key: key,
             version: version,
             codedType: codedType,
@@ -192,6 +201,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
     
     static func plistStore(
+        persistence: any Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -202,6 +212,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         configuration: Configuration = .init()
     ) -> Self {
         self.plistStore(
+            persistence: persistence,
             key: key,
             version: version,
             codedType: codedType,
