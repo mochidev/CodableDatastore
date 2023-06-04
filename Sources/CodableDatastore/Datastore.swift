@@ -20,8 +20,8 @@ public struct Datastore<
         identifierType: IdentifierType.Type,
         encoder: (_ instance: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any Indexable>] = [],
-        computedIndexes: [KeyPath<CodedType, any Indexable>] = [],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) {
         
@@ -71,8 +71,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         encoder: (_ object: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any Indexable>] = [],
-        computedIndexes: [KeyPath<CodedType, any Indexable>] = [],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -110,8 +110,8 @@ extension Datastore {
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any Indexable>] = [],
-        computedIndexes: [KeyPath<CodedType, any Indexable>] = [],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -138,8 +138,8 @@ extension Datastore {
         identifierType: IdentifierType.Type,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any Indexable>] = [],
-        computedIndexes: [KeyPath<CodedType, any Indexable>] = [],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let encoder = PropertyListEncoder()
@@ -173,8 +173,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any Indexable>] = [],
-        computedIndexes: [KeyPath<CodedType, any Indexable>] = [],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.jsonStore(
@@ -197,8 +197,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any Indexable>] = [],
-        computedIndexes: [KeyPath<CodedType, any Indexable>] = [],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.plistStore(
