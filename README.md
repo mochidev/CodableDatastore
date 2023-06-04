@@ -69,7 +69,7 @@ Additionally, if any unreferenced filed are identified, they could be placed in 
 
 A common pattern is for App Extensions to need to read data from the main app, but not write to it. In this case, the data store can safely be opened as read only at the time of initialization, allowing the contents of that data store to be read by the app extension.
 
-For cases where the Extension needs to write data for the app, it is suggested a separate data store be used to communicate that flow of data, as data stores do not support multiple writing processes.
+For cases where the Extension needs to write data for the app, it is suggested a separate persistence be used to communicate that flow of data, as persistences do not support multiple writing processes.
 
 </details>
 
