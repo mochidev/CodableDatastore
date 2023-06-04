@@ -105,7 +105,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
 }
 
 extension Datastore {
-    static func jsonStore(
+    public static func JSONStore(
         persistence: any Persistence,
         key: String,
         version: Version,
@@ -136,7 +136,7 @@ extension Datastore {
         )
     }
     
-    static func plistStore(
+    public static func propertyListStore(
         persistence: any Persistence,
         key: String,
         version: Version,
@@ -173,7 +173,7 @@ extension Datastore {
 }
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
-    static func jsonStore(
+    static func JSONStore(
         persistence: any Persistence,
         key: String,
         version: Version,
@@ -185,7 +185,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
-        self.jsonStore(
+        self.JSONStore(
             persistence: persistence,
             key: key,
             version: version,
@@ -200,7 +200,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         )
     }
     
-    static func plistStore(
+    public static func propertyListStore(
         persistence: any Persistence,
         key: String,
         version: Version,
@@ -211,7 +211,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
-        self.plistStore(
+        self.propertyListStore(
             persistence: persistence,
             key: key,
             version: version,
