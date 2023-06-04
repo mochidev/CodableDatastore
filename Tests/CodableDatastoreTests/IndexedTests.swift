@@ -13,7 +13,7 @@ final class IndexedTests: XCTestCase {
     func testIndexed() throws {
         struct NonCodable {}
         
-        struct TestStruct {
+        struct TestStruct: Identifiable, Codable {
             var id: UUID
             
             @Indexed
@@ -79,5 +79,35 @@ final class IndexedTests: XCTestCase {
         let values = accessor.load(from: \.$age)
         XCTAssertEqual("\(values)", "[]")
         XCTAssertEqual("\(type(of: values))", "Array<TestStruct>")
+    }
+    
+    func testCodable() throws {
+        struct TestStruct: Identifiable, Codable, Equatable {
+            var id: UUID
+            
+            @Indexed
+            var name: String
+            
+            @Indexed
+            var age: Int = 1
+            
+            var other: [Int] = []
+            
+            // Technically possible, but heavily discouraged:
+            var composed: Indexed<String> { Indexed(wrappedValue: "\(name) \(age)") }
+        }
+        
+        let originalValue = TestStruct(id: UUID(uuidString: "58167FAA-18C2-43E7-8E31-66E28141C9FE")!, name: "Hello!")
+        
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(originalValue)
+        let newValue = try JSONDecoder().decode(TestStruct.self, from: data)
+        
+        XCTAssertEqual(originalValue, newValue)
+        
+        let jsonString = String(data: data, encoding: .utf8)!
+        print(jsonString)
+        XCTAssertEqual(jsonString, #"{"age":1,"id":"58167FAA-18C2-43E7-8E31-66E28141C9FE","name":"Hello!","other":[]}"#)
     }
 }
