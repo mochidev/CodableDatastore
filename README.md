@@ -14,6 +14,10 @@
 
 A pure-Swift implementation of a database-like persistent store for use in apps and other single-write-multiple-read environments.
 
+## Quick Links
+
+- [Documentation](https://swiftpackageindex.com/mochidev/CodableDatastore/documentation)
+
 ## Installation
 
 Add `CodableDatastore` as a dependency in your `Package.swift` file to start using it. Then, add `import CodableDatastore` to any file you wish to use the library in.
