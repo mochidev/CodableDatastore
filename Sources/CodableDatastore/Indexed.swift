@@ -87,7 +87,7 @@ public struct Indexed<T> where T: Indexable {
 }
 
 /// An internal protocol to use when evaluating types for indexed properties.
-protocol _Indexed {
+public protocol _Indexed<T> {
     associatedtype T: Indexable
     
     init(wrappedValue: T)
