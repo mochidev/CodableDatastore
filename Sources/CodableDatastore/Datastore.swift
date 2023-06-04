@@ -11,7 +11,8 @@ import Foundation
 public struct Datastore<
     Version: StringIndexable & Hashable & CaseIterable,
     CodedType: Codable,
-    IdentifierType: Indexable
+    IdentifierType: Indexable,
+    AccessMode: _AccessMode
 > {
     public init(
         persistence: any Persistence,
@@ -24,7 +25,21 @@ public struct Datastore<
         directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
         configuration: Configuration = .init()
-    ) {
+    ) where AccessMode == ReadWrite {
+        
+    }
+    
+    public init(
+        persistence: any Persistence,
+        key: String,
+        version: Version,
+        codedType: CodedType.Type = CodedType.self,
+        identifierType: IdentifierType.Type,
+        decoders: [Version: (_ data: Data) async throws -> CodedType],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        configuration: Configuration = .init()
+    ) where AccessMode == ReadOnly {
         
     }
     
@@ -35,14 +50,6 @@ public struct Datastore<
 }
 
 extension Datastore {
-    public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws {
-        
-    }
-    
-    public func delete(_ idenfifier: IdentifierType) async throws {
-        
-    }
-    
     public func load(_ idenfifier: IdentifierType) async throws -> CodedType? {
         return nil
     }
@@ -52,6 +59,20 @@ extension Datastore {
             continuation.finish()
         }
     }
+}
+
+extension Datastore where AccessMode == ReadWrite {
+    public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws {
+        
+    }
+    
+    public func delete(_ idenfifier: IdentifierType) async throws {
+        
+    }
+    
+    /// A read-only view into the data store.
+    // TODO: Make a proper copy here
+    public var readOnly: Datastore<Version, CodedType, IdentifierType, ReadOnly> { self as Any as! Datastore<Version, CodedType, IdentifierType, ReadOnly> }
 }
 
 extension Datastore {
@@ -66,36 +87,11 @@ extension Datastore {
 }
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
-    public init(
-        persistence: any Persistence,
-        key: String,
-        version: Version,
-        codedType: CodedType.Type = CodedType.self,
-        encoder: (_ object: CodedType) async throws -> Data,
-        decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        configuration: Configuration = .init()
-    ) {
-        self.init(
-            persistence: persistence,
-            key: key,
-            version: version,
-            codedType: codedType,
-            identifierType: codedType.ID.self,
-            encoder: encoder,
-            decoders: decoders,
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
-            configuration: configuration
-        )
-    }
-    
-    public func persist(_ instance: CodedType) async throws {
+    public func persist(_ instance: CodedType) async throws where AccessMode == ReadWrite {
         try await self.persist(instance, to: instance.id)
     }
     
-    func delete(_ instance: CodedType) async throws {
+    func delete(_ instance: CodedType) async throws where AccessMode == ReadWrite {
         try await self.delete(instance.id)
     }
     
@@ -104,7 +100,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
 }
 
-extension Datastore {
+extension Datastore where AccessMode == ReadWrite {
     public static func JSONStore(
         persistence: any Persistence,
         key: String,
@@ -162,6 +158,67 @@ extension Datastore {
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues({ migration in
                 return { data in
+                    return try await migration(data, decoder)
+                }
+            }),
+            directIndexes: directIndexes,
+            computedIndexes: computedIndexes,
+            configuration: configuration
+        )
+    }
+}
+
+extension Datastore where AccessMode == ReadOnly {
+    public static func readOnlyJSONStore(
+        persistence: any Persistence,
+        key: String,
+        version: Version,
+        codedType: CodedType.Type = CodedType.self,
+        identifierType: IdentifierType.Type,
+        decoder: JSONDecoder = JSONDecoder(),
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        configuration: Configuration = .init()
+    ) -> Self {
+        self.init(
+            persistence: persistence,
+            key: key,
+            version: version,
+            codedType: codedType,
+            identifierType: identifierType,
+            decoders: migrations.mapValues({ migration in
+                return { data in
+                   return try await migration(data, decoder)
+                }
+            }),
+            directIndexes: directIndexes,
+            computedIndexes: computedIndexes,
+            configuration: configuration
+        )
+    }
+    
+    public static func readOnlyPropertyListStore(
+        persistence: any Persistence,
+        key: String,
+        version: Version,
+        codedType: CodedType.Type = CodedType.self,
+        identifierType: IdentifierType.Type,
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        configuration: Configuration = .init()
+    ) -> Self {
+        let decoder = PropertyListDecoder()
+        
+        return self.init(
+            persistence: persistence,
+            key: key,
+            version: version,
+            codedType: codedType,
+            identifierType: identifierType,
+            decoders: migrations.mapValues({ migration in
+                return { data in
                    return try await migration(data, decoder)
                 }
             }),
@@ -172,8 +229,33 @@ extension Datastore {
     }
 }
 
-extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
-    static func JSONStore(
+extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadWrite {
+    public init(
+        persistence: any Persistence,
+        key: String,
+        version: Version,
+        codedType: CodedType.Type = CodedType.self,
+        encoder: (_ object: CodedType) async throws -> Data,
+        decoders: [Version: (_ data: Data) async throws -> CodedType],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        configuration: Configuration = .init()
+    ) where AccessMode == ReadWrite {
+        self.init(
+            persistence: persistence,
+            key: key,
+            version: version,
+            codedType: codedType,
+            identifierType: codedType.ID.self,
+            encoder: encoder,
+            decoders: decoders,
+            directIndexes: directIndexes,
+            computedIndexes: computedIndexes,
+            configuration: configuration
+        )
+    }
+    
+    public static func JSONStore(
         persistence: any Persistence,
         key: String,
         version: Version,
@@ -218,6 +300,79 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
             codedType: codedType,
             identifierType: codedType.ID.self,
             outputFormat: outputFormat,
+            migrations: migrations,
+            directIndexes: directIndexes,
+            computedIndexes: computedIndexes,
+            configuration: configuration
+        )
+    }
+}
+
+extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadOnly {
+    public init(
+        persistence: any Persistence,
+        key: String,
+        version: Version,
+        codedType: CodedType.Type = CodedType.self,
+        decoders: [Version: (_ data: Data) async throws -> CodedType],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        configuration: Configuration = .init()
+    ) where AccessMode == ReadOnly {
+        self.init(
+            persistence: persistence,
+            key: key,
+            version: version,
+            codedType: codedType,
+            identifierType: codedType.ID.self,
+            decoders: decoders,
+            directIndexes: directIndexes,
+            computedIndexes: computedIndexes,
+            configuration: configuration
+        )
+    }
+    
+    public static func readOnlyJSONStore(
+        persistence: any Persistence,
+        key: String,
+        version: Version,
+        codedType: CodedType.Type = CodedType.self,
+        decoder: JSONDecoder = JSONDecoder(),
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        configuration: Configuration = .init()
+    ) -> Self {
+        self.readOnlyJSONStore(
+            persistence: persistence,
+            key: key,
+            version: version,
+            codedType: codedType,
+            identifierType: codedType.ID.self,
+            decoder: decoder,
+            migrations: migrations,
+            directIndexes: directIndexes,
+            computedIndexes: computedIndexes,
+            configuration: configuration
+        )
+    }
+    
+    public static func readOnlyPropertyListStore(
+        persistence: any Persistence,
+        key: String,
+        version: Version,
+        codedType: CodedType.Type = CodedType.self,
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
+        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        configuration: Configuration = .init()
+    ) -> Self {
+        self.readOnlyPropertyListStore(
+            persistence: persistence,
+            key: key,
+            version: version,
+            codedType: codedType,
+            identifierType: codedType.ID.self,
             migrations: migrations,
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
