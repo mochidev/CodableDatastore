@@ -87,7 +87,7 @@ public struct Indexed<T> where T: Indexable {
 }
 
 /// An internal protocol to use when evaluating types for indexed properties.
-public protocol _Indexed<T> {
+public protocol _Indexed<T>: Indexable {
     associatedtype T: Indexable
     
     init(wrappedValue: T)
@@ -95,4 +95,23 @@ public protocol _Indexed<T> {
     var wrappedValue: T { get }
     var projectedValue: Self { get }
 }
-extension Indexed: _Indexed {}
+
+extension _Indexed {
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let wrappedValue = try container.decode(T.self)
+        
+        self.init(wrappedValue: wrappedValue)
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wrappedValue)
+    }
+    
+    public static func < (lhs: Self, rhs: Self) -> Bool { lhs.wrappedValue < rhs.wrappedValue }
+    public static func == (lhs: Self, rhs: Self) -> Bool { lhs.wrappedValue == rhs.wrappedValue }
+}
+
+extension Indexed: _Indexed {
+}
