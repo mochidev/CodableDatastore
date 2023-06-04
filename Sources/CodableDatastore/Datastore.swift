@@ -9,11 +9,11 @@
 import Foundation
 
 public struct Datastore<
-    Version: StringIndexable & Hashable & CaseIterable,
+    Version: RawRepresentable & Hashable & CaseIterable,
     CodedType: Codable,
     IdentifierType: Indexable,
     AccessMode: _AccessMode
-> {
+> where Version.RawValue: Indexable {
     public init(
         persistence: any Persistence,
         key: String,
