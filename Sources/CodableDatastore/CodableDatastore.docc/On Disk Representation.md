@@ -94,3 +94,66 @@ long enough for it to operate successfully.
         - 📦 C-%%%%%%%%%%%%%%%%.datastore
         - ...
 ```
+
+### Data Store
+
+```
+- 📦 A-0011223344556677.datastore
+    - 📂 History/
+        - 📃 yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.json
+        - ...
+    - 📂 Pages/
+        - 📦 A-%%%%%%%%%%%%%%%%.datastoreindex
+        - 📦 B-%%%%%%%%%%%%%%%%.datastoreindex
+        - 📦 C-%%%%%%%%%%%%%%%%.datastoreindex
+        - ...
+    - 📂 Indexes/
+        - 📦 A-%%%%%%%%%%%%%%%%.datastoreindex
+        - 📦 B-%%%%%%%%%%%%%%%%.datastoreindex
+        - 📦 C-%%%%%%%%%%%%%%%%.datastoreindex
+        - ...
+```
+
+### Data Store Index
+
+```
+- 📦 A-0011223344556677.datastoreindex
+    - 📂 yyyy/
+        - 📂 MM-dd/
+            - 📂 HH-mm/
+                - 📃 yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.datastorepage
+```
+
+### Direct Index Page Format
+
+```
+PAGE
+<15
+ata": "data" 
+}
+=42 version1
+7 object3
+{
+    "data": "data" 
+}
+>28 version1
+7 object4
+{
+    "d
+```
+
+### Secondary Index Page Format
+
+TODO: Just the index values here, linking to the page with the actual data, and the index of the object within that page.
+
+```
+PAGE
+<20
+6677.datastorepage@2
+=62
+7 object3
+2023-06-04 17-06-40 0011223344556677.datastorepage@5
+>25
+7 object4
+2023-06-04 17-0
+```
