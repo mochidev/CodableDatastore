@@ -54,7 +54,7 @@ extension Datastore {
         return nil
     }
     
-    public func load(_ range: any RangeExpression<IdentifierType>) async throws -> AsyncStream<CodedType> {
+    public func load(_ range: any IndexRangeExpression<IdentifierType>) async throws -> AsyncStream<CodedType> {
         return AsyncStream<CodedType> { continuation in
             continuation.finish()
         }
@@ -77,7 +77,7 @@ extension Datastore where AccessMode == ReadWrite {
 
 extension Datastore {
     public func load<IndexedValue>(
-        _ range: any RangeExpression<IdentifierType>,
+        _ range: any IndexRangeExpression<IdentifierType>,
         from keypath: KeyPath<CodedType, Indexed<IndexedValue>>
     ) async throws -> AsyncStream<CodedType> {
         return AsyncStream<CodedType> { continuation in
