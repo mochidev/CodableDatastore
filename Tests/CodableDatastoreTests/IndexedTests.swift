@@ -110,4 +110,37 @@ final class IndexedTests: XCTestCase {
         print(jsonString)
         XCTAssertEqual(jsonString, #"{"age":1,"id":"58167FAA-18C2-43E7-8E31-66E28141C9FE","name":"Hello!","other":[]}"#)
     }
+    
+    func testCodableIndexedString() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(Indexed(wrappedValue: "A string"))
+        let jsonString = String(data: data, encoding: .utf8)!
+        let decodedValue = try JSONDecoder().decode(String.self, from: data)
+        
+        XCTAssertEqual(jsonString, #""A string""#)
+        XCTAssertEqual(decodedValue, "A string")
+    }
+    
+    func testCodableIndexedInt() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(Indexed(wrappedValue: 1234))
+        let jsonString = String(data: data, encoding: .utf8)!
+        let decodedValue = try JSONDecoder().decode(Int.self, from: data)
+        
+        XCTAssertEqual(jsonString, #"1234"#)
+        XCTAssertEqual(decodedValue, 1234)
+    }
+    
+    func testCodableIndexedUUID() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(Indexed(wrappedValue: UUID(uuidString: "00112233-4455-6677-8899-AABBCCDDEEFF")!))
+        let jsonString = String(data: data, encoding: .utf8)!
+        let decodedValue = try JSONDecoder().decode(UUID.self, from: data)
+        
+        XCTAssertEqual(jsonString, #""00112233-4455-6677-8899-AABBCCDDEEFF""#)
+        XCTAssertEqual(decodedValue, UUID(uuidString: "00112233-4455-6677-8899-AABBCCDDEEFF"))
+    }
 }
