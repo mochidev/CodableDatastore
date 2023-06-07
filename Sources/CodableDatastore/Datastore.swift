@@ -61,6 +61,26 @@ extension Datastore {
     }
 }
 
+public enum Observation<CodedType, IdentifierType> {
+    case create(value: CodedType, identifier: IdentifierType)
+    case update(oldValue: CodedType, newValue: CodedType, identifier: IdentifierType)
+    case delete(value: CodedType, identifier: IdentifierType)
+}
+
+extension Datastore {
+    public func observe(_ idenfifier: IdentifierType) -> AsyncStream<Observation<CodedType, IdentifierType>> {
+        return AsyncStream<Observation<CodedType, IdentifierType>> { continuation in
+            continuation.finish()
+        }
+    }
+    
+    public func observe() -> AsyncStream<CodedType> {
+        return AsyncStream<CodedType> { continuation in
+            continuation.finish()
+        }
+    }
+}
+
 extension Datastore where AccessMode == ReadWrite {
     public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws {
         
@@ -97,6 +117,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     
     func load(_ instance: CodedType) async throws -> CodedType? {
         try await self.load(instance.id)
+    }
+    
+    public func observe(_ instance: CodedType) -> AsyncStream<Observation<CodedType, IdentifierType>> {
+        return AsyncStream<Observation<CodedType, IdentifierType>> { continuation in
+            continuation.finish()
+        }
     }
 }
 
