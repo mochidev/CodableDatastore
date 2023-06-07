@@ -20,6 +20,22 @@ public enum RangeBoundExpression<Bound: Comparable>: Equatable {
 
 extension RangeBoundExpression: Sendable where Bound: Sendable { }
 
+/// The order a range is declared in.
+public enum RangeOrder: Equatable {
+    /// The range is in ascending order.
+    case ascending
+    
+    /// The range is in descending order.
+    case descending
+    
+    var reversed: Self {
+        switch self {
+        case .ascending: return .descending
+        case .descending: return .ascending
+        }
+    }
+}
+
 /// A type that can represent a range within an index.
 public protocol IndexRangeExpression<Bound> {
     associatedtype Bound: Comparable
@@ -29,6 +45,20 @@ public protocol IndexRangeExpression<Bound> {
     
     /// The definition of the upper bound of the range.
     var upperBoundExpression: RangeBoundExpression<Bound> { get }
+    
+    ///The order the elements in the range appear.
+    var order: RangeOrder { get }
+}
+
+extension IndexRangeExpression {
+    /// Reverse a range so it is iterated on in the opposite direction.
+    var reversed: some IndexRangeExpression<Bound> {
+        IndexRange(
+            lower: lowerBoundExpression,
+            upper: upperBoundExpression,
+            order: order.reversed
+        )
+    }
 }
 
 /// The position relative to a range.
@@ -71,6 +101,8 @@ extension Range: IndexRangeExpression {
     public var lowerBoundExpression: RangeBoundExpression<Bound> { .including(lowerBound) }
     @inlinable
     public var upperBoundExpression: RangeBoundExpression<Bound> { .excluding(upperBound) }
+    @inlinable
+    public var order: RangeOrder { .ascending }
 }
 
 extension ClosedRange: IndexRangeExpression {
@@ -78,6 +110,8 @@ extension ClosedRange: IndexRangeExpression {
     public var lowerBoundExpression: RangeBoundExpression<Bound> { .including(lowerBound) }
     @inlinable
     public var upperBoundExpression: RangeBoundExpression<Bound> { .including(upperBound) }
+    @inlinable
+    public var order: RangeOrder { .ascending }
 }
 
 extension PartialRangeUpTo: IndexRangeExpression {
@@ -85,6 +119,8 @@ extension PartialRangeUpTo: IndexRangeExpression {
     public var lowerBoundExpression: RangeBoundExpression<Bound> { .extent }
     @inlinable
     public var upperBoundExpression: RangeBoundExpression<Bound> { .excluding(upperBound) }
+    @inlinable
+    public var order: RangeOrder { .ascending }
 }
 
 extension PartialRangeThrough: IndexRangeExpression {
@@ -92,6 +128,8 @@ extension PartialRangeThrough: IndexRangeExpression {
     public var lowerBoundExpression: RangeBoundExpression<Bound> { .extent }
     @inlinable
     public var upperBoundExpression: RangeBoundExpression<Bound> { .including(upperBound) }
+    @inlinable
+    public var order: RangeOrder { .ascending }
 }
 
 extension PartialRangeFrom: IndexRangeExpression {
@@ -99,4 +137,62 @@ extension PartialRangeFrom: IndexRangeExpression {
     public var lowerBoundExpression: RangeBoundExpression<Bound> { .including(lowerBound) }
     @inlinable
     public var upperBoundExpression: RangeBoundExpression<Bound> { .extent }
+    @inlinable
+    public var order: RangeOrder { .ascending }
+}
+
+/// A range of indices within an Index to fetch.
+public struct IndexRange<Bound: Comparable>: IndexRangeExpression {
+    /// The lower bound of the range.
+    ///
+    /// This must compare less than upper bound.
+    public var lowerBoundExpression: RangeBoundExpression<Bound>
+    
+    /// The upper bound of the range.
+    ///
+    /// This must compare greater than the lower bound.
+    public var upperBoundExpression: RangeBoundExpression<Bound>
+    
+    /// The order of the range to check.
+    public var order: RangeOrder
+    
+    /// Construct a range of indices within an Index to fetch.
+    ///
+    /// The lower bound must compare less than the upper bound, though a descending range can be specified with an order
+    public init(
+        lower lowerBoundExpression: RangeBoundExpression<Bound> = .extent,
+        upper upperBoundExpression: RangeBoundExpression<Bound> = .extent,
+        order: RangeOrder = .ascending
+    ) {
+        self.lowerBoundExpression = lowerBoundExpression
+        self.upperBoundExpression = upperBoundExpression
+        self.order = order
+    }
+}
+
+infix operator ..>
+postfix operator ..>
+
+extension Comparable {
+    /// A range excluding the lower bound.
+    @inlinable
+    public static func ..> (minimum: Self, maximum: Self) -> some IndexRangeExpression<Self> {
+        precondition(minimum == minimum, "Range cannot have an unordered lower bound.")
+        precondition(maximum == maximum, "Range cannot have an unordered upper bound.")
+        precondition(minimum <= maximum, "Range lower bound must be less than upper bound.")
+        return IndexRange(
+            lower: .excluding(minimum),
+            upper: .including(maximum)
+        )
+    }
+    
+    /// A partial range excluding the lower bound.
+    @inlinable
+    public static postfix func ..> (minimum: Self) -> some IndexRangeExpression<Self> {
+        precondition(minimum == minimum, "Range cannot have an unordered lower bound.")
+        return IndexRange(
+            lower: .excluding(minimum),
+            upper: .extent
+        )
+    }
 }
