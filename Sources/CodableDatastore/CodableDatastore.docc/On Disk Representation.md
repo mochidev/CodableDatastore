@@ -250,16 +250,13 @@ index's page.
 ```
 PAGE
 <20
-6677.datastorepage@2
+556677.datastorepage
 =62
 7 object3
 5@2023-06-04 17-06-40 0011223344556677.datastorepage
-=63
+>27
 7 object4
-5@2023-06-04 17-06-40 0011223344556677.datastorepage
->25
-7 object5
-2023-06-04 17-0
+2@2023-06-05 02-0
 ```
 
 In the above example, the overall page format is identical, but the payloads
