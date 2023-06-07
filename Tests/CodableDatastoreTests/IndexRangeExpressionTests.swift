@@ -15,11 +15,18 @@ final class IndexRangeExpressionTests: XCTestCase {
             range.lowerBoundExpression
         }
         
+        func lowerBoundExpression(_ range: Swift.UnboundedRange) -> RangeBoundExpression<Int> {
+            lowerBoundExpression(IndexRange())
+        }
+        
         XCTAssertEqual(lowerBoundExpression(1..<2), .including(1))
         XCTAssertEqual(lowerBoundExpression(1...2), .including(1))
+        XCTAssertEqual(lowerBoundExpression(1..>2), .excluding(1))
         XCTAssertEqual(lowerBoundExpression(..<2), .extent)
         XCTAssertEqual(lowerBoundExpression(...2), .extent)
         XCTAssertEqual(lowerBoundExpression(1...), .including(1))
+        XCTAssertEqual(lowerBoundExpression(1..>), .excluding(1))
+        XCTAssertEqual(lowerBoundExpression(...), .extent)
     }
     
     func testUpperBound() throws {
@@ -27,11 +34,18 @@ final class IndexRangeExpressionTests: XCTestCase {
             range.upperBoundExpression
         }
         
+        func upperBoundExpression(_ range: Swift.UnboundedRange) -> RangeBoundExpression<Int> {
+            upperBoundExpression(IndexRange())
+        }
+        
         XCTAssertEqual(upperBoundExpression(1..<2), .excluding(2))
         XCTAssertEqual(upperBoundExpression(1...2), .including(2))
+        XCTAssertEqual(upperBoundExpression(1..>2), .including(2))
         XCTAssertEqual(upperBoundExpression(..<2), .excluding(2))
         XCTAssertEqual(upperBoundExpression(...2), .including(2))
         XCTAssertEqual(upperBoundExpression(1...), .extent)
+        XCTAssertEqual(upperBoundExpression(1..>), .extent)
+        XCTAssertEqual(upperBoundExpression(...), .extent)
     }
     
     func testPosition() throws {
@@ -39,34 +53,53 @@ final class IndexRangeExpressionTests: XCTestCase {
             range.position(of: value)
         }
         
+        func position(of value: Int, in range: Swift.UnboundedRange) -> RangePosition {
+            position(of: value, in: IndexRange())
+        }
+        
         XCTAssertEqual(position(of: 0, in: 1..<3), .before)
         XCTAssertEqual(position(of: 0, in: 1...3), .before)
+        XCTAssertEqual(position(of: 0, in: 1..>3), .before)
         XCTAssertEqual(position(of: 0, in: ..<3), .within)
         XCTAssertEqual(position(of: 0, in: ...3), .within)
         XCTAssertEqual(position(of: 0, in: 1...), .before)
+        XCTAssertEqual(position(of: 0, in: 1..>), .before)
+        XCTAssertEqual(position(of: 0, in: ...), .within)
         
         XCTAssertEqual(position(of: 1, in: 1..<3), .within)
         XCTAssertEqual(position(of: 1, in: 1...3), .within)
+        XCTAssertEqual(position(of: 1, in: 1..>3), .before)
         XCTAssertEqual(position(of: 1, in: ..<3), .within)
         XCTAssertEqual(position(of: 1, in: ...3), .within)
         XCTAssertEqual(position(of: 1, in: 1...), .within)
+        XCTAssertEqual(position(of: 1, in: 1..>), .before)
+        XCTAssertEqual(position(of: 1, in: ...), .within)
         
         XCTAssertEqual(position(of: 2, in: 1..<3), .within)
         XCTAssertEqual(position(of: 2, in: 1...3), .within)
+        XCTAssertEqual(position(of: 2, in: 1..>3), .within)
         XCTAssertEqual(position(of: 2, in: ..<3), .within)
         XCTAssertEqual(position(of: 2, in: ...3), .within)
         XCTAssertEqual(position(of: 2, in: 1...), .within)
+        XCTAssertEqual(position(of: 2, in: 1..>), .within)
+        XCTAssertEqual(position(of: 2, in: ...), .within)
         
         XCTAssertEqual(position(of: 3, in: 1..<3), .after)
         XCTAssertEqual(position(of: 3, in: 1...3), .within)
+        XCTAssertEqual(position(of: 3, in: 1..>3), .within)
         XCTAssertEqual(position(of: 3, in: ..<3), .after)
         XCTAssertEqual(position(of: 3, in: ...3), .within)
         XCTAssertEqual(position(of: 3, in: 1...), .within)
+        XCTAssertEqual(position(of: 3, in: 1..>), .within)
+        XCTAssertEqual(position(of: 3, in: ...), .within)
         
         XCTAssertEqual(position(of: 4, in: 1..<3), .after)
         XCTAssertEqual(position(of: 4, in: 1...3), .after)
+        XCTAssertEqual(position(of: 4, in: 1..>3), .after)
         XCTAssertEqual(position(of: 4, in: ..<3), .after)
         XCTAssertEqual(position(of: 4, in: ...3), .after)
         XCTAssertEqual(position(of: 4, in: 1...), .within)
+        XCTAssertEqual(position(of: 4, in: 1..>), .within)
+        XCTAssertEqual(position(of: 4, in: ...), .within)
     }
 }
