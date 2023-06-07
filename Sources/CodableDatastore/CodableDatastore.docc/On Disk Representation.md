@@ -269,3 +269,54 @@ have a slightly different structure:
 These indexes start with `0`, where `0` is the first instance that starts on that page.
 - An `@`
 - The file name of the page in the primary direct index.
+
+## Operations
+
+The four common database operations are outlined below:
+
+### Persisting Instances
+
+1. If a [persistence store](#Persistence-Store) doesn't already exist, one is
+   created with an empty [snapshot](#Snapshot). Note that an empty persistence
+   store and snapshot may be created in advance via ``DiskPersistence`` to
+   reserve the file path should the need arise.
+2. If a [data store](#Data-Store) does not yet exist, it is created on first
+   write.
+3. If a snapshot is marked as dirty, it is scanned for abandoned pages and they
+   are cleaned up, usually by making a new snapshot so lost data can potentially
+   be recovered (TODO: Figure out a mechanism for data recovery).
+4. If [indexes](#Data-Store-Index) already exist, their types and keys are
+   compared to determine if they must change.
+    - Any removed or updated index are staged for deletion.
+    - Any new or updated indexes are staged for creation.
+5. If a primary direct index already exists, its manifest is loaded, and
+   a binary search begins by loading pages, comparing object index values until
+   a suitable page is found.
+    - If the primary direct index must be re-built, this process is skipped and
+      the entire data set is streamed in so it can be re-indexed.
+6. The snapshot is marked dirty by creating an empty `Dirty` file.
+7. A copy of the page where an update must be made, and the new instance is
+   either updated at the existing location, or inserted appropriately. If the
+   page grows in size, data blocks at the boundary are trimmed and a new page
+   is made after it.
+8. A new manifest for the primary index is written, inserting the updated or
+   new pages.
+9. Other indexes are subsequently updated by using the old value if exists to
+   look up their locations.
+10. A new root is written for the data store that was updated.
+11. The snapshot manifest is updated to point to the new root.
+12. Older roots and manifests are updated with any unique page references they
+    may contain, and are pruned if necessary.
+13. Non-referenced indexes that were staged are similarly pruned if they have
+    no references.
+14. Non-referenced pages in existing indexes are also pruned.
+15. The `Dirty` file is removed for the snapshot.
+
+The above is performed for a single transaction, so multiple updates can take
+advantage of this and be written at the same time. Updated made without
+a transaction are performed within one automatically, though these edits may
+be coalesced if they happen between writes to disk from multiple sources.
+
+As pages end up getting loaded repeatedly, manifests are cached in memory in
+persistences that write to disk, along with pages ordered by when they were
+last accessed.
