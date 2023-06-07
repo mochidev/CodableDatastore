@@ -2,7 +2,7 @@
 
 The on-disk representation of a ``DiskPersistence``.
 
-## Overview
+## File Storage Overview
 
 ``Datastore``s are grouped together within a single ``DiskPersistence`` when
 saved to disk, located at the user's chosen ``/Foundation/URL``.
@@ -29,7 +29,7 @@ Snapshots are saved in an organized grouping of folders based on the file names
 of individual snapshots. This is to ensure file system performance does not get
 impacted in the presence of many snapshots.
 
-For ease of manual inspection, a [snapshot][#Snapshot] is encoded with the
+For ease of manual inspection, a [snapshot](#Snapshot) is encoded with the
 following date format for when it was created:
 `yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.snapshot`, where `%%` is a random hex byte
 to ensure uniqueness. Keep in mind that the active snapshot is not necessarily
@@ -68,11 +68,11 @@ operating.
 
 ### Snapshot
 
-A snapshot represents a collection of data stores at a given moment in time. It
-is composed of a collection of data stores along with a manifest file that names
-those data stores and links to their root objects.
+A snapshot represents a collection of [data stores](#Data-Store) at a given
+moment in time. It is composed of a collection of data stores along with a
+manifest file that names those data stores and links to their root objects.
 
-Datastores are named using an auto-generated name: `A-%%%%%%%%%%%%%%%%.datastore`,
+Data stores are named using an auto-generated name: `A-%%%%%%%%%%%%%%%%.datastore`,
 where `A` is a string derived from the key, and `%%` is a random hex byte
 to ensure uniqueness. The original keys are stored in the Manifest. As
 a limited number of data stores are expected for a given app, no further
@@ -85,29 +85,71 @@ read-only persistence were to load a Manifest that was changed before it read
 the root, it would still reference an older root that should be kept around
 long enough for it to operate successfully.
 
+The `Dirty` file is only present if a snapshot didn't complete the process of
+cleaning up files after writing data. Although the snapshot itself should be in
+a consistent state, extra files might still be present, and thus a cleanup pass
+should happen.
+
+A data store supports external writes as a form of patches on top of the main
+data set. These patches are then consumed by the main process handling the
+datastore, one at a time. Patches are not guaranteed to be applied, especially
+if their prior state no longer matches the expectations they were based on.
+
 ```
 - 📦 2023-06-04 17-06-40 0011223344556677.snapshot
     - 📃 Manifest.json
+    - 📃 Dirty
     - 📂 Datastores/
         - 📦 A-%%%%%%%%%%%%%%%%.datastore
         - 📦 B-%%%%%%%%%%%%%%%%.datastore
         - 📦 C-%%%%%%%%%%%%%%%%.datastore
         - ...
+    - 📂 Inbox/
+        - 📃 yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.patch
+        - ...
 ```
 
 ### Data Store
 
+A data store stores [pages](#Direct-Index–Page-Format) of data for a single
+key and type, along with its [indexes](#Data-Store-Index). The root object that
+points to each index, and contains metadata about those indices, is stored in
+`Root`. Only root objects for the past 10 or so edits are kept around, so other
+readers of a data store can reliably read from a data store while other writes
+are happening, potentially destroying obsolete records in the process.
+[Snapshots](#Snapshot) point to a single root object at a time.
+
+Root objects are written as new files, making sure to update the parent
+[snapshot](#Snapshot) before deleting older root objects. Once a new root
+object is written, older ones may be updated solely to indicate which pages
+they uniquely refer to, so this information only needs to be re-calculated if
+the store is found to be dirty.
+
+Two kinds of indexes are supported: direct indexes, and secondary indexes.
+Direct indexes contain the entire instance and can be queried without a layer
+of indirection, though having more than one can result in higher write overhead
+along with more space usage. Secondary indexes only store the value their index
+refers to, along with a pointer to the page in the primary direct index
+(ie. the one based on the identifier of each instance).
+
+If indexes defined in code change, a difference will be calculated, deleting
+any old indexes, and re-computing pages for any new or updated indexes. This
+process will happen automatically on the first read (if the index changed or
+is new) or write (to any index) to the datastore, though it can be pre-empted
+by warming the datastore first and displaying appropriate UI with progress.
+
 ```
 - 📦 A-0011223344556677.datastore
-    - 📂 History/
+    - 📂 Root/
         - 📃 yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.json
         - ...
-    - 📂 Pages/
+    - 📂 DirectIndexes/
+        - 📦 Primary.datastoreindex
         - 📦 A-%%%%%%%%%%%%%%%%.datastoreindex
         - 📦 B-%%%%%%%%%%%%%%%%.datastoreindex
         - 📦 C-%%%%%%%%%%%%%%%%.datastoreindex
         - ...
-    - 📂 Indexes/
+    - 📂 SecondaryIndex/
         - 📦 A-%%%%%%%%%%%%%%%%.datastoreindex
         - 📦 B-%%%%%%%%%%%%%%%%.datastoreindex
         - 📦 C-%%%%%%%%%%%%%%%%.datastoreindex
@@ -116,22 +158,43 @@ long enough for it to operate successfully.
 
 ### Data Store Index
 
+A data store index is a collection of [pages](#Direct-Index–Page-Format), along
+with a single manifest file that points to the set of pages in their relevant
+order. Other information about the index is stored within the [data store](#Data-Store).
+
+Like the root objects in the data store, manifests are always written as
+new files, making sure to update the parent [snapshot](#Snapshot) before
+deleting older manifests. Once a new manifest is written, older ones may be
+updated solely to indicate which pages they uniquely refer to, so this
+information only needs to be re-calculated if the store is found to be dirty.
+Pages that are uniquely referred to can be safely deleted 
+
 ```
 - 📦 A-0011223344556677.datastoreindex
-    - 📂 yyyy/
-        - 📂 MM-dd/
-            - 📂 HH-mm/
-                - 📃 yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.datastorepage
+    - 📂 Manifest/
+        - 📃 yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.manifest
+        - ...
+    - 📂 Pages/
+        - 📂 yyyy/
+            - 📂 MM-dd/
+                - 📂 HH-mm/
+                    - 📃 yyyy-MM-dd HH-mm-ss %%%%%%%%%%%%%%%%.datastorepage
 ```
 
 ### Direct Index Page Format
+
+A direct index page is a collection of encoded instances along with some
+limited metadata, such as the index value they are sorted under and their
+version. These data blocks are prefixed accordingly such that they can span
+multiple pages should data be large.
 
 ```
 PAGE
 <15
 ata": "data" 
 }
-=42 version1
+=44
+8 version1
 7 object3
 {
     "data": "data" 
@@ -142,9 +205,47 @@ ata": "data"
     "d
 ```
 
+In the example above, a page explicitely starts with `PAGE\n`. The `\n` here
+indicates the page is using the first version of the human-readable page format.
+`PAGE ` (with a space) is reserved for future iterations of human-readable
+formats, while `PAGE\0` is reserved for a compressed and optionally encrypted
+binary representation.
+
+This is followed by a number of data blocks, that can take one of four forms:
+`<`, `=`, `>`, and `~`:
+- `<` indicates a block that represents the tail-end of a block from a previous
+  page. It is formed by collating `<`, a decimal number of the payload size,
+  a new line `\n`, the payload, and a final new line `\n`. The payload is
+  concatenated to a previous payload to build the message.
+    - If a block still doesn't fit on a single page, the preceding symbol is `~`
+      instead of `<`, and the payload size used is the amount of data contained
+      on _this_ page, and the next page must be opened as well.
+- `=` indicates a block completely represented on this page. It is formed by
+  collating `=`, a decimal number of the payload size, a space ` `, the payload,
+  and a final new line `\n`.
+- `>` indicates a block that is started on this page, but requires more space
+  to be fully represented, and the next page should be opened. It is formed by
+  collating `=`, a decimal number of the payload size, a space ` `, the payload,
+  and a final new line `\n`.
+
+When concatenated, the payload has the following structure:
+- A decimal number, indicating the size in bytes of the version string.
+- A space ` `
+- A version string
+- A new line `\n`
+- A decimal number, indicating the size in bytes of the index value.
+- A space ` `
+- The index value
+- A new line `\n`
+- The encoded data for the instance.
+
+
 ### Secondary Index Page Format
 
-TODO: Just the index values here, linking to the page with the actual data, and the index of the object within that page.
+Similarly to a [direct index page](#Direct-Index-Page-Format), a secondary index
+page is a collection of entries, however, the data stored in each entry is
+limited to the index value and a pointer to the entry within the primary direct
+index's page.
 
 ```
 PAGE
@@ -152,8 +253,22 @@ PAGE
 6677.datastorepage@2
 =62
 7 object3
-2023-06-04 17-06-40 0011223344556677.datastorepage@5
->25
+5@2023-06-04 17-06-40 0011223344556677.datastorepage
+=63
 7 object4
+5@2023-06-04 17-06-40 0011223344556677.datastorepage
+>25
+7 object5
 2023-06-04 17-0
 ```
+
+In the above example, the overall page format is identical, but the payloads
+have a slightly different structure:
+- A decimal number, indicating the size in bytes of the index value.
+- A space ` `
+- The index value
+- A new line `\n`
+- A decimal number representing the numerical index of the instance on the page.
+These indexes start with `0`, where `0` is the first instance that starts on that page.
+- An `@`
+- The file name of the page in the primary direct index.
