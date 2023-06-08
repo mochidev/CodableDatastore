@@ -73,16 +73,50 @@ final class DiskPersistenceTests: XCTestCase {
         XCTAssertTrue(try temporaryStoreURL.checkResourceIsReachable())
         XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Snapshots", isDirectory: true).checkResourceIsReachable())
         XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Backups", isDirectory: true).checkResourceIsReachable())
+        XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false).checkResourceIsReachable())
+    }
+    
+    func testStoreInfoOnEmptyStore() async throws {
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        try await persistence.createPersistenceIfNecessary()
+        
+        let data = try Data(contentsOf: temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false))
+        
+        struct TestStruct: Codable {
+            var version: String
+            var modificationDate: String
+            var currentSnapshot: String?
+        }
+        
+        let testStruct = try JSONDecoder().decode(TestStruct.self, from: data)
+        XCTAssertEqual(testStruct.version, "alpha")
+        XCTAssertNil(testStruct.currentSnapshot)
+        
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.formatOptions = [
+            .withInternetDateTime,
+            .withDashSeparatorInDate,
+            .withColonSeparatorInTime,
+            .withTimeZone,
+            .withFractionalSeconds
+        ]
+        XCTAssertNotNil(formatter.date(from: testStruct.modificationDate))
     }
     
     func testStoreCreatesOnlyIfNecessary() async throws {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
+        let dataBefore = try Data(contentsOf: temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false))
         // This second time should be a no-op and shouldn't throw
         try await persistence.createPersistenceIfNecessary()
         
         XCTAssertTrue(try temporaryStoreURL.checkResourceIsReachable())
         XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Snapshots", isDirectory: true).checkResourceIsReachable())
         XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Backups", isDirectory: true).checkResourceIsReachable())
+        XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false).checkResourceIsReachable())
+        
+        let dataAfter = try Data(contentsOf: temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false))
+        XCTAssertEqual(dataBefore, dataAfter)
     }
 }

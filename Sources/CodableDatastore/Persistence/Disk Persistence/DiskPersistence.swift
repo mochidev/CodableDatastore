@@ -35,6 +35,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The location of this persistence.
     let storeURL: URL
     
+    var cachedStoreInfo: StoreInfo?
+    
     /// Initialize a ``DiskPersistence`` with a read-write URL.
     ///
     /// Use this initializer when creating a persistence from the main process that will access it, such as your app. To access the same persistence from another process, use ``init(readOnlyURL:)`` instead.
@@ -118,6 +120,41 @@ extension DiskPersistence {
     var backupsURL: URL {
         storeURL.appendingPathComponent("Backups", isDirectory: true)
     }
+    
+    var storeInfoURL: URL {
+        storeURL.appendingPathComponent("Info.json", isDirectory: false)
+    }
+}
+
+extension DiskPersistence {
+    /// Load the store info from disk, or create a suitable starting value if such a file does not exist.
+    func loadStoreInfo() throws -> StoreInfo {
+        do {
+            let data = try Data(contentsOf: storeInfoURL)
+            
+            let storeInfoDecoder = JSONDecoder()
+            storeInfoDecoder.dateDecodingStrategy = .iso8601WithMilliseconds
+            let storeInfo = try storeInfoDecoder.decode(StoreInfo.self, from: data)
+            
+            cachedStoreInfo = storeInfo
+            return storeInfo
+        } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile {
+            return StoreInfo(modificationDate: Date())
+        } catch let error as NSError where error.domain == NSPOSIXErrorDomain && error.code == Int(POSIXError.ENOENT.rawValue) {
+            return StoreInfo(modificationDate: Date())
+        } catch {
+            throw error
+        }
+    }
+    
+    /// Write the specified store info to the store, and cache the results in ``DiskPersistence/cachedStoreInfo``.
+    func write(_ storeInfo: StoreInfo) throws {
+        let storeInfoEncoder = JSONEncoder()
+        storeInfoEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
+        let data = try storeInfoEncoder.encode(storeInfo)
+        try data.write(to: storeInfoURL, options: .atomic)
+        cachedStoreInfo = storeInfo
+    }
 }
 
 extension DiskPersistence where AccessMode == ReadWrite {
@@ -129,6 +166,13 @@ extension DiskPersistence where AccessMode == ReadWrite {
         try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: snapshotsURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: backupsURL, withIntermediateDirectories: true)
+        
+        // Load the store info, so we can see if we'll need to write it or not.
+        let storeInfo = try loadStoreInfo()
+        // If the cached store info is nil, we didn't have one already, so write the one we got back to disk.
+        if (cachedStoreInfo == nil) {
+            try write(storeInfo)
+        }
     }
 }
 
