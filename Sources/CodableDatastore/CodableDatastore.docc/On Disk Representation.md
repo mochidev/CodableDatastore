@@ -12,13 +12,13 @@ saved to disk, located at the user's chosen ``/Foundation/URL``.
 The persistence store is the top-most level a ``DiskPersistence`` uses, and
 contains a list of [snapshots](#Snapshots) and [backups](#Backups), a pointer
 to the most recent snapshot, and some basic metadata such as version and last
-modification date in `Manifest.json`.
+modification date in `Info.json`.
 
 The file layout is as follows:
 
 ```
 - 📦 Path/To/Data.persistencestore/
-    - 📃 Manifest.json
+    - 📃 Info.json
     - 📁 Snapshots/
     - 📁 Backups/
 ```
