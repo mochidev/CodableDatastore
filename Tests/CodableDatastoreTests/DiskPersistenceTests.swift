@@ -119,4 +119,29 @@ final class DiskPersistenceTests: XCTestCase {
         let dataAfter = try Data(contentsOf: temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false))
         XCTAssertEqual(dataBefore, dataAfter)
     }
+    
+    func testStoreInfoAccessOrder() async throws {
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        try await persistence.createPersistenceIfNecessary()
+        
+        let date1 = Date(timeIntervalSince1970: 0)
+        let date2 = Date(timeIntervalSince1970: 10)
+        
+        let task1 = await persistence.updateStoreInfo { storeInfo in
+            sleep(1)
+            XCTAssertNotEqual(storeInfo.modificationDate, date2)
+            storeInfo.modificationDate = date1
+        }
+        
+        let task2 = await persistence.updateStoreInfo { storeInfo in
+            XCTAssertEqual(storeInfo.modificationDate, date1)
+            storeInfo.modificationDate = date2
+        }
+        
+        try await task1.value
+        try await task2.value
+        
+        let currentStoreInfo = await persistence.cachedStoreInfo
+        XCTAssertEqual(currentStoreInfo?.modificationDate, date2)
+    }
 }

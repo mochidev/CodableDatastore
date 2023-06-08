@@ -37,6 +37,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     
     var cachedStoreInfo: StoreInfo?
     
+    var lastUpdateStoreInfoTask: Task<Any, Error>?
+    
     /// Initialize a ``DiskPersistence`` with a read-write URL.
     ///
     /// Use this initializer when creating a persistence from the main process that will access it, such as your app. To access the same persistence from another process, use ``init(readOnlyURL:)`` instead.
@@ -128,7 +130,7 @@ extension DiskPersistence {
 
 extension DiskPersistence {
     /// Load the store info from disk, or create a suitable starting value if such a file does not exist.
-    func loadStoreInfo() throws -> StoreInfo {
+    private func loadStoreInfo() throws -> StoreInfo {
         do {
             let data = try Data(contentsOf: storeInfoURL)
             
@@ -148,12 +150,43 @@ extension DiskPersistence {
     }
     
     /// Write the specified store info to the store, and cache the results in ``DiskPersistence/cachedStoreInfo``.
-    func write(_ storeInfo: StoreInfo) throws {
+    private func write(_ storeInfo: StoreInfo) throws {
         let storeInfoEncoder = JSONEncoder()
         storeInfoEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
         let data = try storeInfoEncoder.encode(storeInfo)
         try data.write(to: storeInfoURL, options: .atomic)
         cachedStoreInfo = storeInfo
+    }
+    
+    func updateStoreInfo<T>(_ updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) -> Task<T, Error> {
+        
+        /// Grab the last task so we can chain off of it in a serial manner.
+        let lastUpdaterTask = lastUpdateStoreInfoTask
+        let updaterTask = Task {
+            /// We don't care if the last request throws an error or not, but we do want it to complete first.
+            _ = try? await lastUpdaterTask?.value
+            
+            /// Load the store info so we have a fresh copy, unless we have a cached copy already.
+            var storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
+            
+            /// Let the updater do something with the store info.
+            let returnValue = try await updater(&storeInfo)
+            
+            /// Only write to the store if we changed the store info for any reason
+            if storeInfo != cachedStoreInfo {
+                try write(storeInfo)
+            }
+            return returnValue
+        }
+        lastUpdateStoreInfoTask = Task { try await updaterTask.value }
+        
+        return updaterTask
+    }
+    
+    func withStoreInfo<T>(_ updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) async throws -> T {
+        
+        let updaterTask = updateStoreInfo(updater)
+        return try await updaterTask.value
     }
 }
 
@@ -167,12 +200,8 @@ extension DiskPersistence where AccessMode == ReadWrite {
         try FileManager.default.createDirectory(at: snapshotsURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: backupsURL, withIntermediateDirectories: true)
         
-        // Load the store info, so we can see if we'll need to write it or not.
-        let storeInfo = try loadStoreInfo()
-        // If the cached store info is nil, we didn't have one already, so write the one we got back to disk.
-        if (cachedStoreInfo == nil) {
-            try write(storeInfo)
-        }
+        /// Load the store info, so we can see if we'll need to write it or not.
+        try await withStoreInfo { _ in }
     }
 }
 
