@@ -278,7 +278,7 @@ The four common database operations are outlined below:
 
 1. If a [persistence store](#Persistence-Store) doesn't already exist, one is
    created with an empty [snapshot](#Snapshot). Note that an empty persistence
-   store and snapshot may be created in advance via ``DiskPersistence`` to
+   store and snapshot may be created in advance via ``DiskPersistence/createPersistenceIfNecessary()`` to
    reserve the file path should the need arise.
 2. If a [data store](#Data-Store) does not yet exist, it is created on first
    write.
