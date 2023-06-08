@@ -35,8 +35,10 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The location of this persistence.
     let storeURL: URL
     
+    /// A cached instance of the store info as last loaded from disk.
     var cachedStoreInfo: StoreInfo?
     
+    /// A pointer to the last store info updater, so updates can be serialized after the last request
     var lastUpdateStoreInfoTask: Task<Any, Error>?
     
     /// Initialize a ``DiskPersistence`` with a read-write URL.
@@ -95,6 +97,7 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     }
 }
 
+// MARK: - Default Store
 extension DiskPersistence where AccessMode == ReadWrite {
     /// The default persistence for the read-write store of an app.
     public static func defaultStore() throws -> DiskPersistence<AccessMode> {
@@ -114,20 +117,25 @@ extension DiskPersistence where AccessMode == ReadOnly {
     }
 }
 
+// MARK: - Common URL accessors
 extension DiskPersistence {
+    /// The URL that points to the Snapshots directory.
     var snapshotsURL: URL {
         storeURL.appendingPathComponent("Snapshots", isDirectory: true)
     }
     
+    /// The URL that points to the Backups directory.
     var backupsURL: URL {
         storeURL.appendingPathComponent("Backups", isDirectory: true)
     }
     
+    /// The URL that points to the Info.json file.
     var storeInfoURL: URL {
         storeURL.appendingPathComponent("Info.json", isDirectory: false)
     }
 }
 
+// MARK: - Store Info
 extension DiskPersistence {
     /// Load the store info from disk, or create a suitable starting value if such a file does not exist.
     private func loadStoreInfo() throws -> StoreInfo {
@@ -150,7 +158,7 @@ extension DiskPersistence {
     }
     
     /// Write the specified store info to the store, and cache the results in ``DiskPersistence/cachedStoreInfo``.
-    private func write(_ storeInfo: StoreInfo) throws {
+    private func write(_ storeInfo: StoreInfo) throws where AccessMode == ReadWrite {
         let storeInfoEncoder = JSONEncoder()
         storeInfoEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
         let data = try storeInfoEncoder.encode(storeInfo)
@@ -158,7 +166,14 @@ extension DiskPersistence {
         cachedStoreInfo = storeInfo
     }
     
-    func updateStoreInfo<T>(_ updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) -> Task<T, Error> {
+    /// Load and update the store info in an updater, returning the task for the updater.
+    ///
+    /// This method loads the ``StoreInfo`` from cache, offers it to be mutated, then writes it back to disk, if it changed. It is up to the caller to update the modification date of the store.
+    ///
+    /// - Note: Calling this method when no store info exists on disk will create it, even if no changes occur in the block.
+    /// - Parameter updater: An updater that takes a mutable reference to a store info, and will forward the returned value to the caller.
+    /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
+    func updateStoreInfo<T>(_ updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) -> Task<T, Error> where AccessMode == ReadWrite {
         
         /// Grab the last task so we can chain off of it in a serial manner.
         let lastUpdaterTask = lastUpdateStoreInfoTask
@@ -183,13 +198,21 @@ extension DiskPersistence {
         return updaterTask
     }
     
-    func withStoreInfo<T>(_ updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) async throws -> T {
+    /// Load and update the store info in an updater.
+    ///
+    /// This method loads the ``StoreInfo`` from cache, offers it to be mutated, then writes it back to disk, if it changed. It is up to the caller to update the modification date of the store.
+    ///
+    /// - Note: Calling this method when no store info exists on disk will create it, even if no changes occur in the block.
+    /// - Parameter updater: An updater that takes a mutable reference to a store info, and will forward the returned value to the caller.
+    /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion. 
+    func withStoreInfo<T>(_ updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) async throws -> T where AccessMode == ReadWrite {
         
         let updaterTask = updateStoreInfo(updater)
         return try await updaterTask.value
     }
 }
 
+// MARK: - Persisitence Creation
 extension DiskPersistence where AccessMode == ReadWrite {
     /// Create the persistence store if necessary.
     ///
