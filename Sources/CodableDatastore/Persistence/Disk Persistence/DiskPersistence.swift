@@ -110,13 +110,25 @@ extension DiskPersistence where AccessMode == ReadOnly {
     }
 }
 
+extension DiskPersistence {
+    var snapshotsURL: URL {
+        storeURL.appendingPathComponent("Snapshots", isDirectory: true)
+    }
+    
+    var backupsURL: URL {
+        storeURL.appendingPathComponent("Backups", isDirectory: true)
+    }
+}
+
 extension DiskPersistence where AccessMode == ReadWrite {
     /// Create the persistence store if necessary.
     ///
     /// It is useful to call this if you wish for stub directories to be created immediately before a data store
     /// is actually written to the disk.
     public func createPersistenceIfNecessary() async throws {
-        
+        try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: snapshotsURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: backupsURL, withIntermediateDirectories: true)
     }
 }
 
