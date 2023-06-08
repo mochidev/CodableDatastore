@@ -7,7 +7,8 @@
 //
 
 /// A persistence used to group multiple data stores into a common store.
-public protocol Persistence: _Persistence {
+public protocol Persistence<AccessMode>: _Persistence {
+    associatedtype AccessMode: _AccessMode
     func perform(_ transaction: (_ persistence: Self) -> ()) async throws
 }
 

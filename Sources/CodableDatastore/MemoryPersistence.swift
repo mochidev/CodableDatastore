@@ -9,7 +9,7 @@
 import Foundation
 
 public actor MemoryPersistence: Persistence {
-    
+    public typealias AccessMode = ReadWrite
 }
 
 extension MemoryPersistence: _Persistence {
