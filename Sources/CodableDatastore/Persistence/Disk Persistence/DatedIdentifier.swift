@@ -16,7 +16,7 @@ struct Identifier<T>: DatedIdentifier {
     }
 }
 
-protocol DatedIdentifier: RawRepresentable, Codable, Equatable {
+protocol DatedIdentifier: RawRepresentable, Codable, Equatable, Hashable {
     var rawValue: String { get }
     init(rawValue: String)
 }
