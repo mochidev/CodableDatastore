@@ -144,4 +144,15 @@ final class DiskPersistenceTests: XCTestCase {
         let currentStoreInfo = await persistence.cachedStoreInfo
         XCTAssertEqual(currentStoreInfo?.modificationDate, date2)
     }
+    
+    func testAccessingStoreInfoAlsoCreatesPersistence() async throws {
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        try await persistence.withStoreInfo { _ in }
+        
+        XCTAssertTrue(try temporaryStoreURL.checkResourceIsReachable())
+        XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Snapshots", isDirectory: true).checkResourceIsReachable())
+        XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Backups", isDirectory: true).checkResourceIsReachable())
+        XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false).checkResourceIsReachable())
+    }
 }
