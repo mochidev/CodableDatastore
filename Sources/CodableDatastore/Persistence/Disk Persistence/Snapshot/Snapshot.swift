@@ -12,12 +12,14 @@ typealias SnapshotIdentifier = Identifier<Snapshot<ReadOnly>>
 
 /// A type that manages access to a snapshot on disk.
 actor Snapshot<AccessMode: _AccessMode> {
-    var identifer: SnapshotIdentifier
+    let identifier: SnapshotIdentifier
+    weak var persistence: DiskPersistence<AccessMode>?
     
     init(
         identifier: SnapshotIdentifier,
         persistence: DiskPersistence<AccessMode>
     ) {
-        self.identifer = identifier
+        self.identifier = identifier
+        self.persistence = persistence
     }
 }
