@@ -159,10 +159,16 @@ extension DiskPersistence {
     
     /// Write the specified store info to the store, and cache the results in ``DiskPersistence/cachedStoreInfo``.
     private func write(_ storeInfo: StoreInfo) throws where AccessMode == ReadWrite {
+        /// Make sure the directory exists first.
+        try createPersistenceDirectories()
+        
+        /// Encode the provided store info, and write it to disk.
         let storeInfoEncoder = JSONEncoder()
         storeInfoEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
         let data = try storeInfoEncoder.encode(storeInfo)
         try data.write(to: storeInfoURL, options: .atomic)
+        
+        /// Update the cache since we know what it should be.
         cachedStoreInfo = storeInfo
     }
     
@@ -193,6 +199,7 @@ extension DiskPersistence {
             }
             return returnValue
         }
+        /// Assign the task to our pointer so we can depend on it the next time. Also, re-wrap it so we can keep proper type information when returning from this method.
         lastUpdateStoreInfoTask = Task { try await updaterTask.value }
         
         return updaterTask
@@ -214,14 +221,26 @@ extension DiskPersistence {
 
 // MARK: - Persisitence Creation
 extension DiskPersistence where AccessMode == ReadWrite {
+    /// Create directories for our persistence.
+    private func createPersistenceDirectories() throws {
+        /// If we've cached our store info, we must have saved it, along with the rest of the structure.
+        guard cachedStoreInfo == nil else { return }
+        
+        try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: snapshotsURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: backupsURL, withIntermediateDirectories: true)
+    }
+    
     /// Create the persistence store if necessary.
     ///
     /// It is useful to call this if you wish for stub directories to be created immediately before a data store
     /// is actually written to the disk.
     public func createPersistenceIfNecessary() async throws {
-        try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: snapshotsURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: backupsURL, withIntermediateDirectories: true)
+        /// If we've cached our store info, we must have saved it, along with the rest of the structure.
+        guard cachedStoreInfo == nil else { return }
+        
+        /// Create directories for our persistence.
+        try createPersistenceDirectories()
         
         /// Load the store info, so we can see if we'll need to write it or not.
         try await withStoreInfo { _ in }
