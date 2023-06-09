@@ -21,7 +21,7 @@ struct StoreInfo: Codable, Equatable {
     var version: StoreInfoVersion = .alpha
     
     /// A pointer to the current snapshot.
-    var currentSnapshot: String?
+    var currentSnapshot: SnapshotIdentifier?
     
     /// The last modification date of the persistence.
     var modificationDate: Date

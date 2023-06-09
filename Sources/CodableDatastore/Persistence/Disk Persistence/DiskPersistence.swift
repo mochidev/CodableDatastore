@@ -219,6 +219,21 @@ extension DiskPersistence {
     }
 }
 
+// MARK: - Snapshot Management
+extension DiskPersistence {
+    /// Load the store info from disk, or create a suitable starting value if such a file does not exist.
+    private func loadSnapshot() async throws -> Snapshot<AccessMode> where AccessMode == ReadWrite {
+        try await withStoreInfo({ storeInfo in
+            let snapshotID = storeInfo.currentSnapshot ?? SnapshotIdentifier()
+            
+            let snapshot = Snapshot(identifier: snapshotID, persistence: self)
+            // TODO: Do more here
+            
+            return snapshot
+        })
+    }
+}
+
 // MARK: - Persisitence Creation
 extension DiskPersistence where AccessMode == ReadWrite {
     /// Create directories for our persistence.
