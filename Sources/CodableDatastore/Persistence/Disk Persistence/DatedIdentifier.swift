@@ -97,7 +97,7 @@ enum DatedIdentifierError: LocalizedError, Equatable {
 private extension StringProtocol {
     subscript (intRange: Range<Int>) -> String {
         let lowerBound = self.index(self.startIndex, offsetBy: intRange.lowerBound)
-        let upperBound = self.index(self.startIndex, offsetBy: intRange.lowerBound)
+        let upperBound = self.index(self.startIndex, offsetBy: intRange.upperBound)
         
         return String(self[lowerBound..<upperBound])
     }
