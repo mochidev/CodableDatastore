@@ -36,10 +36,15 @@ public enum DiskPersistenceInternalError: LocalizedError {
     /// A request to update store info failed as an update was made in an inconsistent state
     case nestedStoreWrite
     
+    /// A request to update snapshot manifest failed as an update was made in an inconsistent state
+    case nestedSnapshotWrite
+    
     public var errorDescription: String? {
         switch self {
         case .nestedStoreWrite:
             return "An internal error caused the store to be modified while it was being modified. Please report reproduction steps if found!"
+        case .nestedSnapshotWrite:
+            return "An internal error caused a snapshot to be modified while it was being modified. Please report reproduction steps if found!"
         }
     }
 }
