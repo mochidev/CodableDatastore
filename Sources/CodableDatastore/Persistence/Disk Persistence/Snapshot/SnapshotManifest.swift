@@ -16,9 +16,14 @@ enum SnapshotManifestVersion: String, Codable {
 }
 
 /// A struct to store information about a ``DiskPersistence``'s snapshot on disk.
-struct SnapshotManifest: Codable, Equatable {
+struct SnapshotManifest: Codable, Equatable, Identifiable {
     /// The version of the snapshot, used when dealing with format changes at the library level.
     var version: SnapshotManifestVersion = .alpha
+    
+    var id: SnapshotIdentifier
+    
+    /// The last modification date of the snaphot.
+    var modificationDate: Date
     
     /// The known datastores for this snapshot, and their roots.
     var dataStores: [String] = []

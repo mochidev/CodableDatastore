@@ -16,7 +16,7 @@ struct Identifier<T>: DatedIdentifier {
     }
 }
 
-protocol DatedIdentifier: RawRepresentable, Codable, Equatable, Hashable {
+protocol DatedIdentifier: RawRepresentable, Codable, Equatable, Hashable, CustomStringConvertible {
     var rawValue: String { get }
     init(rawValue: String)
 }
@@ -45,6 +45,8 @@ extension DatedIdentifier {
             try DatedIdentifierComponents(self)
         }
     }
+    
+    var description: String { rawValue }
 }
 
 struct DatedIdentifierComponents {

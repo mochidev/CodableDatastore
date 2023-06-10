@@ -100,17 +100,17 @@ extension DiskPersistence where AccessMode == ReadOnly {
 // MARK: - Common URL Accessors
 extension DiskPersistence {
     /// The URL that points to the Snapshots directory.
-    var snapshotsURL: URL {
+    nonisolated var snapshotsURL: URL {
         storeURL.appendingPathComponent("Snapshots", isDirectory: true)
     }
     
     /// The URL that points to the Backups directory.
-    var backupsURL: URL {
+    nonisolated var backupsURL: URL {
         storeURL.appendingPathComponent("Backups", isDirectory: true)
     }
     
     /// The URL that points to the Info.json file.
-    var storeInfoURL: URL {
+    nonisolated var storeInfoURL: URL {
         storeURL.appendingPathComponent("Info.json", isDirectory: false)
     }
 }
@@ -264,7 +264,7 @@ extension DiskPersistence {
             return snapshot
         }
         
-        let snapshot = Snapshot(identifier: snapshotID, persistence: self)
+        let snapshot = Snapshot(id: snapshotID, persistence: self)
         snapshots[snapshotID] = snapshot
         
         return snapshot
@@ -294,7 +294,7 @@ extension DiskPersistence {
             let returnValue = try await updater(snapshot)
             
             /// Update the store info with snapshot info
-            storeInfo.currentSnapshot = snapshot.identifier
+            storeInfo.currentSnapshot = snapshot.id
             storeInfo.modificationDate = modificationDate
             
             return returnValue
