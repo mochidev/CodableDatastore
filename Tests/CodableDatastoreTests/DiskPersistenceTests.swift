@@ -155,4 +155,37 @@ final class DiskPersistenceTests: XCTestCase {
         XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Backups", isDirectory: true).checkResourceIsReachable())
         XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Info.json", isDirectory: false).checkResourceIsReachable())
     }
+    
+    func testCallingStoreInfoResursively() async throws {
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        try await persistence.withStoreInfo { storeInfoA in
+            let originalStoreA = storeInfoA
+            storeInfoA.modificationDate = Date(timeIntervalSince1970: 1)
+            let modifiedStoreA = storeInfoA
+            try await persistence.withStoreInfo { storeInfoB in
+                XCTAssertEqual(originalStoreA, storeInfoB)
+                XCTAssertNotEqual(modifiedStoreA, storeInfoB)
+            }
+        }
+        
+        try await persistence.withStoreInfo { storeInfoA in
+            try await persistence.withStoreInfo { storeInfoB in
+                // No change:
+                storeInfoB.modificationDate = Date(timeIntervalSince1970: 1)
+            }
+        }
+        
+        do {
+            try await persistence.withStoreInfo { storeInfoA in
+                try await persistence.withStoreInfo { storeInfoB in
+                    storeInfoB.modificationDate = Date(timeIntervalSince1970: 2)
+                }
+            }
+            XCTFail("Reached code that shouldn't run")
+        } catch {
+            XCTAssertEqual(error as? DiskPersistenceInternalError, .nestedStoreWrite)
+        }
+        
+    }
 }
