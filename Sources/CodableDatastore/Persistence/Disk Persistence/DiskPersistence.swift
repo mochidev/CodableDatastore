@@ -8,29 +8,6 @@
 
 import Foundation
 
-/// A ``DiskPersistence``-specific error.
-public enum DiskPersistenceError: LocalizedError {
-    /// The specified URL for the persistence store is not a file URL.
-    case notFileURL
-    
-    /// A default store could not be created due to a missing main bundle ID.
-    case missingBundleID
-    
-    /// A default store could not be created due to a missing application support directory.
-    case missingAppSupportDirectory
-    
-    public var errorDescription: String? {
-        switch self {
-        case .notFileURL:
-            return "The persistence store cannot be saved to the specified URL."
-        case .missingBundleID:
-            return "The persistence store cannot be saved to the default URL as it is not running in the context of an app."
-        case .missingAppSupportDirectory:
-            return "The persistence store cannot be saved to the default URL as an Application Support directory could built for this system."
-        }
-    }
-}
-
 public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The location of this persistence.
     let storeURL: URL
@@ -184,6 +161,19 @@ extension DiskPersistence {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateStoreInfo<T>(updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) -> Task<T, Error> where AccessMode == ReadWrite {
         
+        if let storeInfo = DiskPersistenceTaskLocals.storeInfo {
+            return Task {
+                var updatedStoreInfo = storeInfo
+                let returnValue = try await updater(&updatedStoreInfo)
+                
+                guard updatedStoreInfo == storeInfo else {
+                    throw DiskPersistenceInternalError.nestedStoreWrite
+                }
+                
+                return returnValue
+            }
+        }
+        
         /// Grab the last task so we can chain off of it in a serial manner.
         let lastUpdaterTask = lastUpdateStoreInfoTask
         let updaterTask = Task {
@@ -193,8 +183,10 @@ extension DiskPersistence {
             /// Load the store info so we have a fresh copy, unless we have a cached copy already.
             var storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
             
-            /// Let the updater do something with the store info.
-            let returnValue = try await updater(&storeInfo)
+            /// Let the updater do something with the store info, storing the variable on the Task Local stack.
+            let returnValue = try await DiskPersistenceTaskLocals.$storeInfo.withValue(storeInfo) {
+                try await updater(&storeInfo)
+            }
             
             /// Only write to the store if we changed the store info for any reason
             if storeInfo != cachedStoreInfo {
@@ -216,6 +208,10 @@ extension DiskPersistence {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateStoreInfo<T>(accessor: @escaping (_ storeInfo: StoreInfo) async throws -> T) -> Task<T, Error> where AccessMode == ReadOnly {
         
+        if let storeInfo = DiskPersistenceTaskLocals.storeInfo {
+            return Task { try await accessor(storeInfo) }
+        }
+        
         /// Grab the last task so we can chain off of it in a serial manner.
         let lastUpdaterTask = lastUpdateStoreInfoTask
         let updaterTask = Task {
@@ -223,10 +219,12 @@ extension DiskPersistence {
             _ = try? await lastUpdaterTask?.value
             
             /// Load the store info so we have a fresh copy, unless we have a cached copy already.
-            var storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
+            let storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
             
-            /// Let the accessor do something with the store info.
-            return try await accessor(storeInfo)
+            /// Let the accessor do something with the store info, storing the variable on the Task Local stack.
+            return try await DiskPersistenceTaskLocals.$storeInfo.withValue(storeInfo) {
+                try await accessor(storeInfo)
+            }
         }
         /// Assign the task to our pointer so we can depend on it the next time. Also, re-wrap it so we can keep proper type information when returning from this method.
         lastUpdateStoreInfoTask = Task { try await updaterTask.value }
@@ -390,6 +388,11 @@ enum ModificationUpdate {
         case .set(let newDate): return newDate
         }
     }
+}
+
+private enum DiskPersistenceTaskLocals {
+    @TaskLocal
+    static var storeInfo: StoreInfo?
 }
 
 extension DiskPersistence: _Persistence {
