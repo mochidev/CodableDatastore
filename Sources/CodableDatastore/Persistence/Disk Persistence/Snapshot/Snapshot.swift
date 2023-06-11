@@ -8,7 +8,7 @@
 
 import Foundation
 
-typealias SnapshotIdentifier = Identifier<Snapshot<ReadOnly>>
+typealias SnapshotIdentifier = DatedIdentifier<Snapshot<ReadOnly>>
 
 /// A type that manages access to a snapshot on disk.
 actor Snapshot<AccessMode: _AccessMode> {

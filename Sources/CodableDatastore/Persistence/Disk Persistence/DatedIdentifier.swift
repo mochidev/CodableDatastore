@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct Identifier<T>: DatedIdentifier {
+struct DatedIdentifier<T>: DatedIdentifierProtocol {
     var rawValue: String
     
     init(rawValue: String) {
@@ -16,22 +16,12 @@ struct Identifier<T>: DatedIdentifier {
     }
 }
 
-protocol DatedIdentifier: RawRepresentable, Codable, Equatable, Hashable, CustomStringConvertible {
+protocol DatedIdentifierProtocol: TypedIdentifierProtocol {
     var rawValue: String { get }
     init(rawValue: String)
 }
 
-extension DatedIdentifier {
-    init(from decoder: Decoder) throws {
-        let rawValue = try decoder.singleValueContainer().decode(String.self)
-        self.init(rawValue: rawValue)
-    }
-    
-    func encode(to encoder: Encoder) throws {
-        var encoder = encoder.singleValueContainer()
-        try encoder.encode(rawValue)
-    }
-    
+extension DatedIdentifierProtocol {
     init(
         date: Date = Date(),
         token: UInt64 = .random(in: UInt64.min...UInt64.max)
@@ -45,8 +35,6 @@ extension DatedIdentifier {
             try DatedIdentifierComponents(self)
         }
     }
-    
-    var description: String { rawValue }
 }
 
 struct DatedIdentifierComponents {
@@ -60,7 +48,7 @@ struct DatedIdentifierComponents {
     
     var token: String
     
-    init(_ identifier: some DatedIdentifier) throws {
+    init(_ identifier: some DatedIdentifierProtocol) throws {
         let rawString = identifier.rawValue
         guard rawString.count == 36 else {
             throw DatedIdentifierError.invalidLength
