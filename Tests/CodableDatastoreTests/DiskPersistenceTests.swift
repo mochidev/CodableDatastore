@@ -21,7 +21,7 @@ final class DiskPersistenceTests: XCTestCase {
     }
     
     func testTypes() throws {
-#if !os(Linux)
+#if canImport(Darwin)
         XCTAssertTrue(type(of: try DiskPersistence.defaultStore() as Any) is DiskPersistence<ReadWrite>.Type)
         XCTAssertTrue(type(of: try DiskPersistence.readOnlyDefaultStore() as Any) is DiskPersistence<ReadOnly>.Type)
 #endif
@@ -29,7 +29,7 @@ final class DiskPersistenceTests: XCTestCase {
         XCTAssertTrue(type(of: DiskPersistence(readOnlyURL: FileManager.default.temporaryDirectory) as Any) is DiskPersistence<ReadOnly>.Type)
     }
     
-#if os(Linux)
+#if !canImport(Darwin)
     func testDefaultURLs() async throws {
         do {
             _ = try await DiskPersistence.defaultStore().storeURL

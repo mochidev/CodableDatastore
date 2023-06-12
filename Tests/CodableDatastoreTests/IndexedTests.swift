@@ -16,10 +16,10 @@ final class IndexedTests: XCTestCase {
         struct TestStruct: Identifiable, Codable {
             var id: UUID
             
-            @Indexed
-            var name: String
+            @Indexed(key: "name")
+            var name: String = ""
             
-            @Indexed
+            @Indexed(key: "age")
             var age: Int = 1
             
             var other: [Int] = []
@@ -28,14 +28,14 @@ final class IndexedTests: XCTestCase {
 //            var nonCodable = NonCodable() // Not allowed!
             
             // Technically possible, but heavily discouraged:
-            var composed: _AnyIndexed { Indexed(wrappedValue: "\(name) \(age)").projectedValue }
+            var composed: _AnyIndexed { Indexed(wrappedValue: "\(name) \(age)", key: "composed").projectedValue }
         }
         
         let myValue = TestStruct(id: UUID(), name: "Hello!")
         
         XCTAssertEqual("\(myValue[keyPath: \.age])", "1")
 //        XCTAssertEqual("\(myValue[keyPath: \.$age])", "Indexed<Int>(wrappedValue: 1)")
-        XCTAssertEqual("\(myValue[keyPath: \.composed])", #"_AnyIndexed(indexedType: "Indexed<String>", indexed: CodableDatastore.Indexed<Swift.String>(wrappedValue: "Hello! 1"))"#)
+        XCTAssertEqual("\(myValue[keyPath: \.composed])", #"_AnyIndexed(indexed: CodableDatastore.Indexed<Swift.String>(wrappedValue: "Hello! 1", key: "composed"), indexedType: "String", key: "composed")"#)
         
         // This did not work unfortunately:
 //        withUnsafeTemporaryAllocation(of: TestStruct.self, capacity: 1) { pointer in
