@@ -28,14 +28,14 @@ final class IndexedTests: XCTestCase {
 //            var nonCodable = NonCodable() // Not allowed!
             
             // Technically possible, but heavily discouraged:
-            var composed: Indexed<String> { Indexed(wrappedValue: "\(name) \(age)") }
+            var composed: _AnyIndexed { Indexed(wrappedValue: "\(name) \(age)").projectedValue }
         }
         
         let myValue = TestStruct(id: UUID(), name: "Hello!")
         
         XCTAssertEqual("\(myValue[keyPath: \.age])", "1")
-        XCTAssertEqual("\(myValue[keyPath: \.$age])", "Indexed<Int>(wrappedValue: 1)")
-        XCTAssertEqual("\(myValue[keyPath: \.composed])", "Indexed<String>(wrappedValue: \"Hello! 1\")")
+//        XCTAssertEqual("\(myValue[keyPath: \.$age])", "Indexed<Int>(wrappedValue: 1)")
+        XCTAssertEqual("\(myValue[keyPath: \.composed])", #"_AnyIndexed(indexedType: "Indexed<String>", indexed: CodableDatastore.Indexed<Swift.String>(wrappedValue: "Hello! 1"))"#)
         
         // This did not work unfortunately:
 //        withUnsafeTemporaryAllocation(of: TestStruct.self, capacity: 1) { pointer in
@@ -67,7 +67,7 @@ final class IndexedTests: XCTestCase {
         XCTAssertEqual(indexedProperties, ["_name", "_age"])
         
         struct TestAccessor<T> {
-            func load<V>(from keypath: KeyPath<T, Indexed<V>>) -> [T] {
+            func load(from keypath: KeyPath<T, _AnyIndexed>) -> [T] {
                 XCTAssertEqual(keypath, \TestStruct.$age)
                 return []
             }

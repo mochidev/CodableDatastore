@@ -77,20 +77,33 @@ public struct Indexed<T> where T: Indexable {
         self.wrappedValue = wrappedValue
     }
     
-    /// The projected value of the indexed property, which is ourself.
+    /// The projected value of the indexed property, which is a type-erased version of ourself.
     ///
     /// This allows the indexed property to be used in the data store using `.$property` syntax.
-    public var projectedValue: Self { self }
+    public var projectedValue: _AnyIndexed { _AnyIndexed(indexed: self) }
+}
+
+/// A type-erased wrapper for indexed types.
+///
+/// You should not reach for this directly, and instead use the @``Indexed`` property wrapper.
+public struct _AnyIndexed {
+    var indexedType: String
+    var indexed: any _Indexed
+    
+    init(indexed: any _Indexed) {
+        self.indexed = indexed
+        indexedType = String(describing: type(of: indexed))
+    }
 }
 
 /// An internal protocol to use when evaluating types for indexed properties.
-public protocol _Indexed<T>: Indexable {
+protocol _Indexed<T>: Indexable {
     associatedtype T: Indexable
     
     init(wrappedValue: T)
     
     var wrappedValue: T { get }
-    var projectedValue: Self { get }
+    var projectedValue: _AnyIndexed { get }
 }
 
 extension _Indexed {
