@@ -90,9 +90,9 @@ public struct _AnyIndexed {
     var indexedType: String
     var indexed: any _Indexed
     
-    init(indexed: any _Indexed) {
+    init<T>(indexed: Indexed<T>) {
         self.indexed = indexed
-        indexedType = String(describing: type(of: indexed))
+        indexedType = String(describing: T.self)
     }
 }
 
