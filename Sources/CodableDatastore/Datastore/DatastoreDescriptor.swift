@@ -105,7 +105,7 @@ extension DatastoreDescriptor {
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.key == "id" && sampleInstance is any Identifiable.Type {
+            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -120,7 +120,7 @@ extension DatastoreDescriptor {
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.key == "id" && sampleInstance is any Identifiable.Type {
+            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -147,6 +147,11 @@ extension DatastoreDescriptor {
                 key: actualKey,
                 indexType: childValue.projectedValue.indexedType
             )
+            
+            /// If the type is identifiable, skip the `id` index as we always make one based on `id`
+            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
+                continue
+            }
             
             if !directIndexes.contains(indexDescriptor) {
                 secondaryIndexes.insert(indexDescriptor)
