@@ -22,8 +22,8 @@ public struct Datastore<
         identifierType: IdentifierType.Type,
         encoder: (_ instance: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
         
@@ -36,8 +36,8 @@ public struct Datastore<
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
         
@@ -136,8 +136,8 @@ extension Datastore where AccessMode == ReadWrite {
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -166,8 +166,8 @@ extension Datastore where AccessMode == ReadWrite {
         identifierType: IdentifierType.Type,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let encoder = PropertyListEncoder()
@@ -203,8 +203,8 @@ extension Datastore where AccessMode == ReadOnly {
         identifierType: IdentifierType.Type,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -231,8 +231,8 @@ extension Datastore where AccessMode == ReadOnly {
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let decoder = PropertyListDecoder()
@@ -263,8 +263,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         encoder: (_ object: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
         self.init(
@@ -289,8 +289,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.JSONStore(
@@ -315,8 +315,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.propertyListStore(
@@ -341,8 +341,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
         self.init(
@@ -365,8 +365,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyJSONStore(
@@ -389,8 +389,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [KeyPath<CodedType, any _Indexed>] = [],
-        computedIndexes: [KeyPath<CodedType, any _Indexed>] = [],
+        directIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [KeyPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyPropertyListStore(
