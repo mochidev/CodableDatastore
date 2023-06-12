@@ -133,7 +133,7 @@ extension DatastoreDescriptor {
         
         for child in mirror.children {
             guard let label = child.label else { continue }
-            guard let childValue = child.value as? any _Indexed else { continue }
+            guard let childValue = child.value as? any _IndexedProtocol else { continue }
             
             let actualKey: String
             if label.prefix(1) == "_" {
