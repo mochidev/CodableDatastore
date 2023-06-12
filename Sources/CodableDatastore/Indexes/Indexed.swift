@@ -88,7 +88,7 @@ public struct Indexed<T> where T: Indexable {
 /// You should not reach for this directly, and instead use the @``Indexed`` property wrapper.
 public struct _AnyIndexed {
     var indexedType: String
-    var indexed: any _Indexed
+    var indexed: any _IndexedProtocol
     
     init<T>(indexed: Indexed<T>) {
         self.indexed = indexed
@@ -97,7 +97,7 @@ public struct _AnyIndexed {
 }
 
 /// An internal protocol to use when evaluating types for indexed properties.
-protocol _Indexed<T>: Indexable {
+protocol _IndexedProtocol<T>: Indexable {
     associatedtype T: Indexable
     
     init(wrappedValue: T)
@@ -106,7 +106,7 @@ protocol _Indexed<T>: Indexable {
     var projectedValue: _AnyIndexed { get }
 }
 
-extension _Indexed {
+extension _IndexedProtocol {
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let wrappedValue = try container.decode(T.self)
@@ -123,5 +123,5 @@ extension _Indexed {
     public static func == (lhs: Self, rhs: Self) -> Bool { lhs.wrappedValue == rhs.wrappedValue }
 }
 
-extension Indexed: _Indexed {
+extension Indexed: _IndexedProtocol {
 }

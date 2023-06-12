@@ -47,7 +47,7 @@ final class IndexedTests: XCTestCase {
 //            for child in mirror.children {
 //                guard let label = child.label else { continue }
 //                let childType = type(of: child.value)
-//                guard childType is _Indexed.Type else { continue }
+//                guard childType is _IndexedProtocol.Type else { continue }
 //                print("Child: \(label), type: \(childType)")
 //                indexedProperties.append(label)
 //            }
@@ -61,7 +61,7 @@ final class IndexedTests: XCTestCase {
         for child in mirror.children {
             guard let label = child.label else { continue }
             let childType = type(of: child.value)
-            guard childType is any _Indexed.Type else { continue }
+            guard childType is any _IndexedProtocol.Type else { continue }
             indexedProperties.append(label)
         }
         XCTAssertEqual(indexedProperties, ["_name", "_age"])
