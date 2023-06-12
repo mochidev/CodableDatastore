@@ -120,7 +120,7 @@ extension DatastoreDescriptor {
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
+            if (indexDescriptor.key == "$id" || indexDescriptor.key == "id") && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -135,11 +135,17 @@ extension DatastoreDescriptor {
             guard let label = child.label else { continue }
             guard let childValue = child.value as? any _IndexedProtocol else { continue }
             
+            let proposedKey = childValue.projectedValue.key
+            
             let actualKey: String
-            if label.prefix(1) == "_" {
-                actualKey = "$\(label.dropFirst())"
+            if proposedKey.isEmpty {
+                if label.prefix(1) == "_" {
+                    actualKey = "$\(label.dropFirst())"
+                } else {
+                    actualKey = label
+                }
             } else {
-                actualKey = label
+                actualKey = proposedKey
             }
             
             let indexDescriptor = IndexDescriptor(
@@ -149,7 +155,7 @@ extension DatastoreDescriptor {
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
+            if (indexDescriptor.key == "$id" || indexDescriptor.key == "id") && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -180,16 +186,31 @@ extension DatastoreDescriptor.IndexDescriptor {
         sampleInstance: CodedType,
         keypath: KeyPath<CodedType, _AnyIndexed>
     ) {
-        let indexType = sampleInstance[keyPath: keypath].indexedType
+        let sampleIndexValue = sampleInstance[keyPath: keypath]
+        let indexType = sampleIndexValue.indexedType
+        let indexKey = sampleIndexValue.key
         
-        let fullKeyPath = String(describing: keypath)
-        let rootComponent = "\\\(String(describing: CodedType.self))."
-        let path = String(fullKeyPath.dropFirst(rootComponent.count))
+        let path: String
+        if indexKey.isEmpty {
+            path = keypath.keyName
+        } else {
+            var components = keypath.keyName.components(separatedBy: ".")
+            components[components.count-1] = indexKey
+            path = components.joined(separator: ".")
+        }
         
         self.init(
             version: version,
             key: path,
             indexType: indexType
         )
+    }
+}
+
+extension PartialKeyPath {
+    fileprivate var keyName: String {
+        let fullKeyPath = String(describing: self)
+        let rootComponent = "\\\(String(describing: Root.self))."
+        return String(fullKeyPath.dropFirst(rootComponent.count))
     }
 }

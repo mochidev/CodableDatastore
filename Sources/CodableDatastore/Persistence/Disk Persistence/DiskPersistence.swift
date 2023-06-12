@@ -51,7 +51,7 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
             
             let persistenceName = "DefaultStore.persistencestore"
             
-#if os(Linux)
+#if !canImport(Darwin)
             guard let applicationSupportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
                 throw DiskPersistenceError.missingAppSupportDirectory
             }
