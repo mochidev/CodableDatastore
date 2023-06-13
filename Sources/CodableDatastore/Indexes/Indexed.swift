@@ -70,25 +70,11 @@ public struct Indexed<T> where T: Indexable {
     /// This is ordinarily handled transparently when used as a property wrapper.
     public var wrappedValue: T
     
-    /// The key this property is indexed under.
-    ///
-    /// If an empty string, we'll try to determine it from the keypath name, but this can fail on platforms such as Linux
-    public var key: String
-    
     /// Initialize an ``Indexed`` value with an initial value.
     ///
     /// This is ordinarily handled transparently when used as a property wrapper.
     public init(wrappedValue: T) {
         self.wrappedValue = wrappedValue
-        self.key = ""
-    }
-    
-    /// Initialize an ``Indexed`` value with an initial value and key name.
-    ///
-    /// This is ordinarily handled transparently when used as a property wrapper.
-    public init(wrappedValue: T, key: String) {
-        self.wrappedValue = wrappedValue
-        self.key = key
     }
     
     /// The projected value of the indexed property, which is a type-erased version of ourself.
@@ -103,12 +89,10 @@ public struct Indexed<T> where T: Indexable {
 public struct _AnyIndexed {
     var indexed: any _IndexedProtocol
     var indexedType: String
-    var key: String
     
     init<T>(indexed: Indexed<T>) {
         self.indexed = indexed
         indexedType = String(describing: T.self)
-        key = indexed.key
     }
 }
 

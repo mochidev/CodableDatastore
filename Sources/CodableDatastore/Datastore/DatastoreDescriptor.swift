@@ -70,15 +70,15 @@ extension DatastoreDescriptor {
 
 extension DatastoreDescriptor {
     /// Initialize a descriptor from types a ``Datastore`` deals in directly.
-    ///
+    /// 
     /// This will use Swift reflection to inder the indexable properties from those that use the @``Indexed`` property wrapper.
-    ///
+    /// 
     /// - Parameters:
     ///   - version: The current version being used by a data store.
     ///   - sampleInstance: A sample instance to use reflection on.
     ///   - identifierType: The identifier type the data store was created with.
-    ///   - directIndexKeypaths: A list of direct indexes to describe from the sample instance.
-    ///   - computedIndexKeypaths: Additional secondary indexes to describe from the same instance.
+    ///   - directIndexPaths: A list of direct indexes to describe from the sample instance.
+    ///   - computedIndexPaths: Additional secondary indexes to describe from the same instance.
     init<
         Version: RawRepresentable & Hashable & CaseIterable,
         CodedType: Codable,
@@ -87,8 +87,8 @@ extension DatastoreDescriptor {
         version: Version,
         sampleInstance: CodedType,
         identifierType: IdentifierType.Type,
-        directIndexes directIndexKeypaths: [KeyPath<CodedType, _AnyIndexed>],
-        computedIndexes computedIndexKeypaths: [KeyPath<CodedType, _AnyIndexed>]
+        directIndexes directIndexPaths: [IndexPath<CodedType>],
+        computedIndexes computedIndexPaths: [IndexPath<CodedType>]
     ) throws where Version.RawValue: Indexable {
         let datastoreEncoder = JSONEncoder()
         datastoreEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
@@ -97,11 +97,11 @@ extension DatastoreDescriptor {
         var directIndexes: Set<IndexDescriptor> = []
         var secondaryIndexes: Set<IndexDescriptor> = []
         
-        for keypath in computedIndexKeypaths {
+        for indexPath in computedIndexPaths {
             let indexDescriptor = IndexDescriptor(
                 version: versionData,
                 sampleInstance: sampleInstance,
-                keypath: keypath
+                indexPath: indexPath
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
@@ -112,15 +112,15 @@ extension DatastoreDescriptor {
             secondaryIndexes.insert(indexDescriptor)
         }
         
-        for keypath in directIndexKeypaths {
+        for indexPath in directIndexPaths {
             let indexDescriptor = IndexDescriptor(
                 version: versionData,
                 sampleInstance: sampleInstance,
-                keypath: keypath
+                indexPath: indexPath
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if (indexDescriptor.key == "$id" || indexDescriptor.key == "id") && sampleInstance is any Identifiable {
+            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -135,17 +135,11 @@ extension DatastoreDescriptor {
             guard let label = child.label else { continue }
             guard let childValue = child.value as? any _IndexedProtocol else { continue }
             
-            let proposedKey = childValue.projectedValue.key
-            
             let actualKey: String
-            if proposedKey.isEmpty {
-                if label.prefix(1) == "_" {
-                    actualKey = "$\(label.dropFirst())"
-                } else {
-                    actualKey = label
-                }
+            if label.prefix(1) == "_" {
+                actualKey = "$\(label.dropFirst())"
             } else {
-                actualKey = proposedKey
+                actualKey = label
             }
             
             let indexDescriptor = IndexDescriptor(
@@ -155,7 +149,7 @@ extension DatastoreDescriptor {
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if (indexDescriptor.key == "$id" || indexDescriptor.key == "id") && sampleInstance is any Identifiable {
+            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -180,37 +174,19 @@ extension DatastoreDescriptor.IndexDescriptor {
     /// - Parameters:
     ///   - version: The current version being used by a data store.
     ///   - sampleInstance: A sample instance to probe for type information.
-    ///   - keypath: The keypath to the indexed property.
+    ///   - indexPath: The ``IndexPath`` to the indexed property.
     init<CodedType>(
         version: Data,
         sampleInstance: CodedType,
-        keypath: KeyPath<CodedType, _AnyIndexed>
+        indexPath: IndexPath<CodedType>
     ) {
-        let sampleIndexValue = sampleInstance[keyPath: keypath]
+        let sampleIndexValue = sampleInstance[keyPath: indexPath.keyPath]
         let indexType = sampleIndexValue.indexedType
-        let indexKey = sampleIndexValue.key
-        
-        let path: String
-        if indexKey.isEmpty {
-            path = keypath.keyName
-        } else {
-            var components = keypath.keyName.components(separatedBy: ".")
-            components[components.count-1] = indexKey
-            path = components.joined(separator: ".")
-        }
         
         self.init(
             version: version,
-            key: path,
+            key: indexPath.path,
             indexType: indexType
         )
-    }
-}
-
-extension PartialKeyPath {
-    fileprivate var keyName: String {
-        let fullKeyPath = String(describing: self)
-        let rootComponent = "\\\(String(describing: Root.self))."
-        return String(fullKeyPath.dropFirst(rootComponent.count))
     }
 }
