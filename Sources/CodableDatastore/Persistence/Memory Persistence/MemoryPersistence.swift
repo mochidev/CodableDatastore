@@ -13,7 +13,13 @@ public actor MemoryPersistence: Persistence {
 }
 
 extension MemoryPersistence: _Persistence {
+    public func register<V, C, I, A>(
+        datastore: Datastore<V, C, I, A>
+    ) async throws -> DatastoreDescriptor? {
+        preconditionFailure("Unimplemented")
+    }
+    
     public func withTransaction(_ transaction: (MemoryPersistence) -> ()) async throws {
-        
+        preconditionFailure("Unimplemented")
     }
 }

@@ -21,6 +21,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The loaded Snapshots
     var snapshots: [SnapshotIdentifier: Snapshot<AccessMode>] = [:]
     
+    var registeredDatastores: [String: [WeakDatastore]] = [:]
+    
     /// Initialize a ``DiskPersistence`` with a read-write URL.
     ///
     /// Use this initializer when creating a persistence from the main process that will access it, such as your app. To access the same persistence from another process, use ``init(readOnlyURL:)`` instead.
@@ -206,7 +208,7 @@ extension DiskPersistence {
     ///
     /// - Parameter accessor: An accessor that takes an immutable reference to a store info, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateStoreInfo<T>(accessor: @escaping (_ storeInfo: StoreInfo) async throws -> T) -> Task<T, Error> where AccessMode == ReadOnly {
+    func updateStoreInfo<T>(accessor: @escaping (_ storeInfo: StoreInfo) async throws -> T) -> Task<T, Error> {
         
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo {
             return Task { try await accessor(storeInfo) }
@@ -307,7 +309,7 @@ extension DiskPersistence {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateCurrentSnapshot<T>(
         accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
-    ) -> Task<T, Error> where AccessMode == ReadOnly {
+    ) -> Task<T, Error> {
         /// Grab access to the store info to load and update it.
         return updateStoreInfo { storeInfo in
             /// Grab the current snapshot from the store info
@@ -343,7 +345,7 @@ extension DiskPersistence {
     /// - Returns: The value returned from the `accessor`.
     func withCurrentSnapshot<T>(
         accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
-    ) async throws -> T where AccessMode == ReadOnly {
+    ) async throws -> T {
         try await updateCurrentSnapshot(accessor: accessor).value
     }
 }
@@ -373,6 +375,78 @@ extension DiskPersistence where AccessMode == ReadWrite {
         
         /// Load the store info, so we can see if we'll need to write it or not.
         try await withStoreInfo { _ in }
+    }
+}
+
+// MARK: Datastore Registration
+
+extension DiskPersistence {
+    public func register<V, C, I, A>(
+        datastore newDatastore: CodableDatastore.Datastore<V, C, I, A>
+    ) async throws -> DatastoreDescriptor? {
+        guard let datastorePersistence = newDatastore.persistence as? DiskPersistence, datastorePersistence === self else {
+            throw PersistenceError.multipleRegistrations
+        }
+        
+        var existingDatastores = registeredDatastores[newDatastore.key, default: []].filter(\.isAlive)
+        
+        for weakDatastore in existingDatastores {
+            if weakDatastore.contains(datastore: newDatastore) {
+                throw PersistenceError.alreadyRegistered
+            }
+            
+            if A.self == ReadWrite.self, weakDatastore.canWrite {
+                throw PersistenceError.duplicateWriters
+            }
+        }
+        
+        existingDatastores.append(WeakSpecificDatastore(datastore: newDatastore))
+        
+        registeredDatastores[newDatastore.key] = existingDatastores
+        
+        return try await withCurrentSnapshot { snapshot in
+            // TODO: Load datastore from snapshot
+            return nil
+        }
+    }
+}
+
+// MARK: Helper Types
+
+class WeakDatastore {
+    var canWrite: Bool = false
+    
+    var isAlive: Bool { return true }
+    
+    func contains<Version, CodedType, IdentifierType, AccessMode>(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) -> Bool {
+        return false
+    }
+}
+
+class WeakSpecificDatastore<
+    Version: RawRepresentable & Hashable & CaseIterable,
+    CodedType: Codable,
+    IdentifierType: Indexable,
+    AccessMode: _AccessMode
+>: WeakDatastore where Version.RawValue: Indexable & Comparable {
+    weak var datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>?
+    
+    override var isAlive: Bool { return datastore != nil }
+    
+    init(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) {
+        self.datastore = datastore
+        super.init()
+        self.canWrite = false
+    }
+    
+    init(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) where AccessMode == ReadWrite {
+        self.datastore = datastore
+        super.init()
+        self.canWrite = true
+    }
+    
+    override func contains<OtherVersion, OtherCodedType, OtherIdentifierType, OtherAccessMode>(datastore: Datastore<OtherVersion, OtherCodedType, OtherIdentifierType, OtherAccessMode>) -> Bool {
+        return datastore === self.datastore
     }
 }
 
