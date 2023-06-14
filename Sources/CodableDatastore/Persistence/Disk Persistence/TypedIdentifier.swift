@@ -34,3 +34,23 @@ extension TypedIdentifierProtocol {
     
     var description: String { rawValue }
 }
+
+extension TypedIdentifierProtocol {
+    init(
+        name: String,
+        token: UInt64 = .random(in: UInt64.min...UInt64.max)
+    ) {
+        let fileSafeName = name.reduce(into: "") { partialResult, character in
+            /// We only care about the first 16 characters
+            guard partialResult.count < 16 else { return }
+            
+            /// Filter out any chatacters that could mess with filenames
+            guard character.isASCII && (character.isLetter || character.isNumber || character == "_" || character == " ") else { return }
+            
+            partialResult.append(character)
+        }
+        
+        let stringToken = String(token, radix: 16, uppercase: true)
+        self.init(rawValue: "\(fileSafeName)-\(String(repeating: "0", count: 16-stringToken.count))\(stringToken)")
+    }
+}
