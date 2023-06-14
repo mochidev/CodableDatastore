@@ -87,9 +87,7 @@ extension Snapshot {
         do {
             let data = try Data(contentsOf: snapshotURL)
 
-            let manifestDecoder = JSONDecoder()
-            manifestDecoder.dateDecodingStrategy = .iso8601WithMilliseconds
-            let manifest = try manifestDecoder.decode(SnapshotManifest.self, from: data)
+            let manifest = try JSONDecoder.shared.decode(SnapshotManifest.self, from: data)
 
             cachedManifest = manifest
             return manifest
@@ -112,9 +110,7 @@ extension Snapshot {
         }
 
         /// Encode the provided manifest, and write it to disk.
-        let manifestEncoder = JSONEncoder()
-        manifestEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
-        let data = try manifestEncoder.encode(manifest)
+        let data = try JSONEncoder.shared.encode(manifest)
         try data.write(to: manifestURL, options: .atomic)
 
         /// Update the cache since we know what it should be.

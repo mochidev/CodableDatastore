@@ -124,9 +124,7 @@ extension DiskPersistence {
         do {
             let data = try Data(contentsOf: storeInfoURL)
             
-            let storeInfoDecoder = JSONDecoder()
-            storeInfoDecoder.dateDecodingStrategy = .iso8601WithMilliseconds
-            let storeInfo = try storeInfoDecoder.decode(StoreInfo.self, from: data)
+            let storeInfo = try JSONDecoder.shared.decode(StoreInfo.self, from: data)
             
             cachedStoreInfo = storeInfo
             return storeInfo
@@ -145,9 +143,7 @@ extension DiskPersistence {
         try createPersistenceDirectories()
         
         /// Encode the provided store info, and write it to disk.
-        let storeInfoEncoder = JSONEncoder()
-        storeInfoEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
-        let data = try storeInfoEncoder.encode(storeInfo)
+        let data = try JSONEncoder.shared.encode(storeInfo)
         try data.write(to: storeInfoURL, options: .atomic)
         
         /// Update the cache since we know what it should be.
