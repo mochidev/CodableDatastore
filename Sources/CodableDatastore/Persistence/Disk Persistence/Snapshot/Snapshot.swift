@@ -30,8 +30,11 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// A cached instance of the manifest as last loaded from disk.
     var cachedManifest: SnapshotManifest?
     
-    /// A pointer to the last manifest updater, so updates can be serialized after the last request
+    /// A pointer to the last manifest updater, so updates can be serialized after the last request.
     var lastUpdateManifestTask: Task<Any, Error>?
+    
+    /// The loaded datastores.
+    var datastores: [DatastoreIdentifier: DiskPersistence<AccessMode>.Datastore] = [:]
     
     init(
         id: SnapshotIdentifier,
@@ -223,4 +226,27 @@ extension Snapshot {
 private enum SnapshotTaskLocals {
     @TaskLocal
     static var manifest: SnapshotManifest?
+}
+
+// MARK: - Datastore Management
+extension Snapshot {
+    /// Load the datastore for the given key.
+    func loadDatastore(for key: String, from manifest: SnapshotManifest) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
+        let datastoreInfo: (id: DatastoreIdentifier, root: DatastoreRootIdentifier?) = {
+            if let info = manifest.dataStores[key] {
+                return (info.id, info.root)
+            } else {
+                return (DatastoreIdentifier(name: key), nil)
+            }
+        }()
+        
+        if let datastore = datastores[datastoreInfo.id] {
+            return (datastore, datastoreInfo.root)
+        }
+        
+        let datastore = DiskPersistence<AccessMode>.Datastore(id: datastoreInfo.id, snapshot: self)
+        datastores[datastoreInfo.id] = datastore
+        
+        return (datastore, nil)
+    }
 }
