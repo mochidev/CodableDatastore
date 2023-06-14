@@ -17,6 +17,8 @@ public protocol Persistence<AccessMode>: _Persistence {
 /// Although this type is provided so other packages can implement their own persistences,
 /// none of these methods should be called directly.
 public protocol _Persistence {
+    func register<Version, CodedType, IdentifierType, AccessMode>(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) async throws -> DatastoreDescriptor?
+    
     func withTransaction(_ transaction: (_ persistence: Self) -> ()) async throws
 }
 
