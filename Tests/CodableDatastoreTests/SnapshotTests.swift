@@ -52,7 +52,7 @@ final class SnapshotTests: XCTestCase {
         XCTAssertTrue(isEmpty)
         
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
-        let snapshotURL = await snapshot.snapshotURL
+        let snapshotURL = snapshot.snapshotURL
         XCTAssertEqual(snapshotURL.absoluteString, temporaryStoreURL.absoluteString.appending("Snapshots/1970/01-02/03-04/1970-01-02%2003-04-05%200123456789ABCDEF.snapshot/"))
         XCTAssertThrowsError(try snapshotURL.checkResourceIsReachable())
     }
@@ -64,7 +64,7 @@ final class SnapshotTests: XCTestCase {
         
         try await snapshot.withManifest { _ in }
         
-        let snapshotURL = await snapshot.snapshotURL
+        let snapshotURL = snapshot.snapshotURL
         XCTAssertEqual(snapshotURL.absoluteString, temporaryStoreURL.absoluteString.appending("Snapshots/1970/01-02/03-04/1970-01-02%2003-04-05%200123456789ABCDEF.snapshot/"))
         
         XCTAssertTrue(try snapshotURL.checkResourceIsReachable())
@@ -88,7 +88,7 @@ final class SnapshotTests: XCTestCase {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
         try await snapshot.withManifest { _ in }
-        let snapshotURL = await snapshot.snapshotURL
+        let snapshotURL = snapshot.snapshotURL
         
         let data = try Data(contentsOf: snapshotURL.appendingPathComponent("Manifest.json", isDirectory: false))
         
@@ -120,7 +120,7 @@ final class SnapshotTests: XCTestCase {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
         try await snapshot.withManifest { _ in }
-        let snapshotURL = await snapshot.snapshotURL
+        let snapshotURL = snapshot.snapshotURL
         
         let dataBefore = try Data(contentsOf: snapshotURL.appendingPathComponent("Manifest.json", isDirectory: false))
         // This second time should be a no-op and shouldn't throw
