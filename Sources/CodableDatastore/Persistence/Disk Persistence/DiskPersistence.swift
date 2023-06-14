@@ -407,8 +407,13 @@ extension DiskPersistence {
         registeredDatastores[newDatastore.key] = existingDatastores
         
         return try await withCurrentSnapshot { snapshot in
-            // TODO: Load datastore from snapshot
-            return nil
+            let (datastoreActor, rootObject) = try await snapshot.withManifest { snapshotManifest in
+                await snapshot.loadDatastore(for: newDatastore.key, from: snapshotManifest)
+            }
+            
+            guard let rootObject else { return nil }
+            let datastoreInfo = try await datastoreActor.loadRootObject(for: rootObject)
+            return datastoreInfo.descriptor
         }
     }
 }
