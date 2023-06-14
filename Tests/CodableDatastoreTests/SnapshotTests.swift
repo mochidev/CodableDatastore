@@ -96,7 +96,7 @@ final class SnapshotTests: XCTestCase {
             var version: String
             var id: String
             var modificationDate: String
-            var dataStores: [String]
+            var dataStores: [String : String]
         }
         
         let testStruct = try JSONDecoder().decode(TestStruct.self, from: data)
