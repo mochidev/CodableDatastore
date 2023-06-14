@@ -384,7 +384,11 @@ extension DiskPersistence {
     public func register<V, C, I, A>(
         datastore newDatastore: CodableDatastore.Datastore<V, C, I, A>
     ) async throws -> DatastoreDescriptor? {
-        guard let datastorePersistence = newDatastore.persistence as? DiskPersistence, datastorePersistence === self else {
+        guard
+            let datastorePersistence = newDatastore.persistence as? DiskPersistence,
+            datastorePersistence === self
+        else {
+            assertionFailure("The datastore has already been registered with another persistence. Make sure to only register a datastore with a single persistence. This will throw an error on release builds.")
             throw PersistenceError.multipleRegistrations
         }
         
@@ -392,10 +396,12 @@ extension DiskPersistence {
         
         for weakDatastore in existingDatastores {
             if weakDatastore.contains(datastore: newDatastore) {
+                assertionFailure("The datastore has already been registered with this persistence. Make sure to not call register multiple times per persistence. This will throw an error on release builds.")
                 throw PersistenceError.alreadyRegistered
             }
             
             if A.self == ReadWrite.self, weakDatastore.canWrite {
+                assertionFailure("An existing datastore that can write to the persistence has already been registered for this key. Only one writer is suppored per key. This will throw an error on release builds.")
                 throw PersistenceError.duplicateWriters
             }
         }
