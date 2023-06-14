@@ -49,8 +49,35 @@ public actor Datastore<
         self.key = key
     }
     
-    /// Migrates and warms the data store ahead of time
-    public func warm() async throws {
+    /// Migrates and warms the data store ahead of time.
+    ///
+    /// It is recommended you call this method before accessing any data, as it will offer you an opportunity to show a loading screen during potentially long migrations, rather than leaving it for the first read or write on the data store.
+    ///
+    /// - Parameter progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
+    public func warm(progressHandler: (_ progress: Progress) -> Void = { _ in }) async throws {
+        
+    }
+    
+    /// Manually migrate an index if the version persisted is less than a given minimum version.
+    /// 
+    /// Only use this if you must force an index to be re-calculated, which is sometimes necessary when the implementation of the compare method changes between releases.
+    ///
+    /// - Parameters:
+    ///   - index: The index to migrate.
+    ///   - minimumVersion: The minimum valid version for an index to not be migrated.
+    ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
+    public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: (_ progress: Progress) -> Void = { _ in }) async throws {
+        
+    }
+    
+    /// Manually migrate the entire store if the primary index version persisted is less than a given minimum version.
+    ///
+    /// Only use this if you must force the entire store to be re-calculated, which is sometimes necessary when the implementation of the `IdentifierType`'s compare method changes between releases.
+    ///
+    /// - Parameters:
+    ///   - minimumVersion: The minimum valid version for an index to not be migrated.
+    ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
+    public func migrateEntireStore(ifLessThan minimumVersion: Version, progressHandler: (_ progress: Progress) -> Void = { _ in }) async throws {
         
     }
 }
