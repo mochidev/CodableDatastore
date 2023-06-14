@@ -255,7 +255,7 @@ extension DiskPersistence {
 // MARK: - Snapshot Management
 extension DiskPersistence {
     /// Load the default snapshot from disk, or create an empty one if such a file does not exist.
-    private func loadSnapshot(from storeInfo: StoreInfo) async throws -> Snapshot<AccessMode> {
+    private func loadSnapshot(from storeInfo: StoreInfo) -> Snapshot<AccessMode> {
         let snapshotID = storeInfo.currentSnapshot ?? SnapshotIdentifier()
         
         if let snapshot = snapshots[snapshotID] {
@@ -283,7 +283,7 @@ extension DiskPersistence {
         /// Grab access to the store info to load and update it.
         return updateStoreInfo { storeInfo in
             /// Grab the current snapshot from the store info
-            let snapshot = try await self.loadSnapshot(from: storeInfo)
+            let snapshot = self.loadSnapshot(from: storeInfo)
             
             /// Load a modification date to use
             let modificationDate = dateUpdate.modificationDate(for: storeInfo.modificationDate)
@@ -309,7 +309,7 @@ extension DiskPersistence {
         /// Grab access to the store info to load and update it.
         return updateStoreInfo { storeInfo in
             /// Grab the current snapshot from the store info
-            let snapshot = try await self.loadSnapshot(from: storeInfo)
+            let snapshot = self.loadSnapshot(from: storeInfo)
             
             /// Let the accessor do what it needs to do with the snapshot
             return try await accessor(snapshot)
