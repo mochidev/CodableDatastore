@@ -20,7 +20,7 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// The persistence the stapshot is a part of.
     ///
     /// Prefer to access ``Snapshot/persistence`` instead, which offers non-optional access to the same persistence.
-    private weak var _persistence: DiskPersistence<AccessMode>?
+    unowned let persistence: DiskPersistence<AccessMode>
     
     /// A flag indicating if this is a backup snapshot.
     ///
@@ -39,23 +39,15 @@ actor Snapshot<AccessMode: _AccessMode> {
         isBackup: Bool = false
     ) {
         self.id = id
-        self._persistence = persistence
+        self.persistence = persistence
         self.isBackup = isBackup
-    }
-}
-
-extension Snapshot {
-    @inlinable
-    var persistence: DiskPersistence<AccessMode> {
-        guard let persistence = _persistence else { preconditionFailure("Persistence is no longer allocated for this snapshot.") }
-        return persistence
     }
 }
 
 // MARK: - Common URL Accessors
 extension Snapshot {
     /// The URL that points to the Snapshot directory.
-    var snapshotURL: URL {
+    nonisolated var snapshotURL: URL {
         guard let components = try? id.components else { preconditionFailure("Components could not be determined for Snapshot.") }
         
         let baseURL = isBackup ? persistence.backupsURL : persistence.snapshotsURL
@@ -68,22 +60,22 @@ extension Snapshot {
     }
     
     /// The URL that points to the Manifest.json file.
-    var manifestURL: URL {
+    nonisolated var manifestURL: URL {
         snapshotURL.appendingPathComponent("Manifest.json", isDirectory: false)
     }
     
     /// The URL that points to the Dirty file.
-    var dirtyURL: URL {
+    nonisolated var dirtyURL: URL {
         snapshotURL.appendingPathComponent("Dirty", isDirectory: false)
     }
     
     /// The URL that points to the Datastores directory.
-    var datastoresURL: URL {
+    nonisolated var datastoresURL: URL {
         snapshotURL.appendingPathComponent("Datastores", isDirectory: true)
     }
     
     /// The URL that points to the Inbox directory.
-    var inboxURL: URL {
+    nonisolated var inboxURL: URL {
         snapshotURL.appendingPathComponent("Inbox", isDirectory: true)
     }
 }
