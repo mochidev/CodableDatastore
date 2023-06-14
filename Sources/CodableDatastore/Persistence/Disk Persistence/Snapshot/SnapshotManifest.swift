@@ -26,5 +26,18 @@ struct SnapshotManifest: Codable, Equatable, Identifiable {
     var modificationDate: Date
     
     /// The known datastores for this snapshot, and their roots.
-    var dataStores: [String] = []
+    var dataStores: [String: DatastoreInfo] = [:]
+}
+
+extension SnapshotManifest {
+    struct DatastoreInfo: Codable, Equatable, Identifiable {
+        /// The key this datastore uses.
+        var key: String
+        
+        /// The identifier the datastore was saved under.
+        var id: DatastoreIdentifier
+        
+        /// The root object for the datastore.
+        var root: DatastoreRootIdentifier
+    }
 }
