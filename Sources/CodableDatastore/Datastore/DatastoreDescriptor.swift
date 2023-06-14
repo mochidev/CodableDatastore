@@ -90,9 +90,7 @@ extension DatastoreDescriptor {
         directIndexes directIndexPaths: [IndexPath<CodedType>],
         computedIndexes computedIndexPaths: [IndexPath<CodedType>]
     ) throws where Version.RawValue: Indexable {
-        let datastoreEncoder = JSONEncoder()
-        datastoreEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
-        let versionData = try datastoreEncoder.encode(version.rawValue)
+        let versionData = try JSONEncoder.shared.encode(version.rawValue)
         
         var directIndexes: Set<IndexDescriptor> = []
         var secondaryIndexes: Set<IndexDescriptor> = []
