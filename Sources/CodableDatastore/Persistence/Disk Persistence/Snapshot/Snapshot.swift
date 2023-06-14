@@ -171,7 +171,7 @@ extension Snapshot {
     ///
     /// - Parameter accessor: An accessor that takes an immutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateManifest<T>(accessor: @escaping (_ manifest: SnapshotManifest) async throws -> T) -> Task<T, Error> where AccessMode == ReadOnly {
+    func updateManifest<T>(accessor: @escaping (_ manifest: SnapshotManifest) async throws -> T) -> Task<T, Error> {
         
         if let manifest = SnapshotTaskLocals.manifest {
             return Task { try await accessor(manifest) }
@@ -214,7 +214,8 @@ extension Snapshot {
     ///
     /// - Parameter accessor: An accessor that takes an immutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
-    func withManifest<T>(accessor: @escaping (_ manifest: SnapshotManifest) async throws -> T) async throws -> T where AccessMode == ReadOnly {
+    @_disfavoredOverload
+    func withManifest<T>(accessor: @escaping (_ manifest: SnapshotManifest) async throws -> T) async throws -> T {
         try await updateManifest(accessor: accessor).value
     }
 }
