@@ -40,6 +40,9 @@ public struct DatastoreDescriptor: Codable, Equatable, Hashable {
     ///
     /// If the index produces the same value, the identifier of the instance is implicitely used as a secondary sort parameter.
     public var secondaryIndexes: [String : IndexDescriptor]
+    
+    /// The number of instances the ``Datastore`` manages.
+    public var size: Int
 }
 
 extension DatastoreDescriptor {
@@ -161,7 +164,8 @@ extension DatastoreDescriptor {
             codedType: String(describing: type(of: sampleInstance)),
             identifierType: String(describing: identifierType),
             directIndexes: Dictionary(uniqueKeysWithValues: directIndexes.map({ ($0.key, $0) })),
-            secondaryIndexes: Dictionary(uniqueKeysWithValues: secondaryIndexes.map({ ($0.key, $0) }))
+            secondaryIndexes: Dictionary(uniqueKeysWithValues: secondaryIndexes.map({ ($0.key, $0) })),
+            size: 0
         )
     }
 }
