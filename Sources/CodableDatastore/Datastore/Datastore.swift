@@ -8,14 +8,18 @@
 
 import Foundation
 
-public struct Datastore<
+/// A store for a homogenous collection of instances.
+public actor Datastore<
     Version: RawRepresentable & Hashable & CaseIterable,
     CodedType: Codable,
     IdentifierType: Indexable,
     AccessMode: _AccessMode
-> where Version.RawValue: Indexable {
+> where Version.RawValue: Indexable & Comparable {
+    let persistence: any Persistence
+    let key: String
+    
     public init(
-        persistence: any Persistence,
+        persistence: some Persistence<AccessMode>,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -26,11 +30,12 @@ public struct Datastore<
         computedIndexes: [IndexPath<CodedType>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
-        
+        self.persistence = persistence
+        self.key = key
     }
     
     public init(
-        persistence: any Persistence,
+        persistence: some Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -40,7 +45,8 @@ public struct Datastore<
         computedIndexes: [IndexPath<CodedType>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
-        
+        self.persistence = persistence
+        self.key = key
     }
     
     /// Migrates and warms the data store ahead of time
@@ -128,7 +134,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
 
 extension Datastore where AccessMode == ReadWrite {
     public static func JSONStore(
-        persistence: any Persistence,
+        persistence: some Persistence<AccessMode>,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -159,7 +165,7 @@ extension Datastore where AccessMode == ReadWrite {
     }
     
     public static func propertyListStore(
-        persistence: any Persistence,
+        persistence: some Persistence<AccessMode>,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -196,7 +202,7 @@ extension Datastore where AccessMode == ReadWrite {
 
 extension Datastore where AccessMode == ReadOnly {
     public static func readOnlyJSONStore(
-        persistence: any Persistence,
+        persistence: some Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -225,7 +231,7 @@ extension Datastore where AccessMode == ReadOnly {
     }
     
     public static func readOnlyPropertyListStore(
-        persistence: any Persistence,
+        persistence: some Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -257,7 +263,7 @@ extension Datastore where AccessMode == ReadOnly {
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadWrite {
     public init(
-        persistence: any Persistence,
+        persistence: some Persistence<AccessMode>,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -266,7 +272,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         directIndexes: [IndexPath<CodedType>] = [],
         computedIndexes: [IndexPath<CodedType>] = [],
         configuration: Configuration = .init()
-    ) where AccessMode == ReadWrite {
+    ) {
         self.init(
             persistence: persistence,
             key: key,
@@ -282,7 +288,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
     
     public static func JSONStore(
-        persistence: any Persistence,
+        persistence: some Persistence<AccessMode>,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -309,7 +315,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
     
     public static func propertyListStore(
-        persistence: any Persistence,
+        persistence: some Persistence<AccessMode>,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -336,7 +342,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadOnly {
     public init(
-        persistence: any Persistence,
+        persistence: some Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -344,7 +350,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         directIndexes: [IndexPath<CodedType>] = [],
         computedIndexes: [IndexPath<CodedType>] = [],
         configuration: Configuration = .init()
-    ) where AccessMode == ReadOnly {
+    ) {
         self.init(
             persistence: persistence,
             key: key,
@@ -359,7 +365,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
     
     public static func readOnlyJSONStore(
-        persistence: any Persistence,
+        persistence: some Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
@@ -384,7 +390,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
     
     public static func readOnlyPropertyListStore(
-        persistence: any Persistence,
+        persistence: some Persistence,
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
