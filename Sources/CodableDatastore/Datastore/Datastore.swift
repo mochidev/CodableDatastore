@@ -18,6 +18,15 @@ public actor Datastore<
     let persistence: any Persistence
     let key: String
     
+    fileprivate var warmupStatus: TaskStatus = .waiting
+    fileprivate var warmupProgressHandlers: [ProgressHandler] = []
+    
+    fileprivate var storeMigrationStatus: TaskStatus = .waiting
+    fileprivate var storeMigrationProgressHandlers: [ProgressHandler] = []
+    
+    fileprivate var indexMigrationStatus: [IndexPath<CodedType> : TaskStatus] = [:]
+    fileprivate var indexMigrationProgressHandlers: [IndexPath<CodedType> : ProgressHandler] = [:]
+    
     public init(
         persistence: some Persistence<AccessMode>,
         key: String,
@@ -54,10 +63,46 @@ public actor Datastore<
     /// It is recommended you call this method before accessing any data, as it will offer you an opportunity to show a loading screen during potentially long migrations, rather than leaving it for the first read or write on the data store.
     ///
     /// - Parameter progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func warm(progressHandler: (_ progress: Progress) -> Void = { _ in }) async throws {
-        
+    public func warm(progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+        try await warmupIfNeeded(progressHandler: progressHandler)
     }
     
+    func warmupIfNeeded(progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+        switch warmupStatus {
+        case .complete: return
+        case .inProgress(let task):
+            warmupProgressHandlers.append(progressHandler)
+            try await task.value
+        case .waiting:
+            let warmupTask = Task {
+                let descriptor = try await persistence.register(datastore: self)
+                print("\(String(describing: descriptor))")
+                
+                /// Only operate on read-write datastores beyond this point.
+                guard let self = self as? Datastore<Version, CodedType, IdentifierType, ReadWrite> else { return }
+                print("\(self)")
+                
+                for handler in warmupProgressHandlers {
+                    handler(.evaluating)
+                }
+                
+                // TODO: Migrate any incompatible indexes by calling the internal methods below as needed.
+                await Task.yield() // The "work"
+                
+                for handler in warmupProgressHandlers {
+                    handler(.complete(total: 0))
+                }
+                
+                warmupProgressHandlers.removeAll()
+                warmupStatus = .complete
+            }
+            warmupStatus = .inProgress(warmupTask)
+            try await warmupTask.value
+        }
+    }
+}
+
+extension Datastore where AccessMode == ReadWrite {
     /// Manually migrate an index if the version persisted is less than a given minimum version.
     /// 
     /// Only use this if you must force an index to be re-calculated, which is sometimes necessary when the implementation of the compare method changes between releases.
@@ -66,8 +111,48 @@ public actor Datastore<
     ///   - index: The index to migrate.
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: (_ progress: Progress) -> Void = { _ in }) async throws {
+    public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+        guard
+            /// If we have no descriptor, then no data exists to be migrated.
+            let descriptor = try await persistence.datastoreDescriptor(for: self),
+            descriptor.size > 0,
+            /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
+            let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+            /// We don't care in this method of the version is incompatible — the index will be discarded.
+            let version = try? Version(matchingIndex.version),
+            /// Make sure the stored version is smaller than the one we require, otherwise stop early.
+            version.rawValue < minimumVersion.rawValue
+        else { return }
         
+        var warmUpProgress: Progress = .complete(total: 0)
+        try await warmupIfNeeded { progress in
+            warmUpProgress = progress
+            progressHandler(progress.adding(current: 0, total: descriptor.size))
+        }
+        
+        /// Make sure we still need to do the work, as the warm up may have made changes anyways due to incompatible types.
+        guard
+            /// If we have no descriptor, then no data exists to be migrated.
+            let descriptor = try await persistence.datastoreDescriptor(for: self),
+            descriptor.size > 0,
+            /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
+            let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+            /// We don't care in this method of the version is incompatible — the index will be discarded.
+            let version = try? Version(matchingIndex.version),
+            /// Make sure the stored version is smaller than the one we require, otherwise stop early.
+            version.rawValue < minimumVersion.rawValue
+        else {
+            progressHandler(warmUpProgress.adding(current: descriptor.size, total: descriptor.size))
+            return
+        }
+        
+        try await migrate(index: index) { migrateProgress in
+            progressHandler(warmUpProgress.adding(migrateProgress))
+        }
+    }
+    
+    func migrate(index: IndexPath<CodedType>, progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+        // TODO: Migrate just that index, use indexMigrationStatus and indexMigrationProgressHandlers to record progress.
     }
     
     /// Manually migrate the entire store if the primary index version persisted is less than a given minimum version.
@@ -77,8 +162,12 @@ public actor Datastore<
     /// - Parameters:
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrateEntireStore(ifLessThan minimumVersion: Version, progressHandler: (_ progress: Progress) -> Void = { _ in }) async throws {
-        
+    public func migrateEntireStore(ifLessThan minimumVersion: Version, progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+        // TODO: Like the method above, check the description to see if a migration is needed
+    }
+    
+    func migrateEntireStore(progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+        // TODO: Migrate all indexes, use storeMigrationStatus and storeMigrationProgressHandlers to record progress.
     }
 }
 
@@ -440,3 +529,10 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
 }
 
+// MARK: - Helper Types
+
+private enum TaskStatus {
+    case waiting
+    case inProgress(Task<Void, Error>)
+    case complete
+}
