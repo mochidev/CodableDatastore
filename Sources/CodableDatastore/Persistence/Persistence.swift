@@ -19,6 +19,8 @@ public protocol Persistence<AccessMode>: _Persistence {
 public protocol _Persistence {
     func register<Version, CodedType, IdentifierType, AccessMode>(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) async throws -> DatastoreDescriptor?
     
+    func datastoreDescriptor<Version, CodedType, IdentifierType, AccessMode>(for datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) async throws -> DatastoreDescriptor?
+    
     func withTransaction(_ transaction: (_ persistence: Self) -> ()) async throws
 }
 

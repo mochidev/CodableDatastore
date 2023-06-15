@@ -406,9 +406,23 @@ extension DiskPersistence {
         
         registeredDatastores[newDatastore.key] = existingDatastores
         
+        return try await datastoreDescriptor(for: newDatastore)
+    }
+    
+    public func datastoreDescriptor<V, C, I, A>(
+        for datastore: CodableDatastore.Datastore<V, C, I, A>
+    ) async throws -> DatastoreDescriptor? {
+        guard
+            let datastorePersistence = datastore.persistence as? DiskPersistence,
+            datastorePersistence === self
+        else {
+            assertionFailure("The datastore is registered with another persistence. Make sure to only register a datastore with a single persistence. This will throw an error on release builds.")
+            throw PersistenceError.multipleRegistrations
+        }
+        
         return try await withCurrentSnapshot { snapshot in
             let (datastoreActor, rootObject) = try await snapshot.withManifest { snapshotManifest in
-                await snapshot.loadDatastore(for: newDatastore.key, from: snapshotManifest)
+                await snapshot.loadDatastore(for: datastore.key, from: snapshotManifest)
             }
             
             guard let rootObject else { return nil }

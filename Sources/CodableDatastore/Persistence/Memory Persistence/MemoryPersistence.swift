@@ -19,6 +19,12 @@ extension MemoryPersistence: _Persistence {
         preconditionFailure("Unimplemented")
     }
     
+    public func datastoreDescriptor<V, C, I, A>(
+        for datastore: Datastore<V, C, I, A>
+    ) async throws -> DatastoreDescriptor? {
+        preconditionFailure("Unimplemented")
+    }
+    
     public func withTransaction(_ transaction: (MemoryPersistence) -> ()) async throws {
         preconditionFailure("Unimplemented")
     }
