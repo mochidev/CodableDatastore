@@ -57,7 +57,11 @@ public actor Datastore<
         self.persistence = persistence
         self.key = key
     }
-    
+}
+
+// MARK: - Warmup
+
+extension Datastore {
     /// Migrates and warms the data store ahead of time.
     ///
     /// It is recommended you call this method before accessing any data, as it will offer you an opportunity to show a loading screen during potentially long migrations, rather than leaving it for the first read or write on the data store.
@@ -101,6 +105,8 @@ public actor Datastore<
         }
     }
 }
+
+// MARK: - Migrations
 
 extension Datastore where AccessMode == ReadWrite {
     /// Manually migrate an index if the version persisted is less than a given minimum version.
@@ -171,6 +177,8 @@ extension Datastore where AccessMode == ReadWrite {
     }
 }
 
+// MARK: - Loading
+
 extension Datastore {
     public func load(_ idenfifier: IdentifierType) async throws -> CodedType? {
         return nil
@@ -181,7 +189,18 @@ extension Datastore {
             continuation.finish()
         }
     }
+    
+    public func load<IndexedValue>(
+        _ range: any IndexRangeExpression<IndexedValue>,
+        from keypath: KeyPath<CodedType, Indexed<IndexedValue>>
+    ) async throws -> AsyncStream<CodedType> {
+        return AsyncStream<CodedType> { continuation in
+            continuation.finish()
+        }
+    }
 }
+
+// MARK: - Observation
 
 public enum Observation<CodedType, IdentifierType> {
     case created(value: CodedType, identifier: IdentifierType)
@@ -203,6 +222,8 @@ extension Datastore {
     }
 }
 
+// MARK: - Writting
+
 extension Datastore where AccessMode == ReadWrite {
     public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws {
         
@@ -217,27 +238,18 @@ extension Datastore where AccessMode == ReadWrite {
     public var readOnly: Datastore<Version, CodedType, IdentifierType, ReadOnly> { self as Any as! Datastore<Version, CodedType, IdentifierType, ReadOnly> }
 }
 
-extension Datastore {
-    public func load<IndexedValue>(
-        _ range: any IndexRangeExpression<IdentifierType>,
-        from keypath: KeyPath<CodedType, Indexed<IndexedValue>>
-    ) async throws -> AsyncStream<CodedType> {
-        return AsyncStream<CodedType> { continuation in
-            continuation.finish()
-        }
-    }
-}
+// MARK: Idetifiable CodedType
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
     public func persist(_ instance: CodedType) async throws where AccessMode == ReadWrite {
         try await self.persist(instance, to: instance.id)
     }
     
-    func delete(_ instance: CodedType) async throws where AccessMode == ReadWrite {
+    public func delete(_ instance: CodedType) async throws where AccessMode == ReadWrite {
         try await self.delete(instance.id)
     }
     
-    func load(_ instance: CodedType) async throws -> CodedType? {
+    public func load(_ instance: CodedType) async throws -> CodedType? {
         try await self.load(instance.id)
     }
     
@@ -247,6 +259,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         }
     }
 }
+
+// MARK: - JSON and Plist Stores
 
 extension Datastore where AccessMode == ReadWrite {
     public static func JSONStore(
@@ -376,6 +390,8 @@ extension Datastore where AccessMode == ReadOnly {
         )
     }
 }
+
+// MARK: - Identifiable CodedType Initializers
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadWrite {
     public init(
