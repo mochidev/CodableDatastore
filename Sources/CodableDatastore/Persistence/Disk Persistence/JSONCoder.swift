@@ -12,6 +12,11 @@ extension JSONEncoder {
     static var shared: JSONEncoder = {
         let datastoreEncoder = JSONEncoder()
         datastoreEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
+#if DEBUG
+        datastoreEncoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+#else
+        datastoreEncoder.outputFormatting = [.withoutEscapingSlashes]
+#endif
         return datastoreEncoder
     }()
 }
