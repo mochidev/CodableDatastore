@@ -67,17 +67,22 @@ extension Datastore {
     /// It is recommended you call this method before accessing any data, as it will offer you an opportunity to show a loading screen during potentially long migrations, rather than leaving it for the first read or write on the data store.
     ///
     /// - Parameter progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func warm(progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+    public func warm(progressHandler: ProgressHandler? = nil) async throws {
         try await warmupIfNeeded(progressHandler: progressHandler)
     }
     
-    func warmupIfNeeded(progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+    func warmupIfNeeded(progressHandler: ProgressHandler? = nil) async throws {
         switch warmupStatus {
         case .complete: return
         case .inProgress(let task):
-            warmupProgressHandlers.append(progressHandler)
+            if let progressHandler {
+                warmupProgressHandlers.append(progressHandler)
+            }
             try await task.value
         case .waiting:
+            if let progressHandler {
+                warmupProgressHandlers.append(progressHandler)
+            }
             let warmupTask = Task {
                 let descriptor = try await persistence.register(datastore: self)
                 print("\(String(describing: descriptor))")
@@ -117,7 +122,7 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - index: The index to migrate.
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+    public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
         guard
             /// If we have no descriptor, then no data exists to be migrated.
             let descriptor = try await persistence.datastoreDescriptor(for: self),
@@ -133,7 +138,7 @@ extension Datastore where AccessMode == ReadWrite {
         var warmUpProgress: Progress = .complete(total: 0)
         try await warmupIfNeeded { progress in
             warmUpProgress = progress
-            progressHandler(progress.adding(current: 0, total: descriptor.size))
+            progressHandler?(progress.adding(current: 0, total: descriptor.size))
         }
         
         /// Make sure we still need to do the work, as the warm up may have made changes anyways due to incompatible types.
@@ -148,16 +153,16 @@ extension Datastore where AccessMode == ReadWrite {
             /// Make sure the stored version is smaller than the one we require, otherwise stop early.
             version.rawValue < minimumVersion.rawValue
         else {
-            progressHandler(warmUpProgress.adding(current: descriptor.size, total: descriptor.size))
+            progressHandler?(warmUpProgress.adding(current: descriptor.size, total: descriptor.size))
             return
         }
         
         try await migrate(index: index) { migrateProgress in
-            progressHandler(warmUpProgress.adding(migrateProgress))
+            progressHandler?(warmUpProgress.adding(migrateProgress))
         }
     }
     
-    func migrate(index: IndexPath<CodedType>, progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+    func migrate(index: IndexPath<CodedType>, progressHandler: ProgressHandler? = nil) async throws {
         // TODO: Migrate just that index, use indexMigrationStatus and indexMigrationProgressHandlers to record progress.
     }
     
@@ -168,11 +173,11 @@ extension Datastore where AccessMode == ReadWrite {
     /// - Parameters:
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrateEntireStore(ifLessThan minimumVersion: Version, progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+    public func migrateEntireStore(ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
         // TODO: Like the method above, check the description to see if a migration is needed
     }
     
-    func migrateEntireStore(progressHandler: @escaping ProgressHandler = { _ in }) async throws {
+    func migrateEntireStore(progressHandler: ProgressHandler?) async throws {
         // TODO: Migrate all indexes, use storeMigrationStatus and storeMigrationProgressHandlers to record progress.
     }
 }
