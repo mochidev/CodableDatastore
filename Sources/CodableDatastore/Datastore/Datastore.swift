@@ -184,9 +184,9 @@ extension Datastore {
 }
 
 public enum Observation<CodedType, IdentifierType> {
-    case create(value: CodedType, identifier: IdentifierType)
-    case update(oldValue: CodedType, newValue: CodedType, identifier: IdentifierType)
-    case delete(value: CodedType, identifier: IdentifierType)
+    case created(value: CodedType, identifier: IdentifierType)
+    case updated(oldValue: CodedType, newValue: CodedType, identifier: IdentifierType)
+    case deleted(value: CodedType, identifier: IdentifierType)
 }
 
 extension Datastore {
