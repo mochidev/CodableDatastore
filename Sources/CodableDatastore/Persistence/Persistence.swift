@@ -119,6 +119,120 @@ public protocol _Persistence {
         datastoreKey: String
     ) async throws -> any InsertionCursor
     
+    /// Create or update an entry in the primary index of a data store.
+    ///
+    /// This should emit .created and .updated observations to the data stores.
+    /// - Parameters:
+    ///   - versionData: The version data associated with the entry.
+    ///   - identifierValue: The identifier the entry is keyed under.
+    ///   - instanceData: The data that represented the encoded entry.
+    ///   - cursor: The location to insert the entry.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func persistPrimaryIndexEntry<IdentifierType: Indexable>(
+        versionData: Data,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursor,
+        datastoreKey: String
+    ) async throws
+    
+    /// Delete an entry from the primary index of the data store.
+    ///
+    /// This should emit .deleted observations to the data stores.
+    /// - Parameters:
+    ///   - cursor: The location of the entry to delete.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func deletePrimaryIndexEntry(
+        cursor: some InstanceCursor,
+        datastoreKey: String
+    ) async throws
+    
+    /// Reset the primary index of a data store.
+    ///
+    /// It is expected that the caller of this method will re-iterate through and add all entries back in, though perhaps with different identifiers or in a different order.
+    /// - Parameter datastoreKey: The key of the datastore the index belongs to.
+    func resetPrimaryIndex(
+        datastoreKey: String
+    ) async throws
+    
+    /// Create an entry in a direct index of a data store.
+    /// - Parameters:
+    ///   - versionData: The version data associated with the entry.
+    ///   - indexValue: The value the entry is sorted under.
+    ///   - identifierValue: The identifier the entry is keyed under.
+    ///   - instanceData: The data that represented the encoded entry.
+    ///   - cursor: The location to insert the entry.
+    ///   - indexName: The name of the index.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func persistDirectIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        versionData: Data,
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws
+    
+    /// Delete an entry from a direct index of the data store.
+    /// - Parameters:
+    ///   - cursor: The location of the entry to delete.
+    ///   - indexName: The name of the index.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func deleteDirectIndexEntry(
+        cursor: some InstanceCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws
+    
+    /// Delete a direct index of the data store.
+    ///
+    /// It is expected that the caller of this method will re-iterate through and add all entries back in, though perhaps with different indexed values or in a different order.
+    /// - Parameters:
+    ///   - indexName: The name of the index.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func deleteDirectIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws
+    
+    /// Create an entry in a secondary index of a data store.
+    /// - Parameters:
+    ///   - indexValue: The value the entry is sorted under.
+    ///   - identifierValue: The identifier the entry is keyed under.
+    ///   - cursor: The location to insert the entry.
+    ///   - indexName: The name of the index.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        cursor: some InsertionCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws
+    
+    /// Delete an entry from a secondary index of the data store.
+    /// - Parameters:
+    ///   - cursor: The location of the entry to delete.
+    ///   - indexName: The name of the index.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func deleteSecondaryIndexEntry(
+        cursor: some InstanceCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws
+    
+    /// Delete a direct index of the data store.
+    ///
+    /// It is expected that the caller of this method will re-iterate through and add all entries back in, though perhaps with different indexed values or in a different order.
+    /// - Parameters:
+    ///   - indexName: The name of the index.
+    ///   - datastoreKey: The key of the datastore the index belongs to.
+    func deleteSecondaryIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws
+    
     func withTransaction(_ transaction: (_ persistence: Self) -> ()) async throws
 }
 

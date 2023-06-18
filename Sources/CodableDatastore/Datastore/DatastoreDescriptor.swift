@@ -19,7 +19,7 @@ public struct DatastoreDescriptor: Codable, Equatable, Hashable {
     
     /// The main type the ``Datastore`` serves.
     ///
-    /// This type information is strictly informal — it can freely change between runs so long as the codable representations are compatible.
+    /// This type information is strictly informational — it can freely change between runs so long as the codable representations are compatible.
     public var codedType: String
     
     /// The type used to identify instances in the ``Datastore``.
