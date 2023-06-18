@@ -432,6 +432,60 @@ extension DiskPersistence {
     }
 }
 
+// MARK: Cursor Lookups
+
+extension DiskPersistence {
+    public func primaryIndexCursor<IdentifierType: Indexable>(
+        for identifier: IdentifierType,
+        datastoreKey: String
+    ) async throws -> (cursor: any InstanceCursor, data: Data) {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func primaryIndexCursor<IdentifierType: Indexable>(
+        inserting identifier: IdentifierType,
+        datastoreKey: String
+    ) async throws -> any InsertionCursor {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        for index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> (cursor: any InstanceCursor, data: Data) {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        inserting index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> any InsertionCursor {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        for index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> any InstanceCursor {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        inserting index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> any InsertionCursor {
+        preconditionFailure("Unimplemented")
+    }
+}
+
 // MARK: Helper Types
 
 class WeakDatastore {
