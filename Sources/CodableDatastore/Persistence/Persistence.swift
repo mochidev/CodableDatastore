@@ -41,7 +41,11 @@ public protocol _Persistence {
     func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
         datastoreKey: String
-    ) async throws -> (cursor: any InstanceCursor, data: Data)
+    ) async throws -> (
+        cursor: any InstanceCursorProtocol,
+        instanceData: Data,
+        versionData: Data
+    )
     
     /// Load a cursor for inserting the specified identifier in the primary index of the specified datastore key.
     ///
@@ -53,7 +57,7 @@ public protocol _Persistence {
     func primaryIndexCursor<IdentifierType: Indexable>(
         inserting identifier: IdentifierType,
         datastoreKey: String
-    ) async throws -> any InsertionCursor
+    ) async throws -> any InsertionCursorProtocol
     
     /// Load a cursor for the specified indexedValue in a direct index of the specified datastore key.
     ///
@@ -69,7 +73,11 @@ public protocol _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> (cursor: any InstanceCursor, data: Data)
+    ) async throws -> (
+        cursor: any InstanceCursorProtocol,
+        instanceData: Data,
+        versionData: Data
+    )
     
     /// Load a cursor for inserting the specified indexedValue in a direct index of the specified datastore key.
     ///
@@ -85,7 +93,7 @@ public protocol _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> any InsertionCursor
+    ) async throws -> any InsertionCursorProtocol
     
     /// Load a cursor for the specified indexedValue in a secondary index of the specified datastore key.
     ///
@@ -101,7 +109,7 @@ public protocol _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> any InstanceCursor
+    ) async throws -> any InstanceCursorProtocol
     
     /// Load a cursor for inserting the specified indexedValue in a secondary index of the specified datastore key.
     ///
@@ -117,7 +125,7 @@ public protocol _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> any InsertionCursor
+    ) async throws -> any InsertionCursorProtocol
     
     /// Create or update an entry in the primary index of a data store.
     ///
@@ -132,7 +140,7 @@ public protocol _Persistence {
         versionData: Data,
         identifierValue: IdentifierType,
         instanceData: Data,
-        cursor: some InsertionCursor,
+        cursor: some InsertionCursorProtocol,
         datastoreKey: String
     ) async throws
     
@@ -143,7 +151,7 @@ public protocol _Persistence {
     ///   - cursor: The location of the entry to delete.
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deletePrimaryIndexEntry(
-        cursor: some InstanceCursor,
+        cursor: some InstanceCursorProtocol,
         datastoreKey: String
     ) async throws
     
@@ -169,7 +177,7 @@ public protocol _Persistence {
         indexValue: IndexType,
         identifierValue: IdentifierType,
         instanceData: Data,
-        cursor: some InsertionCursor,
+        cursor: some InsertionCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws
@@ -180,7 +188,7 @@ public protocol _Persistence {
     ///   - indexName: The name of the index.
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteDirectIndexEntry(
-        cursor: some InstanceCursor,
+        cursor: some InstanceCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws
@@ -206,7 +214,7 @@ public protocol _Persistence {
     func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
         indexValue: IndexType,
         identifierValue: IdentifierType,
-        cursor: some InsertionCursor,
+        cursor: some InsertionCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws
@@ -217,7 +225,7 @@ public protocol _Persistence {
     ///   - indexName: The name of the index.
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteSecondaryIndexEntry(
-        cursor: some InstanceCursor,
+        cursor: some InstanceCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws

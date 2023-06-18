@@ -28,14 +28,18 @@ extension MemoryPersistence: _Persistence {
     public func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
         datastoreKey: String
-    ) async throws -> (cursor: any InstanceCursor, data: Data) {
+    ) async throws -> (
+        cursor: any InstanceCursorProtocol,
+        instanceData: Data,
+        versionData: Data
+    ) {
         preconditionFailure("Unimplemented")
     }
     
     public func primaryIndexCursor<IdentifierType: Indexable>(
         inserting identifier: IdentifierType,
         datastoreKey: String
-    ) async throws -> any InsertionCursor {
+    ) async throws -> any InsertionCursorProtocol {
         preconditionFailure("Unimplemented")
     }
     
@@ -44,7 +48,11 @@ extension MemoryPersistence: _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> (cursor: any InstanceCursor, data: Data) {
+    ) async throws -> (
+        cursor: any InstanceCursorProtocol,
+        instanceData: Data,
+        versionData: Data
+    ) {
         preconditionFailure("Unimplemented")
     }
     
@@ -53,7 +61,7 @@ extension MemoryPersistence: _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> any InsertionCursor {
+    ) async throws -> any InsertionCursorProtocol {
         preconditionFailure("Unimplemented")
     }
     
@@ -62,7 +70,7 @@ extension MemoryPersistence: _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> any InstanceCursor {
+    ) async throws -> any InstanceCursorProtocol {
         preconditionFailure("Unimplemented")
     }
     
@@ -71,7 +79,7 @@ extension MemoryPersistence: _Persistence {
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: String
-    ) async throws -> any InsertionCursor {
+    ) async throws -> any InsertionCursorProtocol {
         preconditionFailure("Unimplemented")
     }
     
@@ -79,14 +87,14 @@ extension MemoryPersistence: _Persistence {
         versionData: Data,
         identifierValue: IdentifierType,
         instanceData: Data,
-        cursor: some InsertionCursor,
+        cursor: some InsertionCursorProtocol,
         datastoreKey: String
     ) async throws {
         preconditionFailure("Unimplemented")
     }
     
     public func deletePrimaryIndexEntry(
-        cursor: some InstanceCursor,
+        cursor: some InstanceCursorProtocol,
         datastoreKey: String
     ) async throws {
         preconditionFailure("Unimplemented")
@@ -103,7 +111,7 @@ extension MemoryPersistence: _Persistence {
         indexValue: IndexType,
         identifierValue: IdentifierType,
         instanceData: Data,
-        cursor: some InsertionCursor,
+        cursor: some InsertionCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws {
@@ -111,7 +119,7 @@ extension MemoryPersistence: _Persistence {
     }
     
     public func deleteDirectIndexEntry(
-        cursor: some InstanceCursor,
+        cursor: some InstanceCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws {
@@ -128,7 +136,7 @@ extension MemoryPersistence: _Persistence {
     public func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
         indexValue: IndexType,
         identifierValue: IdentifierType,
-        cursor: some InsertionCursor,
+        cursor: some InsertionCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws {
@@ -136,7 +144,7 @@ extension MemoryPersistence: _Persistence {
     }
     
     public func deleteSecondaryIndexEntry(
-        cursor: some InstanceCursor,
+        cursor: some InstanceCursorProtocol,
         indexName: String,
         datastoreKey: String
     ) async throws {
