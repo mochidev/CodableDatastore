@@ -130,29 +130,12 @@ extension DatastoreDescriptor {
             directIndexes.insert(indexDescriptor)
         }
         
-        let mirror = Mirror(reflecting: sampleInstance)
-        
-        for child in mirror.children {
-            guard let label = child.label else { continue }
-            guard let childValue = child.value as? any _IndexedProtocol else { continue }
-            
-            let actualKey: String
-            if label.prefix(1) == "_" {
-                actualKey = "$\(label.dropFirst())"
-            } else {
-                actualKey = label
-            }
-            
+        Mirror.indexedChildren(from: sampleInstance) { indexName, value in
             let indexDescriptor = IndexDescriptor(
                 version: versionData,
-                key: actualKey,
-                indexType: childValue.projectedValue.indexedType
+                key: indexName,
+                indexType: value.projectedValue.indexedType
             )
-            
-            /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
-                continue
-            }
             
             if !directIndexes.contains(indexDescriptor) {
                 secondaryIndexes.insert(indexDescriptor)
