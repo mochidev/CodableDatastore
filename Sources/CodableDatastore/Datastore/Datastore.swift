@@ -17,6 +17,11 @@ public actor Datastore<
 > where Version.RawValue: Indexable & Comparable {
     let persistence: any Persistence
     let key: String
+    let version: Version
+    let encoder: (_ instance: CodedType) async throws -> Data
+    let decoders: [Version: (_ data: Data) async throws -> CodedType]
+    let directIndexes: [IndexPath<CodedType>]
+    let computedIndexes: [IndexPath<CodedType>]
     
     fileprivate var warmupStatus: TaskStatus = .waiting
     fileprivate var warmupProgressHandlers: [ProgressHandler] = []
@@ -33,7 +38,7 @@ public actor Datastore<
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
-        encoder: (_ instance: CodedType) async throws -> Data,
+        encoder: @escaping (_ instance: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
         directIndexes: [IndexPath<CodedType>] = [],
         computedIndexes: [IndexPath<CodedType>] = [],
@@ -41,6 +46,11 @@ public actor Datastore<
     ) where AccessMode == ReadWrite {
         self.persistence = persistence
         self.key = key
+        self.version = version
+        self.encoder = encoder
+        self.decoders = decoders
+        self.directIndexes = directIndexes
+        self.computedIndexes = computedIndexes
     }
     
     public init(
@@ -56,6 +66,11 @@ public actor Datastore<
     ) where AccessMode == ReadOnly {
         self.persistence = persistence
         self.key = key
+        self.version = version
+        self.encoder = { _ in preconditionFailure("Encode called on read-only instance.") }
+        self.decoders = decoders
+        self.directIndexes = directIndexes
+        self.computedIndexes = computedIndexes
     }
 }
 
@@ -404,7 +419,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         key: String,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
-        encoder: (_ object: CodedType) async throws -> Data,
+        encoder: @escaping (_ object: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
         directIndexes: [IndexPath<CodedType>] = [],
         computedIndexes: [IndexPath<CodedType>] = [],
