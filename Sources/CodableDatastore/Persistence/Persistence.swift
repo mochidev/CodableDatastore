@@ -33,7 +33,7 @@ public protocol _Persistence {
     
     /// Load a cursor for the specified identifier in the primary index of the specified datastore key.
     ///
-    /// - Throws: This method will throw if an instance for the specified identifier could not be found.
+    /// - Throws: ``PersistenceError/instanceNotFound``  if an instance for the specified identifier could not be found.
     /// - Parameters:
     ///   - identifier: The identifier of the instance to load.
     ///   - datastoreKey: The key of the datastore the index belongs to.
@@ -49,7 +49,7 @@ public protocol _Persistence {
     
     /// Load a cursor for inserting the specified identifier in the primary index of the specified datastore key.
     ///
-    /// - Throws: This method will throw if an instance for the specified identifier already exists.
+    /// - Throws: ``PersistenceError/instanceAlreadyExists`` if an instance for the specified identifier already exists.
     /// - Parameters:
     ///   - identifier: The identifier of an instance to insert.
     ///   - datastoreKey: The key of the datastore the index belongs to.
@@ -61,7 +61,7 @@ public protocol _Persistence {
     
     /// Load a cursor for the specified indexedValue in a direct index of the specified datastore key.
     ///
-    /// - Throws: This method will throw if an instance for the specified identifier could not be found.
+    /// - Throws: ``PersistenceError/instanceNotFound`` if an instance for the specified identifier could not be found.
     /// - Parameters:
     ///   - indexedValue: The indexed value to search against.
     ///   - identifier: The identifier of the instance to load.
@@ -81,7 +81,7 @@ public protocol _Persistence {
     
     /// Load a cursor for inserting the specified indexedValue in a direct index of the specified datastore key.
     ///
-    /// - Throws: This method will throw if an instance for the specified identifier already exists.
+    /// - Throws: ``PersistenceError/instanceAlreadyExists`` if an instance for the specified identifier already exists.
     /// - Parameters:
     ///   - indexedValue: The indexed value to search against.
     ///   - identifier: The identifier of an instance to insert.
@@ -97,7 +97,7 @@ public protocol _Persistence {
     
     /// Load a cursor for the specified indexedValue in a secondary index of the specified datastore key.
     ///
-    /// - Throws: This method will throw if an instance for the specified identifier could not be found.
+    /// - Throws: ``PersistenceError/instanceNotFound`` if an instance for the specified identifier could not be found.
     /// - Parameters:
     ///   - indexedValue: The indexed value to search against.
     ///   - identifier: The identifier of the instance to load.
@@ -113,7 +113,7 @@ public protocol _Persistence {
     
     /// Load a cursor for inserting the specified indexedValue in a secondary index of the specified datastore key.
     ///
-    /// - Throws: This method will throw if an instance for the specified identifier already exists.
+    /// - Throws: ``PersistenceError/instanceAlreadyExists`` if an instance for the specified identifier already exists.
     /// - Parameters:
     ///   - indexedValue: The indexed value to search against.
     ///   - identifier: The identifier of an instance to insert.
