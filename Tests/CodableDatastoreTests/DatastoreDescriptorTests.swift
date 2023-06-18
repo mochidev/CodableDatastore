@@ -39,12 +39,12 @@ final class DatastoreDescriptorTests: XCTestCase {
             case a, b, c
         }
         
-        struct Nested {
+        struct Nested: Codable {
             @Indexed
             var a: Enum
         }
         
-        struct SampleType {
+        struct SampleType: Codable {
             @Indexed
             var a: String
             
