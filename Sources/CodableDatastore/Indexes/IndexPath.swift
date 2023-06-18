@@ -31,3 +31,9 @@ extension IndexPath: Comparable {
         lhs.path < rhs.path
     }
 }
+
+extension Encodable {
+    subscript(keyPath indexPath: IndexPath<Self>) -> _AnyIndexed {
+        return self[keyPath: indexPath.keyPath]
+    }
+}

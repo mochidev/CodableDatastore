@@ -177,12 +177,12 @@ extension DatastoreDescriptor.IndexDescriptor {
     ///   - version: The current version being used by a data store.
     ///   - sampleInstance: A sample instance to probe for type information.
     ///   - indexPath: The ``IndexPath`` to the indexed property.
-    init<CodedType>(
+    init<CodedType: Codable>(
         version: Data,
         sampleInstance: CodedType,
         indexPath: IndexPath<CodedType>
     ) {
-        let sampleIndexValue = sampleInstance[keyPath: indexPath.keyPath]
+        let sampleIndexValue = sampleInstance[keyPath: indexPath]
         let indexType = sampleIndexValue.indexedType
         
         self.init(
