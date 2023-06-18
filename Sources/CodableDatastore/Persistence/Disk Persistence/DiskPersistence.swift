@@ -374,7 +374,7 @@ extension DiskPersistence where AccessMode == ReadWrite {
     }
 }
 
-// MARK: Datastore Registration
+// MARK: - Datastore Registration
 
 extension DiskPersistence {
     public func register<V, C, I, A>(
@@ -432,7 +432,7 @@ extension DiskPersistence {
     }
 }
 
-// MARK: Cursor Lookups
+// MARK: - Cursor Lookups
 
 extension DiskPersistence {
     public func primaryIndexCursor<IdentifierType: Indexable>(
@@ -486,7 +486,86 @@ extension DiskPersistence {
     }
 }
 
-// MARK: Helper Types
+// MARK: - Entry Manipulation
+
+extension DiskPersistence {
+    public func persistPrimaryIndexEntry<IdentifierType: Indexable>(
+        versionData: Data,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursor,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deletePrimaryIndexEntry(
+        cursor: some InstanceCursor,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func resetPrimaryIndex(
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func persistDirectIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        versionData: Data,
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteDirectIndexEntry(
+        cursor: some InstanceCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteDirectIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        cursor: some InsertionCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteSecondaryIndexEntry(
+        cursor: some InstanceCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteSecondaryIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+}
+
+// MARK: - Helper Types
 
 class WeakDatastore {
     var canWrite: Bool = false

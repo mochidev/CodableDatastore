@@ -233,9 +233,14 @@ When concatenated, the payload has the following structure:
 - A space ` `
 - A version string
 - A new line `\n`
-- A decimal number, indicating the size in bytes of the index value.
+- For non-primary indexes:
+    - A decimal number, indicating the size in bytes of the index value.
+    - A space ` `
+    - The index value
+    - A new line `\n`
+- A decimal number, indicating the size in bytes of the identifier value.
 - A space ` `
-- The index value
+- The identifier value
 - A new line `\n`
 - The encoded data for the instance.
 
@@ -249,14 +254,17 @@ index's page.
 
 ```
 PAGE
-<20
-556677.datastorepage
-=62
-7 object3
-5@2023-06-04 17-06-40 0011223344556677.datastorepage
->27
-7 object4
-2@2023-06-05 02-0
+<3
+ct2
+=15
+5 date3
+object1
+=15
+5 date3
+object7
+>12
+5 date4
+obje
 ```
 
 In the above example, the overall page format is identical, but the payloads
@@ -265,10 +273,7 @@ have a slightly different structure:
 - A space ` `
 - The index value
 - A new line `\n`
-- A decimal number representing the numerical index of the instance on the page.
-These indexes start with `0`, where `0` is the first instance that starts on that page.
-- An `@`
-- The file name of the page in the primary direct index.
+- The identifier of the object as stored in the primary index.
 
 ## Operations
 

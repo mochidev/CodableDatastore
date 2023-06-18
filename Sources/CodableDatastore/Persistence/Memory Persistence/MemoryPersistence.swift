@@ -75,6 +75,81 @@ extension MemoryPersistence: _Persistence {
         preconditionFailure("Unimplemented")
     }
     
+    public func persistPrimaryIndexEntry<IdentifierType: Indexable>(
+        versionData: Data,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursor,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deletePrimaryIndexEntry(
+        cursor: some InstanceCursor,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func resetPrimaryIndex(
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func persistDirectIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        versionData: Data,
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteDirectIndexEntry(
+        cursor: some InstanceCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteDirectIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        cursor: some InsertionCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteSecondaryIndexEntry(
+        cursor: some InstanceCursor,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    public func deleteSecondaryIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
     public func withTransaction(_ transaction: (MemoryPersistence) -> ()) async throws {
         preconditionFailure("Unimplemented")
     }
