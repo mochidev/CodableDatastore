@@ -25,6 +25,13 @@ extension MemoryPersistence: _Persistence {
         preconditionFailure("Unimplemented")
     }
     
+    public func apply(
+        descriptor: DatastoreDescriptor,
+        for datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
     public func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
         datastoreKey: String

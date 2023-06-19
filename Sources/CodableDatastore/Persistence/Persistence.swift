@@ -31,6 +31,14 @@ public protocol _Persistence {
     /// - Returns: A descriptor of the datastore as the persistence knows it.
     func datastoreDescriptor<Version, CodedType, IdentifierType, AccessMode>(for datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) async throws -> DatastoreDescriptor?
     
+    /// Apply a descriptor for a given datastore.
+    ///
+    /// - Note: The persistence may choose which values to keep and which to ignore. For instance, an index version may be ignored if the index already exists.
+    /// - Parameters:
+    ///   - descriptor: A descriptor of the Datastore as it should exist.
+    ///   - datastoreKey: The key of the datastore the descriptor belongs to.
+    func apply(descriptor: DatastoreDescriptor, for datastoreKey: String) async throws
+    
     /// Load a cursor for the specified identifier in the primary index of the specified datastore key.
     ///
     /// - Throws: ``PersistenceError/instanceNotFound``  if an instance for the specified identifier could not be found.
