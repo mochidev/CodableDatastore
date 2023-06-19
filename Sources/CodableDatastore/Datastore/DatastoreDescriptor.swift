@@ -14,7 +14,7 @@ import Foundation
 public struct DatastoreDescriptor: Codable, Equatable, Hashable {
     /// The version that was current at time of serialization.
     ///
-    /// If a ``Datastore`` cannot decode this version, the datastore is presumed innaccessible, and any reads or writes will fail.
+    /// If a ``Datastore`` cannot decode this version, the datastore is presumed inaccessible, and any reads or writes will fail.
     public var version: Data
     
     /// The main type the ``Datastore`` serves.
@@ -29,16 +29,16 @@ public struct DatastoreDescriptor: Codable, Equatable, Hashable {
     
     /// The direct indexes the ``Datastore`` uses.
     ///
-    /// Direct indexes duplicate the entire instance in their entries, which is useful for quick ranged reads. The identifier is implicitely a direct index, though other properties may also be used should they be applicable.
+    /// Direct indexes duplicate the entire instance in their entries, which is useful for quick ranged reads. The identifier is implicitly a direct index, though other properties may also be used should they be applicable.
     ///
-    /// If the index produces the same value, the identifier of the instance is implicitely used as a secondary sort parameter.
+    /// If the index produces the same value, the identifier of the instance is implicitly used as a secondary sort parameter.
     public var directIndexes: [String : IndexDescriptor]
     
     /// The secondary indexes the ``Datastore`` uses.
     ///
     /// Secondary indexes store just the value being indexed, and point to the object in the primary datastore.
     ///
-    /// If the index produces the same value, the identifier of the instance is implicitely used as a secondary sort parameter.
+    /// If the index produces the same value, the identifier of the instance is implicitly used as a secondary sort parameter.
     public var secondaryIndexes: [String : IndexDescriptor]
     
     /// The number of instances the ``Datastore`` manages.
@@ -52,7 +52,7 @@ extension DatastoreDescriptor {
     public struct IndexDescriptor: Codable, Equatable, Hashable, Comparable {
         /// The version that was first used to persist an index to disk.
         ///
-        /// This is used to determine if an index must be re-built purely because something about how the index changed in a way that could not be automatically determined, sunce as Codable conformance changing.
+        /// This is used to determine if an index must be re-built purely because something about how the index changed in a way that could not be automatically determined, such as Codable conformance changing.
         public var version: Data
         
         /// The key this index is based on.
@@ -74,7 +74,7 @@ extension DatastoreDescriptor {
 extension DatastoreDescriptor {
     /// Initialize a descriptor from types a ``Datastore`` deals in directly.
     /// 
-    /// This will use Swift reflection to inder the indexable properties from those that use the @``Indexed`` property wrapper.
+    /// This will use Swift reflection to infer the indexable properties from those that use the @``Indexed`` property wrapper.
     /// 
     /// - Parameters:
     ///   - version: The current version being used by a data store.
