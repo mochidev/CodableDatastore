@@ -430,6 +430,13 @@ extension DiskPersistence {
             return datastoreInfo.descriptor
         }
     }
+    
+    public func apply(
+        descriptor: DatastoreDescriptor,
+        for datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
 }
 
 // MARK: - Cursor Lookups
