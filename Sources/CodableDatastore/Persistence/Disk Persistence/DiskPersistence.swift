@@ -63,7 +63,7 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
                 .appendingPathComponent(appName, isDirectory: true)
                 .appendingPathComponent(persistenceName, isDirectory: true)
 #else
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 8, *) {
+            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9, *) {
                 return URL
                     .applicationSupportDirectory
                     .appending(component: appName, directoryHint: .isDirectory)
