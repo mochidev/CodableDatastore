@@ -165,7 +165,7 @@ extension MemoryPersistence: _Persistence {
         preconditionFailure("Unimplemented")
     }
     
-    public func withTransaction(_ transaction: (MemoryPersistence) -> ()) async throws {
+    public func withUnsafeTransaction(options: TransactionOptions, transaction: @escaping (_ persistence: MemoryPersistence) async throws -> ()) async throws {
         preconditionFailure("Unimplemented")
     }
 }

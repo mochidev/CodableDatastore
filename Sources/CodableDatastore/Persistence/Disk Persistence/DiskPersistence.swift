@@ -639,7 +639,7 @@ private enum DiskPersistenceTaskLocals {
 }
 
 extension DiskPersistence: _Persistence {
-    public func withTransaction(_ transaction: (DiskPersistence) -> ()) async throws {
+    public func withUnsafeTransaction(options: TransactionOptions, transaction: @escaping (_ persistence: DiskPersistence) async throws -> ()) async throws {
         
     }
 }
