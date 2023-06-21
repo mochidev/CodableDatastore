@@ -11,7 +11,7 @@ import Foundation
 /// A persistence used to group multiple data stores into a common store.
 public protocol Persistence<AccessMode>: _Persistence {
     associatedtype AccessMode: _AccessMode
-    func perform(_ transaction: (_ persistence: Self) -> ()) async throws
+    func perform(options: TransactionOptions, transaction: @escaping (_ persistence: Self) async throws -> ()) async throws
 }
 
 /// An internal list of requirements for a persistence.
@@ -249,11 +249,15 @@ public protocol _Persistence {
         datastoreKey: String
     ) async throws
     
-    func withTransaction(_ transaction: (_ persistence: Self) -> ()) async throws
+    func withUnsafeTransaction(options: TransactionOptions, transaction: @escaping (_ persistence: Self) async throws -> ()) async throws
 }
 
-extension _Persistence {
-    public func perform(_ transaction: (_ persistence: Self) -> ()) async throws {
-        try await withTransaction(transaction)
+extension Persistence {
+    public func perform(options: TransactionOptions = [], transaction: @escaping (_ persistence: Self) async throws -> ()) async throws {
+        try await withUnsafeTransaction(options: options, transaction: transaction)
+    }
+    
+    public func perform(transaction: @escaping (_ persistence: Self) async throws -> ()) async throws {
+        try await withUnsafeTransaction(options: [], transaction: transaction)
     }
 }

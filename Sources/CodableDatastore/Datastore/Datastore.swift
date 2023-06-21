@@ -280,184 +280,182 @@ extension Datastore where AccessMode == ReadWrite {
     public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws {
         try await warmupIfNeeded()
         
-        // TODO: Start an implicit transaction
+        let updatedDescriptor = try self.updatedDescriptor(for: instance)
+        let versionData = try Data(self.version)
+        let instanceData = try await self.encoder(instance)
         
-        /// Create any missing indexes or prime the datastore for writing.
-        let updatedDescriptor = try updatedDescriptor(for: instance)
-        try await persistence.apply(descriptor: updatedDescriptor, for: key)
-        
-        let versionData = try Data(version)
-        let instanceData = try await encoder(instance)
-        
-        let existingEntry: (cursor: any InstanceCursorProtocol, instance: CodedType)? = try await {
-            do {
-                let existingEntry = try await persistence.primaryIndexCursor(for: idenfifier, datastoreKey: key)
-                
-                let existingVersion = try Version(existingEntry.versionData)
-                let decoder = try decoder(for: existingVersion)
-                let existingInstance = try await decoder(existingEntry.instanceData)
-                
-                return (cursor: existingEntry.cursor, instance: existingInstance)
-            } catch PersistenceError.instanceNotFound {
-                return nil
-            } catch {
-                throw error
-            }
-        }()
-        
-        /// Grab the insertion cursor in the primary index.
-        let existingInstance = existingEntry?.instance
-        let insertionCursor: any InsertionCursorProtocol = try await {
-            if let existingEntry { return existingEntry.cursor }
-            return try await persistence.primaryIndexCursor(inserting: idenfifier, datastoreKey: key)
-        }()
-        
-        /// Persist the entry in the primary index
-        try await persistence.persistPrimaryIndexEntry(
-            versionData: versionData,
-            identifierValue: idenfifier,
-            instanceData: instanceData,
-            cursor: insertionCursor,
-            datastoreKey: key
-        )
-        
-        var queriedIndexes: Set<String> = []
-        
-        /// Persist the direct indexes with full copies
-        for indexPath in directIndexes {
-            let indexName = indexPath.path
-            guard !queriedIndexes.contains(indexName) else { continue }
-            queriedIndexes.insert(indexName)
+        try await persistence.withUnsafeTransaction(options: [.idempotent]) { persistence in
+            /// Create any missing indexes or prime the datastore for writing.
+            try await persistence.apply(descriptor: updatedDescriptor, for: self.key)
             
-            let existingValue = existingInstance?[keyPath: indexPath]
-            let updatedValue = instance[keyPath: indexPath]
-//            let indexType = updatedValue.indexedType
+            let existingEntry: (cursor: any InstanceCursorProtocol, instance: CodedType)? = try await {
+                do {
+                    let existingEntry = try await persistence.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+                    
+                    let existingVersion = try Version(existingEntry.versionData)
+                    let decoder = try self.decoder(for: existingVersion)
+                    let existingInstance = try await decoder(existingEntry.instanceData)
+                    
+                    return (cursor: existingEntry.cursor, instance: existingInstance)
+                } catch PersistenceError.instanceNotFound {
+                    return nil
+                } catch {
+                    throw error
+                }
+            }()
             
-            if let existingValue {
-                /// Grab a cursor to the old value in the index.
-                let existingValueCursor = try await persistence.directIndexCursor(
-                    for: existingValue.indexed,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: key
-                )
-                
-                /// Delete it.
-                try await persistence.deleteDirectIndexEntry(
-                    cursor: existingValueCursor.cursor,
-                    indexName: indexName,
-                    datastoreKey: key
-                )
-            }
+            /// Grab the insertion cursor in the primary index.
+            let existingInstance = existingEntry?.instance
+            let insertionCursor: any InsertionCursorProtocol = try await {
+                if let existingEntry { return existingEntry.cursor }
+                return try await persistence.primaryIndexCursor(inserting: idenfifier, datastoreKey: self.key)
+            }()
             
-            /// Grab a cursor to insert the new value in the index.
-            let updatedValueCursor = try await persistence.directIndexCursor(
-                inserting: updatedValue.indexed,
-                identifier: idenfifier,
-                indexName: indexName,
-                datastoreKey: key
-            )
-            
-            /// Insert it.
-            try await persistence.persistDirectIndexEntry(
+            /// Persist the entry in the primary index
+            try await persistence.persistPrimaryIndexEntry(
                 versionData: versionData,
-                indexValue: updatedValue.indexed,
                 identifierValue: idenfifier,
                 instanceData: instanceData,
-                cursor: updatedValueCursor,
-                indexName: indexName,
-                datastoreKey: key
+                cursor: insertionCursor,
+                datastoreKey: self.key
             )
-        }
-        
-        /// Next, go through any remaining computed indexes as secondary indexes.
-        for indexPath in computedIndexes {
-            let indexName = indexPath.path
-            guard !queriedIndexes.contains(indexName) else { continue }
-            queriedIndexes.insert(indexName)
             
-            let existingValue = existingInstance?[keyPath: indexPath]
-            let updatedValue = instance[keyPath: indexPath]
-//            let indexType = updatedValue.indexedType
+            var queriedIndexes: Set<String> = []
             
-            if let existingValue {
-                /// Grab a cursor to the old value in the index.
-                let existingValueCursor = try await persistence.secondaryIndexCursor(
-                    for: existingValue.indexed,
+            /// Persist the direct indexes with full copies
+            for indexPath in self.directIndexes {
+                let indexName = indexPath.path
+                guard !queriedIndexes.contains(indexName) else { continue }
+                queriedIndexes.insert(indexName)
+                
+                let existingValue = existingInstance?[keyPath: indexPath]
+                let updatedValue = instance[keyPath: indexPath]
+//                let indexType = updatedValue.indexedType
+                
+                if let existingValue {
+                    /// Grab a cursor to the old value in the index.
+                    let existingValueCursor = try await persistence.directIndexCursor(
+                        for: existingValue.indexed,
+                        identifier: idenfifier,
+                        indexName: indexName,
+                        datastoreKey: self.key
+                    )
+                    
+                    /// Delete it.
+                    try await persistence.deleteDirectIndexEntry(
+                        cursor: existingValueCursor.cursor,
+                        indexName: indexName,
+                        datastoreKey: self.key
+                    )
+                }
+                
+                /// Grab a cursor to insert the new value in the index.
+                let updatedValueCursor = try await persistence.directIndexCursor(
+                    inserting: updatedValue.indexed,
                     identifier: idenfifier,
                     indexName: indexName,
-                    datastoreKey: key
+                    datastoreKey: self.key
+                )
+                
+                /// Insert it.
+                try await persistence.persistDirectIndexEntry(
+                    versionData: versionData,
+                    indexValue: updatedValue.indexed,
+                    identifierValue: idenfifier,
+                    instanceData: instanceData,
+                    cursor: updatedValueCursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
+            
+            /// Next, go through any remaining computed indexes as secondary indexes.
+            for indexPath in self.computedIndexes {
+                let indexName = indexPath.path
+                guard !queriedIndexes.contains(indexName) else { continue }
+                queriedIndexes.insert(indexName)
+                
+                let existingValue = existingInstance?[keyPath: indexPath]
+                let updatedValue = instance[keyPath: indexPath]
+//                let indexType = updatedValue.indexedType
+                
+                if let existingValue {
+                    /// Grab a cursor to the old value in the index.
+                    let existingValueCursor = try await persistence.secondaryIndexCursor(
+                        for: existingValue.indexed,
+                        identifier: idenfifier,
+                        indexName: indexName,
+                        datastoreKey: self.key
+                    )
+                    
+                    /// Delete it.
+                    try await persistence.deleteSecondaryIndexEntry(
+                        cursor: existingValueCursor,
+                        indexName: indexName,
+                        datastoreKey: self.key
+                    )
+                }
+                
+                /// Grab a cursor to insert the new value in the index.
+                let updatedValueCursor = try await persistence.secondaryIndexCursor(
+                    inserting: updatedValue.indexed,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+                
+                /// Insert it.
+                try await persistence.persistSecondaryIndexEntry(
+                    indexValue: updatedValue.indexed,
+                    identifierValue: idenfifier,
+                    cursor: updatedValueCursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
+            
+            /// Remove any remaining indexed values from the old instance.
+            try await Mirror.indexedChildren(from: existingInstance) { indexName, value in
+                guard !queriedIndexes.contains(indexName) else { return }
+                
+                /// Grab a cursor to the old value in the index.
+                let existingValueCursor = try await persistence.secondaryIndexCursor(
+                    for: value,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
                 )
                 
                 /// Delete it.
                 try await persistence.deleteSecondaryIndexEntry(
                     cursor: existingValueCursor,
                     indexName: indexName,
-                    datastoreKey: key
+                    datastoreKey: self.key
                 )
             }
             
-            /// Grab a cursor to insert the new value in the index.
-            let updatedValueCursor = try await persistence.secondaryIndexCursor(
-                inserting: updatedValue.indexed,
-                identifier: idenfifier,
-                indexName: indexName,
-                datastoreKey: key
-            )
-            
-            /// Insert it.
-            try await persistence.persistSecondaryIndexEntry(
-                indexValue: updatedValue.indexed,
-                identifierValue: idenfifier,
-                cursor: updatedValueCursor,
-                indexName: indexName,
-                datastoreKey: key
-            )
+            /// Re-insert those indexes from the new index.
+            try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
+                guard !queriedIndexes.contains(indexName) else { return }
+                
+                /// Grab a cursor to insert the new value in the index.
+                let updatedValueCursor = try await persistence.secondaryIndexCursor(
+                    inserting: value,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+                
+                /// Insert it.
+                try await persistence.persistSecondaryIndexEntry(
+                    indexValue: value,
+                    identifierValue: idenfifier,
+                    cursor: updatedValueCursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
         }
-        
-        /// Remove any remaining indexed values from the old instance.
-        try await Mirror.indexedChildren(from: existingInstance) { indexName, value in
-            guard !queriedIndexes.contains(indexName) else { return }
-            
-            /// Grab a cursor to the old value in the index.
-            let existingValueCursor = try await persistence.secondaryIndexCursor(
-                for: value,
-                identifier: idenfifier,
-                indexName: indexName,
-                datastoreKey: key
-            )
-            
-            /// Delete it.
-            try await persistence.deleteSecondaryIndexEntry(
-                cursor: existingValueCursor,
-                indexName: indexName,
-                datastoreKey: key
-            )
-        }
-        
-        /// Re-insert those indexes from the new index.
-        try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
-            guard !queriedIndexes.contains(indexName) else { return }
-            
-            /// Grab a cursor to insert the new value in the index.
-            let updatedValueCursor = try await persistence.secondaryIndexCursor(
-                inserting: value,
-                identifier: idenfifier,
-                indexName: indexName,
-                datastoreKey: key
-            )
-            
-            /// Insert it.
-            try await persistence.persistSecondaryIndexEntry(
-                indexValue: value,
-                identifierValue: idenfifier,
-                cursor: updatedValueCursor,
-                indexName: indexName,
-                datastoreKey: key
-            )
-        }
-        
-        // TODO: Close implicit transaction
     }
     
     public func delete(_ idenfifier: IdentifierType) async throws {
