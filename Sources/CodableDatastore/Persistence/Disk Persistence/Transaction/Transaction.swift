@@ -16,14 +16,16 @@ extension DiskPersistence {
         var childTransactions: [Transaction] = []
         
         private(set) var task: Task<Void, Error>!
-        var options: TransactionOptions = []
+        let options: TransactionOptions
         
         private init(
             persistence: DiskPersistence,
-            parent: Transaction?
+            parent: Transaction?,
+            options: TransactionOptions
         ) {
             self.persistence = persistence
             self.parent = parent
+            self.options = options
         }
         
         private func attachTask<T>(
@@ -43,7 +45,6 @@ extension DiskPersistence {
                 return returnValue
             }
             
-            self.options = options
             self.task = Task {
                 _ = try await task.value
                 
@@ -73,7 +74,8 @@ extension DiskPersistence {
             
             let transaction = Transaction(
                 persistence: persistence,
-                parent: nil
+                parent: nil,
+                options: options
             )
             
             let task = await transaction.attachTask(options: options) {
@@ -93,10 +95,12 @@ extension DiskPersistence {
         ) async -> (Transaction, Task<T, Error>) {
             let transaction = Transaction(
                 persistence: persistence,
-                parent: self
+                parent: self,
+                options: options
             )
             
-            let lastChild = childTransactions.last
+            /// Get the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
+            let lastChild = childTransactions.last { !$0.options.contains(.readOnly) }
             childTransactions.append(transaction)
             
             let task = await transaction.attachTask(options: options) {
