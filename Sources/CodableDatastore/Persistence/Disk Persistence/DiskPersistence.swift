@@ -23,6 +23,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     
     var registeredDatastores: [String: [WeakDatastore]] = [:]
     
+    var lastTransaction: Transaction?
+    
     /// Initialize a ``DiskPersistence`` with a read-write URL.
     ///
     /// Use this initializer when creating a persistence from the main process that will access it, such as your app. To access the same persistence from another process, use ``init(readOnlyURL:)`` instead.
@@ -580,6 +582,23 @@ extension DiskPersistence {
     }
 }
 
+// MARK: - Transactions
+
+extension DiskPersistence {
+    public func withUnsafeTransaction(options: TransactionOptions, transaction: @escaping (_ persistence: DiskPersistence) async throws -> ()) async throws {
+        let (transacrion, task) = await Transaction.makeTransaction(persistence: self, lastTransaction: lastTransaction, options: options) {
+            try await transaction(self)
+        }
+        
+        /// Save the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
+        if !options.contains(.readOnly) {
+            lastTransaction = transacrion
+        }
+        
+        try await task.value
+    }
+}
+
 // MARK: - Helper Types
 
 class WeakDatastore {
@@ -638,8 +657,3 @@ private enum DiskPersistenceTaskLocals {
     static var storeInfo: StoreInfo?
 }
 
-extension DiskPersistence: _Persistence {
-    public func withUnsafeTransaction(options: TransactionOptions, transaction: @escaping (_ persistence: DiskPersistence) async throws -> ()) async throws {
-        
-    }
-}
