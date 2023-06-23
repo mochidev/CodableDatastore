@@ -9,7 +9,6 @@
 import Foundation
 
 typealias DatastoreIdentifier = TypedIdentifier<DiskPersistence<ReadOnly>.Datastore>
-typealias DatastoreRootIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Datastore>
 
 extension DiskPersistence {
     actor Datastore {
