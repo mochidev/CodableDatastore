@@ -276,7 +276,11 @@ extension Datastore {
 extension Datastore where AccessMode == ReadWrite {
     /// Persist an instance for a given identifier.
     ///
+    /// If an instance does not already exist for the specified identifier, it will be created. If an instance already exists, it will be updated.
     /// - Note: If you instance conforms to Identifiable, it it preferable to use ``persist(_:)`` instead.
+    /// - Parameters:
+    ///   - instance: The instance to persist.
+    ///   - idenfifier: The unique identifier to use to reference the item being persisted.
     public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws {
         try await warmupIfNeeded()
         
@@ -458,6 +462,17 @@ extension Datastore where AccessMode == ReadWrite {
         }
     }
     
+    /// Persist an instance for a given identifier, keyed to the specified path.
+    ///
+    /// If an instance does not already exist for the specified identifier, it will be created. If an instance already exists, it will be updated.
+    /// - Note: If you instance conforms to Identifiable, it it preferable to use ``persist(_:)`` instead.
+    /// - Parameters:
+    ///   - instance: The instance to persist.
+    ///   - keypath: The keypath the identifier is located at.
+    public func persist(_ instance: CodedType, id keypath: KeyPath<CodedType, IdentifierType>) async throws {
+        try await persist(instance, to: instance[keyPath: keypath])
+    }
+    
     public func delete(_ idenfifier: IdentifierType) async throws {
         
     }
@@ -470,6 +485,10 @@ extension Datastore where AccessMode == ReadWrite {
 // MARK: Idetifiable CodedType
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
+    /// Persist an instance to the data store.
+    ///
+    /// If an instance does not already exist for the specified identifier, it will be created. If an instance already exists, it will be updated.
+    /// - Parameter instance: The instance to persist.
     public func persist(_ instance: CodedType) async throws where AccessMode == ReadWrite {
         try await self.persist(instance, to: instance.id)
     }
