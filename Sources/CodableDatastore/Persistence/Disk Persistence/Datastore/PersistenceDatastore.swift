@@ -20,6 +20,16 @@ extension DiskPersistence {
         
         var lastUpdateDescriptorTask: Task<Any, Error>?
         
+        /// The root objects that are being tracked in memory.
+        var trackedRootObjects: [RootObject.ID : RootObject] = [:]
+        var trackedIndex: [Index.ID : Index] = [:]
+        var trackedPages: [Page.ID : Page] = [:]
+        
+        /// The root objects on the file system that are actively loaded in memory.
+        var loadedRootObjects: [RootObject.ID : RootObject] = [:]
+        var loadedIndex: [Index.ID : Index] = [:]
+        var loadedPages: [Page.ID : Page] = [:]
+        
         init(
             id: DatastoreIdentifier,
             snapshot: Snapshot<AccessMode>
