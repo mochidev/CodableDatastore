@@ -32,10 +32,10 @@ struct DatastoreRootManifest: Codable, Equatable, Identifiable {
     var primaryIndexManifest: IndexInfo
     
     /// A pointer to the direct indexes' root objects.
-    var directIndexManifests: [String: IndexInfo] = [:]
+    var directIndexManifests: [DatastoreIndexIdentifier: IndexInfo] = [:]
     
     /// A pointer to the secondary indexes' root objects.
-    var secondaryIndexManifests: [String: IndexInfo] = [:]
+    var secondaryIndexManifests: [DatastoreIndexIdentifier: IndexInfo] = [:]
 }
 
 extension DatastoreRootManifest {
@@ -44,9 +44,9 @@ extension DatastoreRootManifest {
         var key: String
         
         /// The identifier for the index on disk.
-        var id: DatastoreIdentifier
+        var id: DatastoreIndexIdentifier
         
         /// The root object of the index.
-        var root: DatastoreRootIdentifier
+        var root: DatastoreIndexManifestIdentifier
     }
 }
