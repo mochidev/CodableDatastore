@@ -26,9 +26,9 @@ extension DiskPersistence {
         var trackedPages: [Page.ID : Page] = [:]
         
         /// The root objects on the file system that are actively loaded in memory.
-        var loadedRootObjects: [RootObject.ID : RootObject] = [:]
-        var loadedIndex: [Index.ID : Index] = [:]
-        var loadedPages: [Page.ID : Page] = [:]
+        var loadedRootObjects: Set<RootObject.ID> = []
+        var loadedIndex: Set<Index.ID> = []
+        var loadedPages: Set<Page.ID> = []
         
         init(
             id: DatastoreIdentifier,
@@ -41,6 +41,7 @@ extension DiskPersistence {
 }
 
 // MARK: - Common URL Accessors
+
 extension DiskPersistence.Datastore {
     /// The URL that points to the Snapshot directory.
     nonisolated var datastoreURL: URL {
@@ -69,6 +70,62 @@ extension DiskPersistence.Datastore {
 }
 
 // MARK: - Root Object Management
+
+extension DiskPersistence.Datastore {
+    func rootObject(for identifier: RootObject.ID) -> RootObject {
+        if let rootObject = trackedRootObjects[identifier] {
+            return rootObject
+        }
+        let rootObject = RootObject(datastore: self, id: identifier)
+        trackedRootObjects[identifier] = rootObject
+        return rootObject
+    }
+    
+    func mark(identifier: RootObject.ID, asLoaded: Bool) {
+        if asLoaded {
+            loadedRootObjects.insert(identifier)
+        } else {
+            loadedRootObjects.remove(identifier)
+        }
+    }
+    
+    func index(for identifier: Index.ID) -> Index {
+        if let index = trackedIndex[identifier] {
+            return index
+        }
+        let index = Index(datastore: self, id: identifier)
+        trackedIndex[identifier] = index
+        return index
+    }
+    
+    func mark(identifier: Index.ID, asLoaded: Bool) {
+        if asLoaded {
+            loadedIndex.insert(identifier)
+        } else {
+            loadedIndex.remove(identifier)
+        }
+    }
+    
+    func page(for identifier: Page.ID) -> Page {
+        if let page = trackedPages[identifier] {
+            return page
+        }
+        let page = Page(datastore: self, id: identifier)
+        trackedPages[identifier] = page
+        return page
+    }
+    
+    func mark(identifier: Page.ID, asLoaded: Bool) {
+        if asLoaded {
+            loadedPages.insert(identifier)
+        } else {
+            loadedPages.remove(identifier)
+        }
+    }
+}
+
+// MARK: - Root Object Management
+
 extension DiskPersistence.Datastore {
     /// Load the root object from disk for the given identifier.
     func loadRootObject(for rootIdentifier: DatastoreRootIdentifier) throws -> DatastoreRootManifest {
