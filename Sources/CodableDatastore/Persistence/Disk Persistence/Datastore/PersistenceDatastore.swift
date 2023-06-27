@@ -67,6 +67,30 @@ extension DiskPersistence.Datastore {
         datastoreURL
             .appendingPathComponent("SecondaryIndexes", isDirectory: true)
     }
+    
+    nonisolated func indexURL(for indexID: Index.ID) -> URL {
+        switch indexID {
+        case .primary:
+            return directIndexesURL
+                .appendingPathComponent("Primary.datastoreindex", isDirectory: true)
+        case .direct(let indexID, _):
+            return directIndexesURL
+                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
+        case .secondary(let indexID, _):
+            return secondaryIndexesURL
+                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
+        }
+    }
+    
+    nonisolated func manifestsURL(for indexID: Index.ID) -> URL {
+        indexURL(for: indexID)
+            .appendingPathComponent("Manifest", isDirectory: true)
+    }
+    
+    nonisolated func pagesURL(for indexID: Index.ID) -> URL {
+        indexURL(for: indexID)
+            .appendingPathComponent("Pages", isDirectory: true)
+    }
 }
 
 // MARK: - Root Object Management
