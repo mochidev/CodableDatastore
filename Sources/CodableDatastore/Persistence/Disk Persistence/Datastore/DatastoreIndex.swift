@@ -55,56 +55,11 @@ extension DiskPersistence.Datastore.Index {
 // MARK: - Common URL Accessors
 
 extension DiskPersistence.Datastore.Index {
-    /// The URL that points to the index.
-    nonisolated var indexURL: URL {
-        switch id {
-        case .primary:
-            return datastore
-                .directIndexesURL
-                .appendingPathComponent("Primary.datastoreindex", isDirectory: true)
-        case .direct(let indexID, _):
-            return datastore
-                .directIndexesURL
-                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
-        case .secondary(let indexID, _):
-            return datastore
-                .secondaryIndexesURL
-                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
-        }
-    }
-    
-    /// The URL that points to the Manifest directory.
-    nonisolated var manifestsURL: URL {
-        indexURL.appendingPathComponent("Manifest", isDirectory: true)
-    }
-    
-    /// The URL that points to the Manifest directory.
-    nonisolated var pagesURL: URL {
-        indexURL.appendingPathComponent("Pages", isDirectory: true)
-    }
-    
     /// The URL that points to the manifest.
     nonisolated var manifestURL: URL {
-        switch id {
-        case .primary(let manifestID):
-            return datastore
-                .directIndexesURL
-                .appendingPathComponent("Primary.datastoreindex", isDirectory: true)
-                .appendingPathComponent("Manifest", isDirectory: true)
-                .appendingPathComponent("\(manifestID).indexmanifest", isDirectory: false)
-        case .direct(let indexID, let manifestID):
-            return datastore
-                .directIndexesURL
-                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
-                .appendingPathComponent("Manifest", isDirectory: true)
-                .appendingPathComponent("\(manifestID).indexmanifest", isDirectory: false)
-        case .secondary(let indexID, let manifestID):
-            return datastore
-                .secondaryIndexesURL
-                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
-                .appendingPathComponent("Manifest", isDirectory: true)
-                .appendingPathComponent("\(manifestID).indexmanifest", isDirectory: false)
-        }
+        datastore
+            .manifestsURL(for: id)
+            .appendingPathComponent("\(id.manifestID).indexmanifest", isDirectory: false)
     }
 }
 
@@ -134,10 +89,26 @@ extension DiskPersistence.Datastore.Index {
         }
         
         /// Make sure the directories exists first.
-        try FileManager.default.createDirectory(at: manifestsURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: datastore.manifestsURL(for: id), withIntermediateDirectories: true)
         
         /// Encode the provided manifest, and write it to disk.
         let data = Data(manifest.bytes)
         try data.write(to: manifestURL, options: .atomic)
+    }
+}
+
+// MARK: - Pages
+
+extension DiskPersistence.Datastore.Index {
+    var orderedPages: [DiskPersistence.Datastore.Page] {
+        get async throws {
+            var pages: [DiskPersistence.Datastore.Page] = []
+            
+            for pageID in try await manifest.orderedPageIDs {
+                pages.append(await datastore.page(for: .init(index: id, page: pageID)))
+            }
+            
+            return pages
+        }
     }
 }
