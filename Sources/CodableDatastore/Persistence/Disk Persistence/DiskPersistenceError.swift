@@ -19,6 +19,11 @@ public enum DiskPersistenceError: LocalizedError {
     /// A default store could not be created due to a missing application support directory.
     case missingAppSupportDirectory
     
+    /// The index manifest was in a format that could not be understood.
+    ///
+    /// - TODO: Offer advice to try re-building the index if possible.
+    case invalidIndexManifestFormat
+    
     public var errorDescription: String? {
         switch self {
         case .notFileURL:
@@ -27,6 +32,8 @@ public enum DiskPersistenceError: LocalizedError {
             return "The persistence store cannot be saved to the default URL as it is not running in the context of an app."
         case .missingAppSupportDirectory:
             return "The persistence store cannot be saved to the default URL as an Application Support directory could built for this system."
+        case .invalidIndexManifestFormat:
+            return "The index manifest was in a format that could not be understood."
         }
     }
 }
