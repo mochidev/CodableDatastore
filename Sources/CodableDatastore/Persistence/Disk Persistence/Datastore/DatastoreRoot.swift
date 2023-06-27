@@ -47,9 +47,7 @@ extension DiskPersistence.Datastore.RootObject {
 extension DiskPersistence.Datastore.RootObject {
     private var rootObject: DatastoreRootManifest {
         get async throws {
-            if let _rootObject {
-                return _rootObject
-            }
+            if let _rootObject { return _rootObject }
             
             let data = try Data(contentsOf: rootObjectURL)
             
