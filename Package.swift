@@ -17,8 +17,18 @@ let package = Package(
             targets: ["CodableDatastore"]
         ),
     ],
+    dependencies: [
+        .package(url: "https://github.com/mochidev/AsyncSequenceReader.git", .upToNextMinor(from: "0.1.2")),
+        .package(url: "https://github.com/mochidev/Bytes.git", .upToNextMinor(from: "0.2.3")),
+    ],
     targets: [
-        .target( name: "CodableDatastore"),
+        .target(
+            name: "CodableDatastore",
+            dependencies: [
+                "AsyncSequenceReader",
+                "Bytes"
+            ]
+        ),
         .testTarget(
             name: "CodableDatastoreTests",
             dependencies: ["CodableDatastore"]
