@@ -24,6 +24,9 @@ public enum DiskPersistenceError: LocalizedError {
     /// - TODO: Offer advice to try re-building the index if possible.
     case invalidIndexManifestFormat
     
+    /// The page was in a format that could not be understood.
+    case invalidPageFormat
+    
     public var errorDescription: String? {
         switch self {
         case .notFileURL:
@@ -34,6 +37,8 @@ public enum DiskPersistenceError: LocalizedError {
             return "The persistence store cannot be saved to the default URL as an Application Support directory could built for this system."
         case .invalidIndexManifestFormat:
             return "The index manifest was in a format that could not be understood."
+        case .invalidPageFormat:
+            return "The page was in a format that could not be understood."
         }
     }
 }
