@@ -1,5 +1,5 @@
 //
-//  DatastoreEntryBlock.swift
+//  DatastorePageEntryBlock.swift
 //  CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-06-27.
@@ -12,7 +12,7 @@ import Bytes
 
 /// A block of data that represents a portion of an entry on a page.
 @usableFromInline
-enum DatastoreEntryBlock: Hashable {
+enum DatastorePageEntryBlock: Hashable {
     /// The tail end of an entry.
     ///
     /// This must be combined with a previous block to form an entry.
@@ -36,7 +36,7 @@ enum DatastoreEntryBlock: Hashable {
 
 extension AsyncIteratorProtocol where Element == Byte {
     @usableFromInline
-    mutating func next(_ type: DatastoreEntryBlock.Type) async throws -> DatastoreEntryBlock? {
+    mutating func next(_ type: DatastorePageEntryBlock.Type) async throws -> DatastorePageEntryBlock? {
         guard let blockType = try await nextIfPresent(utf8: String.self, count: 1) else {
             return nil
         }
@@ -78,7 +78,7 @@ extension AsyncIteratorProtocol where Element == Byte {
 
 // MARK: - Encoding
 
-extension DatastoreEntryBlock {
+extension DatastorePageEntryBlock {
     var bytes: Bytes {
         var bytes = Bytes()
         
