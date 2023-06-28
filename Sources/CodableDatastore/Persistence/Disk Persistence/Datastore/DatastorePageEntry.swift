@@ -1,5 +1,5 @@
 //
-//  DatastoreEntry.swift
+//  DatastorePageEntry.swift
 //  CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-06-27.
@@ -10,7 +10,7 @@ import Foundation
 import AsyncSequenceReader
 import Bytes
 
-struct DatastoreEntry: Hashable {
+struct DatastorePageEntry: Hashable {
     var headers: [Bytes]
     var content: Bytes
 }
@@ -18,7 +18,7 @@ struct DatastoreEntry: Hashable {
 
 // MARK: - Encoding
 
-extension DatastoreEntry {
+extension DatastorePageEntry {
     var bytes: Bytes {
         var bytes = Bytes()
         
@@ -39,12 +39,12 @@ extension DatastoreEntry {
         return bytes
     }
     
-    func blocks(remainingPageSpace: Int, maxPageSpace: Int) -> [DatastoreEntryBlock] {
+    func blocks(remainingPageSpace: Int, maxPageSpace: Int) -> [DatastorePageEntryBlock] {
         precondition(remainingPageSpace >= 0, "remainingPageSpace must be greater or equal to zero.")
         precondition(maxPageSpace > 4, "maxPageSpace must be greater or equal to 5.")
         
         var remainingSlice = bytes[...]
-        var blocks: [DatastoreEntryBlock] = []
+        var blocks: [DatastorePageEntryBlock] = []
         
         if remainingPageSpace > 4 {
             var usableSpace = remainingPageSpace - 4
