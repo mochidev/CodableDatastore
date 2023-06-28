@@ -193,14 +193,17 @@ PAGE
 <15
 ata": "data" 
 }
-=44
+=45
 8 version1
 7 object3
+
 {
     "data": "data" 
 }
->28 version1
+>30
+8 version1
 7 object4
+
 {
     "d
 ```
@@ -216,32 +219,33 @@ This is followed by a number of data blocks, that can take one of four forms:
 - `<` indicates a block that represents the tail-end of a block from a previous
   page. It is formed by collating `<`, a decimal number of the payload size,
   a new line `\n`, the payload, and a final new line `\n`. The payload is
-  concatenated to a previous payload to build the message.
+  concatenated to a previous payload to build the entry.
     - If a block still doesn't fit on a single page, the preceding symbol is `~`
       instead of `<`, and the payload size used is the amount of data contained
-      on _this_ page, and the next page must be opened as well.
+      on _this_ page; the next page must be opened as well to form a full entry.
 - `=` indicates a block completely represented on this page. It is formed by
-  collating `=`, a decimal number of the payload size, a space ` `, the payload,
-  and a final new line `\n`.
+  collating `=`, a decimal number of the payload size, a new line `\n`, the
+  payload, and a final new line `\n`.
 - `>` indicates a block that is started on this page, but requires more space
   to be fully represented, and the next page should be opened. It is formed by
-  collating `=`, a decimal number of the payload size, a space ` `, the payload,
-  and a final new line `\n`.
+  collating `=`, a decimal number of the payload size, a new line `\n`, the
+  payload, and a final new line `\n`.
 
-When concatenated, the payload has the following structure:
+Once concatenated, an entry has the following structure:
 - A decimal number, indicating the size in bytes of the version string.
-- A space ` `
-- A version string
-- A new line `\n`
+- A space ` `.
+- A version string.
+- A new line `\n`.
 - For non-primary indexes:
     - A decimal number, indicating the size in bytes of the index value.
-    - A space ` `
-    - The index value
-    - A new line `\n`
+    - A space ` `.
+    - The index value.
+    - A new line `\n`.
 - A decimal number, indicating the size in bytes of the identifier value.
-- A space ` `
-- The identifier value
-- A new line `\n`
+- A space ` `.
+- The identifier value.
+- A new line `\n`.
+- One more new line `\n` to separate the headers from the content.
 - The encoded data for the instance.
 
 
@@ -256,23 +260,27 @@ index's page.
 PAGE
 <3
 ct2
-=15
+=16
 5 date3
+
 object1
-=15
+=16
 5 date3
+
 object7
->12
+>13
 5 date4
+
 obje
 ```
 
 In the above example, the overall page format is identical, but the payloads
 have a slightly different structure:
 - A decimal number, indicating the size in bytes of the index value.
-- A space ` `
-- The index value
-- A new line `\n`
+- A space ` `.
+- The index value.
+- A new line `\n`.
+- One more new line `\n` to separate the headers from the content.
 - The identifier of the object as stored in the primary index.
 
 ## Operations
