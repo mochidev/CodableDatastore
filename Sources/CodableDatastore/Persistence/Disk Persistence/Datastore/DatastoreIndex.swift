@@ -17,6 +17,7 @@ extension DiskPersistence.Datastore {
         let id: ID
         
         var _manifest: DatastoreIndexManifest?
+        var manifestTask: Task<DatastoreIndexManifest, Error>?
         
         var isPersisted: Bool
         
@@ -68,16 +69,22 @@ extension DiskPersistence.Datastore.Index {
 extension DiskPersistence.Datastore.Index {
     private var manifest: DatastoreIndexManifest {
         get async throws {
-            if let _manifest { return _manifest }
+            if let manifestTask { return try await manifestTask.value }
             
-            let manifest = try await DatastoreIndexManifest(contentsOf: manifestURL, id: id.manifestID)
-            
-            isPersisted = true
-            _manifest = manifest
-            
-            await datastore.mark(identifier: id, asLoaded: true)
-            
-            return manifest
+            let loader = Task {
+                if let _manifest { return _manifest }
+                
+                let manifest = try await DatastoreIndexManifest(contentsOf: manifestURL, id: id.manifestID)
+                
+                isPersisted = true
+                _manifest = manifest
+                
+                await datastore.mark(identifier: id, asLoaded: true)
+                
+                return manifest
+            }
+            manifestTask = loader
+            return try await loader.value
         }
     }
     
