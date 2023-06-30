@@ -19,7 +19,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/mochidev/AsyncSequenceReader.git", .upToNextMinor(from: "0.1.2")),
-        .package(url: "https://github.com/mochidev/Bytes.git", .upToNextMinor(from: "0.2.3")),
+        .package(url: "https://github.com/mochidev/Bytes.git", .upToNextMinor(from: "0.3.0")),
     ],
     targets: [
         .target(

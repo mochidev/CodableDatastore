@@ -91,10 +91,7 @@ extension DatastoreIndexManifest {
         
         var iterator = sequence.makeAsyncIterator()
         
-        let magic = try await iterator.next(utf8: String.self, count: 5)
-        guard magic == "INDEX\n" else {
-            throw DiskPersistenceError.invalidIndexManifestFormat
-        }
+        try await iterator.check(utf8: "INDEX\n")
         
         self.version = .alpha
         

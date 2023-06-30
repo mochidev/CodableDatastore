@@ -93,10 +93,7 @@ extension DiskPersistence.Datastore.Page {
                 
                 var iterator = sequence.makeAsyncIterator()
                 
-                let magic = try await iterator.next(utf8: String.self, count: 5)
-                guard magic == "PAGE\n" else {
-                    throw DiskPersistenceError.invalidPageFormat
-                }
+                try await iterator.check(utf8: "PAGE\n")
                 
                 /// Pages larger than 1 GB are unsupported.
                 let transformation = try await iterator.collect(max: 1024*1024*1024) { sequence in
