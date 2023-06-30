@@ -8,6 +8,7 @@
 
 import Foundation
 
+#if swift(<5.9) || !os(xrOS)
 /// Make UUIDs comparable, so that they can be used transparently as an index.
 ///
 /// - SeeAlso: https://github.com/apple/swift-foundation/blob/5388acf1d929865d4df97d3c50e4d08bc4c6bdf0/Sources/FoundationEssentials/UUID.swift#L135-L156
@@ -35,3 +36,4 @@ extension UUID: Comparable {
         return result < 0
     }
 }
+#endif
