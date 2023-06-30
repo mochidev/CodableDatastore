@@ -9,7 +9,7 @@
 import Foundation
 
 extension DiskPersistence {
-    actor Transaction: AnyTransaction {
+    actor Transaction: AnyDiskTransaction {
         let persistence: DiskPersistence
         
         unowned let parent: Transaction?
@@ -82,9 +82,9 @@ extension DiskPersistence {
             options: TransactionOptions,
             handler: @escaping () async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
-            if let parent = TransactionTaskLocals.transaction {
+            if let parent = Self.unsafeCurrentTransaction {
                 let (child, task) = await parent.childTransaction(options: options, handler: handler)
-                return (child as! Self, task)
+                return (child, task)
             }
             
             let transaction = Transaction(
@@ -129,6 +129,10 @@ extension DiskPersistence {
             return (transaction, task)
         }
         
+        nonisolated static var unsafeCurrentTransaction: Self? {
+            TransactionTaskLocals.transaction.map({ $0 as! Self })
+        }
+        
         nonisolated static var currentTransaction: Self {
             get throws {
                 guard let transaction = TransactionTaskLocals.transaction.flatMap({ $0 as? Self })
@@ -139,14 +143,177 @@ extension DiskPersistence {
     }
 }
 
-protocol AnyTransaction {
-    func childTransaction<T>(
-        options: TransactionOptions,
-        handler: @escaping () async throws -> T
-    ) async -> (Self, Task<T, Error>)
+// MARK: - Datastore Interface
+
+extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
+    func withTransaction<T>(options: TransactionOptions, transaction: @escaping (DatastoreInterfaceProtocol) async throws -> T) async throws -> T {
+        // TODO: Return a child directly?
+        try await persistence.withTransaction(options: options, transaction: transaction)
+    }
+    
+    func register<Version, CodedType, IdentifierType, Access>(
+        datastore: Datastore<Version, CodedType, IdentifierType, Access>
+    ) async throws -> DatastoreDescriptor? {
+        try await persistence.register(datastore: datastore)
+    }
+    
+    func datastoreDescriptor<Version, CodedType, IdentifierType, Access>(
+        for datastore: Datastore<Version, CodedType, IdentifierType, Access>
+    ) async throws -> DatastoreDescriptor? {
+        try await persistence.datastoreDescriptor(for: datastore)
+    }
+    
+    func apply(descriptor: DatastoreDescriptor, for datastoreKey: String) async throws {
+        preconditionFailure("Unimplemented")
+    }
 }
 
-private enum TransactionTaskLocals {
+// MARK: - Cursor Lookups
+
+extension DiskPersistence.Transaction {
+    func primaryIndexCursor<IdentifierType: Indexable>(
+        for identifier: IdentifierType,
+        datastoreKey: String
+    ) async throws -> (
+        cursor: any InstanceCursorProtocol,
+        instanceData: Data,
+        versionData: Data
+    ) {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func primaryIndexCursor<IdentifierType: Indexable>(
+        inserting identifier: IdentifierType,
+        datastoreKey: String
+    ) async throws -> any InsertionCursorProtocol {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        for index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> (
+        cursor: any InstanceCursorProtocol,
+        instanceData: Data,
+        versionData: Data
+    ) {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        inserting index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> any InsertionCursorProtocol {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        for index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> any InstanceCursorProtocol {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
+        inserting index: IndexType,
+        identifier: IdentifierType,
+        indexName: String,
+        datastoreKey: String
+    ) async throws -> any InsertionCursorProtocol {
+        preconditionFailure("Unimplemented")
+    }
+}
+
+// MARK: - Entry Manipulation
+
+extension DiskPersistence.Transaction {
+    func persistPrimaryIndexEntry<IdentifierType: Indexable>(
+        versionData: Data,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursorProtocol,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func deletePrimaryIndexEntry(
+        cursor: some InstanceCursorProtocol,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func resetPrimaryIndex(
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func persistDirectIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        versionData: Data,
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursorProtocol,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func deleteDirectIndexEntry(
+        cursor: some InstanceCursorProtocol,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func deleteDirectIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
+        indexValue: IndexType,
+        identifierValue: IdentifierType,
+        cursor: some InsertionCursorProtocol,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func deleteSecondaryIndexEntry(
+        cursor: some InstanceCursorProtocol,
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+    
+    func deleteSecondaryIndex(
+        indexName: String,
+        datastoreKey: String
+    ) async throws {
+        preconditionFailure("Unimplemented")
+    }
+}
+
+// MARK: - Helper Types
+
+fileprivate protocol AnyDiskTransaction {}
+
+fileprivate enum TransactionTaskLocals {
     @TaskLocal
-    static var transaction: AnyTransaction?
+    static var transaction: AnyDiskTransaction?
 }

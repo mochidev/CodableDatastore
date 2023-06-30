@@ -10,7 +10,7 @@
 ///
 /// - Note: A cursor is only valid within the same transaction for the same persistence it was created for.
 public protocol CursorProtocol<P> {
-    associatedtype P: _Persistence
+    associatedtype P: Persistence
     var persistence: P { get }
     
 //    var transaction: Transaction<P> { get }
