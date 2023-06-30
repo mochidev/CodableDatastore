@@ -79,6 +79,13 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
 #endif
         }
     }
+    
+    public nonisolated var _datastoreInterface: DatastoreInterfaceProtocol {
+        if let currentTransaction = Transaction.unsafeCurrentTransaction {
+            return currentTransaction
+        }
+        return DatastoreInterface(persistence: self)
+    }
 }
 
 // MARK: - Default Store
@@ -379,15 +386,15 @@ extension DiskPersistence where AccessMode == ReadWrite {
 // MARK: - Datastore Registration
 
 extension DiskPersistence {
-    public func register<V, C, I, A>(
-        datastore newDatastore: CodableDatastore.Datastore<V, C, I, A>
+    func register<Version, CodedType, IdentifierType, Access>(
+        datastore newDatastore: CodableDatastore.Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
         guard
             let datastorePersistence = newDatastore.persistence as? DiskPersistence,
             datastorePersistence === self
         else {
             assertionFailure("The datastore has already been registered with another persistence. Make sure to only register a datastore with a single persistence. This will throw an error on release builds.")
-            throw PersistenceError.multipleRegistrations
+            throw DatastoreInterfaceError.multipleRegistrations
         }
         
         var existingDatastores = registeredDatastores[newDatastore.key, default: []].filter(\.isAlive)
@@ -395,12 +402,12 @@ extension DiskPersistence {
         for weakDatastore in existingDatastores {
             if weakDatastore.contains(datastore: newDatastore) {
                 assertionFailure("The datastore has already been registered with this persistence. Make sure to not call register multiple times per persistence. This will throw an error on release builds.")
-                throw PersistenceError.alreadyRegistered
+                throw DatastoreInterfaceError.alreadyRegistered
             }
             
-            if A.self == ReadWrite.self, weakDatastore.canWrite {
+            if Access.self == ReadWrite.self, weakDatastore.canWrite {
                 assertionFailure("An existing datastore that can write to the persistence has already been registered for this key. Only one writer is suppored per key. This will throw an error on release builds.")
-                throw PersistenceError.duplicateWriters
+                throw DatastoreInterfaceError.duplicateWriters
             }
         }
         
@@ -411,15 +418,15 @@ extension DiskPersistence {
         return try await datastoreDescriptor(for: newDatastore)
     }
     
-    public func datastoreDescriptor<V, C, I, A>(
-        for datastore: CodableDatastore.Datastore<V, C, I, A>
+    func datastoreDescriptor<Version, CodedType, IdentifierType, Access>(
+        for datastore: CodableDatastore.Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
         guard
             let datastorePersistence = datastore.persistence as? DiskPersistence,
             datastorePersistence === self
         else {
             assertionFailure("The datastore is registered with another persistence. Make sure to only register a datastore with a single persistence. This will throw an error on release builds.")
-            throw PersistenceError.multipleRegistrations
+            throw DatastoreInterfaceError.multipleRegistrations
         }
         
         return try await withCurrentSnapshot { snapshot in
@@ -433,150 +440,9 @@ extension DiskPersistence {
         }
     }
     
-    public func apply(
+    func apply(
         descriptor: DatastoreDescriptor,
         for datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-}
-
-// MARK: - Cursor Lookups
-
-extension DiskPersistence {
-    public func primaryIndexCursor<IdentifierType: Indexable>(
-        for identifier: IdentifierType,
-        datastoreKey: String
-    ) async throws -> (
-        cursor: any InstanceCursorProtocol,
-        instanceData: Data,
-        versionData: Data
-    ) {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func primaryIndexCursor<IdentifierType: Indexable>(
-        inserting identifier: IdentifierType,
-        datastoreKey: String
-    ) async throws -> any InsertionCursorProtocol {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        for index: IndexType,
-        identifier: IdentifierType,
-        indexName: String,
-        datastoreKey: String
-    ) async throws -> (
-        cursor: any InstanceCursorProtocol,
-        instanceData: Data,
-        versionData: Data
-    ) {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        inserting index: IndexType,
-        identifier: IdentifierType,
-        indexName: String,
-        datastoreKey: String
-    ) async throws -> any InsertionCursorProtocol {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        for index: IndexType,
-        identifier: IdentifierType,
-        indexName: String,
-        datastoreKey: String
-    ) async throws -> any InstanceCursorProtocol {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        inserting index: IndexType,
-        identifier: IdentifierType,
-        indexName: String,
-        datastoreKey: String
-    ) async throws -> any InsertionCursorProtocol {
-        preconditionFailure("Unimplemented")
-    }
-}
-
-// MARK: - Entry Manipulation
-
-extension DiskPersistence {
-    public func persistPrimaryIndexEntry<IdentifierType: Indexable>(
-        versionData: Data,
-        identifierValue: IdentifierType,
-        instanceData: Data,
-        cursor: some InsertionCursorProtocol,
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func deletePrimaryIndexEntry(
-        cursor: some InstanceCursorProtocol,
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func resetPrimaryIndex(
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func persistDirectIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
-        versionData: Data,
-        indexValue: IndexType,
-        identifierValue: IdentifierType,
-        instanceData: Data,
-        cursor: some InsertionCursorProtocol,
-        indexName: String,
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func deleteDirectIndexEntry(
-        cursor: some InstanceCursorProtocol,
-        indexName: String,
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func deleteDirectIndex(
-        indexName: String,
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
-        indexValue: IndexType,
-        identifierValue: IdentifierType,
-        cursor: some InsertionCursorProtocol,
-        indexName: String,
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func deleteSecondaryIndexEntry(
-        cursor: some InstanceCursorProtocol,
-        indexName: String,
-        datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
-    }
-    
-    public func deleteSecondaryIndex(
-        indexName: String,
-        datastoreKey: String
     ) async throws {
         preconditionFailure("Unimplemented")
     }
@@ -585,17 +451,17 @@ extension DiskPersistence {
 // MARK: - Transactions
 
 extension DiskPersistence {
-    public func withUnsafeTransaction(options: TransactionOptions, transaction: @escaping (_ persistence: DiskPersistence) async throws -> ()) async throws {
-        let (transacrion, task) = await Transaction.makeTransaction(persistence: self, lastTransaction: lastTransaction, options: options) {
-            try await transaction(self)
+    func withTransaction<T>(options: TransactionOptions, transaction: @escaping (DatastoreInterfaceProtocol) async throws -> T) async throws -> T {
+        let (transaction, task) = await Transaction.makeTransaction(persistence: self, lastTransaction: lastTransaction, options: options) {
+            try await transaction(DatastoreInterface(persistence: self))
         }
         
         /// Save the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
         if !options.contains(.readOnly) {
-            lastTransaction = transacrion
+            lastTransaction = transaction
         }
         
-        try await task.value
+        return try await task.value
     }
 }
 

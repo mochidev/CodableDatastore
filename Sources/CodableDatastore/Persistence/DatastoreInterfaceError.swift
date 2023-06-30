@@ -1,5 +1,5 @@
 //
-//  PersistenceError.swift
+//  DatastoreInterfaceError.swift
 //  CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-06-13.
@@ -8,8 +8,8 @@
 
 import Foundation
 
-/// A ``Persistence``-specific error.
-public enum PersistenceError: LocalizedError {
+/// An error that may be returned from ``DatastoreInterfaceProtocol`` methods.
+public enum DatastoreInterfaceError: LocalizedError {
     /// The datastore has already been registered with another persistence.
     case multipleRegistrations
     
