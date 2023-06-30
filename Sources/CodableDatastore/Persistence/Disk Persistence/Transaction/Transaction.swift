@@ -18,6 +18,8 @@ extension DiskPersistence {
         private(set) var task: Task<Void, Error>!
         let options: TransactionOptions
         
+        var roots: [DatastoreIdentifier : Datastore.RootObject] = [:]
+        
         private init(
             persistence: DiskPersistence,
             parent: Transaction?,
@@ -57,8 +59,21 @@ extension DiskPersistence {
             return task
         }
         
+        func applyRoots(roots: [DatastoreIdentifier : Datastore.RootObject]) {
+            for (key, value) in roots {
+                self.roots[key] = value
+            }
+        }
+        
         private func persist() async throws {
+            if let parent {
+                await parent.applyRoots(roots: roots)
+                return
+            }
             
+            for (_, root) in roots {
+                try await root.persistIfNeeded()
+            }
         }
         
         static func makeTransaction<T>(
@@ -112,6 +127,14 @@ extension DiskPersistence {
             }
             
             return (transaction, task)
+        }
+        
+        nonisolated static var currentTransaction: Self {
+            get throws {
+                guard let transaction = TransactionTaskLocals.transaction.flatMap({ $0 as? Self })
+                else { throw DiskPersistenceInternalError.missingTransaction }
+                return transaction
+            }
         }
     }
 }
