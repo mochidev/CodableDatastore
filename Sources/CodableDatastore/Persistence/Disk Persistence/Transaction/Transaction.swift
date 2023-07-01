@@ -80,7 +80,7 @@ extension DiskPersistence {
             persistence: DiskPersistence,
             lastTransaction: Transaction?,
             options: TransactionOptions,
-            handler: @escaping () async throws -> T
+            handler: @escaping (_ transaction: Transaction) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             if let parent = Self.unsafeCurrentTransaction {
                 let (child, task) = await parent.childTransaction(options: options, handler: handler)
@@ -98,7 +98,7 @@ extension DiskPersistence {
                 if !options.contains(.readOnly) {
                     try? await lastTransaction?.task.value
                 }
-                return try await handler()
+                return try await handler(transaction)
             }
             
             return (transaction, task)
@@ -106,7 +106,7 @@ extension DiskPersistence {
         
         func childTransaction<T>(
             options: TransactionOptions,
-            handler: @escaping () async throws -> T
+            handler: @escaping (_ transaction: Transaction) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             let transaction = Transaction(
                 persistence: persistence,
@@ -123,7 +123,7 @@ extension DiskPersistence {
                 if !options.contains(.readOnly) {
                     _ = try? await lastChild?.task.value
                 }
-                return try await handler()
+                return try await handler(transaction)
             }
             
             return (transaction, task)

@@ -427,18 +427,16 @@ extension DiskPersistence {
 
 extension DiskPersistence {
     public func _withTransaction<T>(options: TransactionOptions, transaction: @escaping (_ transaction: DatastoreInterfaceProtocol) async throws -> T) async throws -> T {
-        preconditionFailure("Unimplemented")
+        let (transaction, task) = await Transaction.makeTransaction(persistence: self, lastTransaction: lastTransaction, options: options) { interface in
+            try await transaction(interface)
+        }
         
-//        let (transaction, task) = await Transaction.makeTransaction(persistence: self, lastTransaction: lastTransaction, options: options) {
-//            try await transaction(DatastoreInterface(persistence: self))
-//        }
-//        
-//        /// Save the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
-//        if !options.contains(.readOnly) {
-//            lastTransaction = transaction
-//        }
-//        
-//        return try await task.value
+        /// Save the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
+        if !options.contains(.readOnly) {
+            lastTransaction = transaction
+        }
+        
+        return try await task.value
     }
 }
 
