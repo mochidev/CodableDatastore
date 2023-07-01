@@ -12,10 +12,11 @@ import Foundation
 public protocol Persistence<AccessMode> {
     associatedtype AccessMode: _AccessMode
     
-    /// The interface a datastore can use to communicate fundamental operations with the persistence.
-    ///
-    /// - Warning: Calling methods on this object can lead to undefined behavior.
-    nonisolated var _datastoreInterface: any DatastoreInterfaceProtocol { get }
+    /// Perform a transaction on the persistence with the specified options.
+    /// - Parameters:
+    ///   - options: The options to use while building the transaction.
+    ///   - transaction: A closure representing the transaction with which to perform operations on. You should not escape the provided transaction.
+    func _withTransaction<T>(options: TransactionOptions, transaction: @escaping @Sendable (_ transaction: DatastoreInterfaceProtocol) async throws -> T) async throws -> T
 }
 
 extension Persistence {
@@ -30,7 +31,7 @@ extension Persistence {
     ///   - options: A set of options to use when performing the transaction.
     ///   - transaction: A closure witht he set of operations to perform.
     public func perform<T>(options: TransactionOptions = [], transaction: @escaping (_ persistence: Self) async throws -> T) async throws -> T {
-        try await _datastoreInterface.withTransaction(options: options) { _ in
+        try await _withTransaction(options: options) { _ in
             try await transaction(self)
         }
     }

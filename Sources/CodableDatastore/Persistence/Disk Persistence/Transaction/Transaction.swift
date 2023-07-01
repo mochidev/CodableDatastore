@@ -153,25 +153,12 @@ extension DiskPersistence {
         nonisolated static var unsafeCurrentTransaction: Self? {
             TransactionTaskLocals.transaction.map({ $0 as! Self })
         }
-        
-        nonisolated static var currentTransaction: Self {
-            get throws {
-                guard let transaction = TransactionTaskLocals.transaction.flatMap({ $0 as? Self })
-                else { throw DiskPersistenceInternalError.missingTransaction }
-                return transaction
-            }
-        }
     }
 }
 
 // MARK: - Datastore Interface
 
 extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
-    func withTransaction<T>(options: TransactionOptions, transaction: @escaping (DatastoreInterfaceProtocol) async throws -> T) async throws -> T {
-        // TODO: Return a child directly?
-        try await persistence.withTransaction(options: options, transaction: transaction)
-    }
-    
     func register<Version, CodedType, IdentifierType, Access>(
         datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {

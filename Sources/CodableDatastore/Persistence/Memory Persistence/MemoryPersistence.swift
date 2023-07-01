@@ -13,7 +13,7 @@ public actor MemoryPersistence: Persistence {
 }
 
 extension MemoryPersistence {
-    public nonisolated var _datastoreInterface: any DatastoreInterfaceProtocol {
+    public func _withTransaction<T>(options: TransactionOptions, transaction: @escaping (_ transaction: DatastoreInterfaceProtocol) async throws -> T) async throws -> T {
         preconditionFailure("Unimplemented")
     }
 }

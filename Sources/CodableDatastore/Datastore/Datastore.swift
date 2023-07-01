@@ -128,30 +128,36 @@ extension Datastore {
                 warmupProgressHandlers.append(progressHandler)
             }
             let warmupTask = Task {
-                let descriptor = try await persistence._datastoreInterface.register(datastore: self)
-                print("\(String(describing: descriptor))")
-                
-                /// Only operate on read-write datastores beyond this point.
-                guard let self = self as? Datastore<Version, CodedType, IdentifierType, ReadWrite> else { return }
-                print("\(self)")
-                
-                for handler in warmupProgressHandlers {
-                    handler(.evaluating)
+                try await persistence._withTransaction(options: []) { transaction in
+                    try await self.registerAndMigrate(with: transaction)
                 }
-                
-                // TODO: Migrate any incompatible indexes by calling the internal methods below as needed.
-                await Task.yield() // The "work"
-                
-                for handler in warmupProgressHandlers {
-                    handler(.complete(total: 0))
-                }
-                
-                warmupProgressHandlers.removeAll()
-                warmupStatus = .complete
             }
             warmupStatus = .inProgress(warmupTask)
             try await warmupTask.value
         }
+    }
+    
+    func registerAndMigrate(with transaction: DatastoreInterfaceProtocol) async throws {
+        let descriptor = try await transaction.register(datastore: self)
+        print("\(String(describing: descriptor))")
+        
+        /// Only operate on read-write datastores beyond this point.
+        guard let self = self as? Datastore<Version, CodedType, IdentifierType, ReadWrite> else { return }
+        print("\(self)")
+        
+        for handler in warmupProgressHandlers {
+            handler(.evaluating)
+        }
+        
+        // TODO: Migrate any incompatible indexes by calling the internal methods below as needed.
+        await Task.yield() // The "work"
+        
+        for handler in warmupProgressHandlers {
+            handler(.complete(total: 0))
+        }
+        
+        warmupProgressHandlers.removeAll()
+        warmupStatus = .complete
     }
 }
 
@@ -167,42 +173,44 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
     public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
-        guard
-            /// If we have no descriptor, then no data exists to be migrated.
-            let descriptor = try await persistence._datastoreInterface.datastoreDescriptor(for: key),
-            descriptor.size > 0,
-            /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-            let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
-            /// We don't care in this method of the version is incompatible — the index will be discarded.
-            let version = try? Version(matchingIndex.version),
-            /// Make sure the stored version is smaller than the one we require, otherwise stop early.
-            version.rawValue < minimumVersion.rawValue
-        else { return }
-        
-        var warmUpProgress: Progress = .complete(total: 0)
-        try await warmupIfNeeded { progress in
-            warmUpProgress = progress
-            progressHandler?(progress.adding(current: 0, total: descriptor.size))
-        }
-        
-        /// Make sure we still need to do the work, as the warm up may have made changes anyways due to incompatible types.
-        guard
-            /// If we have no descriptor, then no data exists to be migrated.
-            let descriptor = try await persistence._datastoreInterface.datastoreDescriptor(for: key),
-            descriptor.size > 0,
-            /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-            let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
-            /// We don't care in this method of the version is incompatible — the index will be discarded.
-            let version = try? Version(matchingIndex.version),
-            /// Make sure the stored version is smaller than the one we require, otherwise stop early.
-            version.rawValue < minimumVersion.rawValue
-        else {
-            progressHandler?(warmUpProgress.adding(current: descriptor.size, total: descriptor.size))
-            return
-        }
-        
-        try await migrate(index: index) { migrateProgress in
-            progressHandler?(warmUpProgress.adding(migrateProgress))
+        try await persistence._withTransaction(options: []) { transaction in
+            guard
+                /// If we have no descriptor, then no data exists to be migrated.
+                let descriptor = try await transaction.datastoreDescriptor(for: self.key),
+                descriptor.size > 0,
+                /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
+                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+                /// We don't care in this method of the version is incompatible — the index will be discarded.
+                let version = try? Version(matchingIndex.version),
+                /// Make sure the stored version is smaller than the one we require, otherwise stop early.
+                version.rawValue < minimumVersion.rawValue
+            else { return }
+            
+            var warmUpProgress: Progress = .complete(total: 0)
+            try await self.warmupIfNeeded { progress in
+                warmUpProgress = progress
+                progressHandler?(progress.adding(current: 0, total: descriptor.size))
+            }
+            
+            /// Make sure we still need to do the work, as the warm up may have made changes anyways due to incompatible types.
+            guard
+                /// If we have no descriptor, then no data exists to be migrated.
+                let descriptor = try await transaction.datastoreDescriptor(for: self.key),
+                descriptor.size > 0,
+                /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
+                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+                /// We don't care in this method of the version is incompatible — the index will be discarded.
+                let version = try? Version(matchingIndex.version),
+                /// Make sure the stored version is smaller than the one we require, otherwise stop early.
+                version.rawValue < minimumVersion.rawValue
+            else {
+                progressHandler?(warmUpProgress.adding(current: descriptor.size, total: descriptor.size))
+                return
+            }
+            
+            try await self.migrate(index: index) { migrateProgress in
+                progressHandler?(warmUpProgress.adding(migrateProgress))
+            }
         }
     }
     
@@ -288,7 +296,7 @@ extension Datastore where AccessMode == ReadWrite {
         let versionData = try Data(self.version)
         let instanceData = try await self.encoder(instance)
         
-        try await persistence._datastoreInterface.withTransaction(options: [.idempotent]) { transaction in
+        try await persistence._withTransaction(options: [.idempotent]) { transaction in
             /// Create any missing indexes or prime the datastore for writing.
             try await transaction.apply(descriptor: updatedDescriptor, for: self.key)
             
@@ -297,7 +305,7 @@ extension Datastore where AccessMode == ReadWrite {
                     let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
                     
                     let existingVersion = try Version(existingEntry.versionData)
-                    let decoder = try self.decoder(for: existingVersion)
+                    let decoder = try await self.decoder(for: existingVersion)
                     let existingInstance = try await decoder(existingEntry.instanceData)
                     
                     return (cursor: existingEntry.cursor, instance: existingInstance)
