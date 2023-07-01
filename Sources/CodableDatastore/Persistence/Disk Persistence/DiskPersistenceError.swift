@@ -51,17 +51,12 @@ public enum DiskPersistenceInternalError: LocalizedError {
     /// A request to update snapshot manifest failed as an update was made in an inconsistent state.
     case nestedSnapshotWrite
     
-    /// The call was made outside of a transaction context, which is unsupported.
-    case missingTransaction
-    
     public var errorDescription: String? {
         switch self {
         case .nestedStoreWrite:
             return "An internal error caused the store to be modified while it was being modified. Please report reproduction steps if found!"
         case .nestedSnapshotWrite:
             return "An internal error caused a snapshot to be modified while it was being modified. Please report reproduction steps if found!"
-        case .missingTransaction:
-            return "An internal error caused a call to be made outside of a transaction context. Please report reproduction steps if found!"
         }
     }
 }

@@ -12,12 +12,6 @@ import Foundation
 /// 
 /// This protocol is provided so others can implement new persistences modelled after the ones provided by ``CodableDatastore``. You should never call any of these methods directly.
 public protocol DatastoreInterfaceProtocol {
-    /// Perform a transaction on the persistence with the specified options.
-    /// - Parameters:
-    ///   - options: The options to use while building the transaction.
-    ///   - transaction: A closure representing the transaction with which to perform operations on. You should not escape the provided transaction.
-    func withTransaction<T>(options: TransactionOptions, transaction: @escaping (_ transaction: DatastoreInterfaceProtocol) async throws -> T) async throws -> T
-    
     /// Register a ``Datastore`` with a ``Persistence`` so that it can be informed of changes made to the persistence.
     ///
     /// A datastore should only be registered once to a single persistence.
