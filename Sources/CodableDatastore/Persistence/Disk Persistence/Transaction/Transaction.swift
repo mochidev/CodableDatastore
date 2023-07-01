@@ -18,7 +18,7 @@ extension DiskPersistence {
         private(set) var task: Task<Void, Error>!
         let options: TransactionOptions
         
-        var roots: [DatastoreIdentifier : Datastore.RootObject] = [:]
+        var rootObjects: [String : Datastore.RootObject] = [:]
         
         private init(
             persistence: DiskPersistence,
@@ -59,19 +59,19 @@ extension DiskPersistence {
             return task
         }
         
-        func applyRoots(roots: [DatastoreIdentifier : Datastore.RootObject]) {
-            for (key, value) in roots {
-                self.roots[key] = value
+        func apply(_ rootObjects: [String : Datastore.RootObject]) {
+            for (key, value) in rootObjects {
+                self.rootObjects[key] = value
             }
         }
         
         private func persist() async throws {
             if let parent {
-                await parent.applyRoots(roots: roots)
+                await parent.apply(rootObjects)
                 return
             }
             
-            for (_, root) in roots {
+            for (_, root) in rootObjects {
                 try await root.persistIfNeeded()
             }
         }
@@ -129,6 +129,27 @@ extension DiskPersistence {
             return (transaction, task)
         }
         
+        func rootObject(for datastoreKey: String) async throws -> Datastore.RootObject? {
+            if let rootObject = rootObjects[datastoreKey] {
+                return rootObject
+            }
+            
+            if let parent = parent {
+                guard let rootObject = try await parent.rootObject(for: datastoreKey)
+                else { return nil }
+                rootObjects[datastoreKey] = rootObject
+                return rootObject
+            }
+            
+            let (persistenceDatastore, rootID) = try await persistence.persistenceDatastore(for: datastoreKey)
+            
+            guard let rootID else { return nil }
+            
+            let rootObject = await persistenceDatastore.rootObject(for: rootID)
+            rootObjects[datastoreKey] = rootObject
+            return rootObject
+        }
+        
         nonisolated static var unsafeCurrentTransaction: Self? {
             TransactionTaskLocals.transaction.map({ $0 as! Self })
         }
@@ -155,12 +176,14 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
         datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
         try await persistence.register(datastore: datastore)
+        return try await datastoreDescriptor(for: datastore)
     }
     
     func datastoreDescriptor<Version, CodedType, IdentifierType, Access>(
         for datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
-        try await persistence.datastoreDescriptor(for: datastore)
+        let rootObject = try await rootObject(for: datastore.key)
+        return try await rootObject?.descriptor
     }
     
     func apply(descriptor: DatastoreDescriptor, for datastoreKey: String) async throws {
