@@ -28,7 +28,7 @@ public protocol DatastoreInterfaceProtocol {
     /// Load the descriptor of a ``Datastore``.
     /// - Parameter datastore: The datastore to query.
     /// - Returns: A descriptor of the datastore as the persistence knows it.
-    func datastoreDescriptor<Version, CodedType, IdentifierType, AccessMode>(for datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) async throws -> DatastoreDescriptor?
+    func datastoreDescriptor(for datastoreKey: DatastoreKey) async throws -> DatastoreDescriptor?
     
     /// Apply a descriptor for a given datastore.
     ///
@@ -36,7 +36,7 @@ public protocol DatastoreInterfaceProtocol {
     /// - Parameters:
     ///   - descriptor: A descriptor of the Datastore as it should exist.
     ///   - datastoreKey: The key of the datastore the descriptor belongs to.
-    func apply(descriptor: DatastoreDescriptor, for datastoreKey: String) async throws
+    func apply(descriptor: DatastoreDescriptor, for datastoreKey: DatastoreKey) async throws
     
     /// Load a cursor for the specified identifier in the primary index of the specified datastore key.
     ///
@@ -47,7 +47,7 @@ public protocol DatastoreInterfaceProtocol {
     /// - Returns: The cursor along with the data it contains.
     func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
         instanceData: Data,
@@ -63,7 +63,7 @@ public protocol DatastoreInterfaceProtocol {
     /// - Returns: A cursor ideal for inserting the specified item.
     func primaryIndexCursor<IdentifierType: Indexable>(
         inserting identifier: IdentifierType,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol
     
     /// Load a cursor for the specified indexedValue in a direct index of the specified datastore key.
@@ -79,7 +79,7 @@ public protocol DatastoreInterfaceProtocol {
         for indexedValue: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
         instanceData: Data,
@@ -99,7 +99,7 @@ public protocol DatastoreInterfaceProtocol {
         inserting index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol
     
     /// Load a cursor for the specified indexedValue in a secondary index of the specified datastore key.
@@ -115,7 +115,7 @@ public protocol DatastoreInterfaceProtocol {
         for index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InstanceCursorProtocol
     
     /// Load a cursor for inserting the specified indexedValue in a secondary index of the specified datastore key.
@@ -131,7 +131,7 @@ public protocol DatastoreInterfaceProtocol {
         inserting index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol
     
     /// Create or update an entry in the primary index of a data store.
@@ -148,7 +148,7 @@ public protocol DatastoreInterfaceProtocol {
         identifierValue: IdentifierType,
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Delete an entry from the primary index of the data store.
@@ -159,7 +159,7 @@ public protocol DatastoreInterfaceProtocol {
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deletePrimaryIndexEntry(
         cursor: some InstanceCursorProtocol,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Reset the primary index of a data store.
@@ -167,7 +167,7 @@ public protocol DatastoreInterfaceProtocol {
     /// It is expected that the caller of this method will re-iterate through and add all entries back in, though perhaps with different identifiers or in a different order.
     /// - Parameter datastoreKey: The key of the datastore the index belongs to.
     func resetPrimaryIndex(
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Create an entry in a direct index of a data store.
@@ -186,7 +186,7 @@ public protocol DatastoreInterfaceProtocol {
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Delete an entry from a direct index of the data store.
@@ -197,7 +197,7 @@ public protocol DatastoreInterfaceProtocol {
     func deleteDirectIndexEntry(
         cursor: some InstanceCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Delete a direct index of the data store.
@@ -208,7 +208,7 @@ public protocol DatastoreInterfaceProtocol {
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteDirectIndex(
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Create an entry in a secondary index of a data store.
@@ -223,7 +223,7 @@ public protocol DatastoreInterfaceProtocol {
         identifierValue: IdentifierType,
         cursor: some InsertionCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Delete an entry from a secondary index of the data store.
@@ -234,7 +234,7 @@ public protocol DatastoreInterfaceProtocol {
     func deleteSecondaryIndexEntry(
         cursor: some InstanceCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
     
     /// Delete a direct index of the data store.
@@ -245,6 +245,6 @@ public protocol DatastoreInterfaceProtocol {
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteSecondaryIndex(
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws
 }

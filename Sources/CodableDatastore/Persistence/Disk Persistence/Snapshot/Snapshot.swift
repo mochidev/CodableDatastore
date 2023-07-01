@@ -231,12 +231,12 @@ private enum SnapshotTaskLocals {
 // MARK: - Datastore Management
 extension Snapshot {
     /// Load the datastore for the given key.
-    func loadDatastore(for key: String, from manifest: SnapshotManifest) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
+    func loadDatastore(for key: DatastoreKey, from manifest: SnapshotManifest) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
         let datastoreInfo: (id: DatastoreIdentifier, root: DatastoreRootIdentifier?) = {
-            if let info = manifest.dataStores[key] {
+            if let info = manifest.dataStores[key.rawValue] {
                 return (info.id, info.root)
             } else {
-                return (DatastoreIdentifier(name: key), nil)
+                return (DatastoreIdentifier(name: key.rawValue), nil)
             }
         }()
         
