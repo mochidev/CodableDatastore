@@ -16,6 +16,9 @@ public enum DatastoreInterfaceError: LocalizedError {
     /// The datastore has already been registered with this persistence.
     case alreadyRegistered
     
+    /// The datastore was not found and has likely not been registered with this persistence.
+    case datastoreNotFound
+    
     /// An existing datastore that can write to the persistence has already been registered for this key.
     case duplicateWriters
     
@@ -31,6 +34,8 @@ public enum DatastoreInterfaceError: LocalizedError {
             return "The datastore has already been registered with another persistence. Make sure to only register a datastore with a single persistence."
         case .alreadyRegistered:
             return "The datastore has already been registered with this persistence. Make sure to not call register multiple times per persistence."
+        case .datastoreNotFound:
+            return "The datastore was not found and has likely not been registered with this persistence."
         case .duplicateWriters:
             return "An existing datastore that can write to the persistence has already been registered for this key. Only one writer is suppored per key."
         case .instanceNotFound:

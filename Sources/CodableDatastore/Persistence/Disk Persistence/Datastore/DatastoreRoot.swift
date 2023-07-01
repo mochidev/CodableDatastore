@@ -78,6 +78,14 @@ extension DiskPersistence.Datastore.RootObject {
     }
 }
 
+// MARK: - Descriptor
+
+extension DiskPersistence.Datastore.RootObject {
+    var descriptor: DatastoreDescriptor {
+        get async throws { try await rootObject.descriptor }
+    }
+}
+
 // MARK: - Indexes
 
 extension DiskPersistence.Datastore.RootObject {

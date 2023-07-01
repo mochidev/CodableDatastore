@@ -25,12 +25,14 @@ extension DiskPersistence.DatastoreInterface: DatastoreInterfaceProtocol {
         datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
         try await persistence.register(datastore: datastore)
+        return try await datastoreDescriptor(for: datastore)
     }
     
     func datastoreDescriptor<Version, CodedType, IdentifierType, Access>(
         for datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
-        try await persistence.datastoreDescriptor(for: datastore)
+        try await DiskPersistence.Transaction.currentTransaction
+            .datastoreDescriptor(for: datastore)
     }
     
     func apply(descriptor: DatastoreDescriptor, for datastoreKey: String) async throws {

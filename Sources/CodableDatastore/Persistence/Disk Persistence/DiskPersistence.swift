@@ -388,7 +388,7 @@ extension DiskPersistence where AccessMode == ReadWrite {
 extension DiskPersistence {
     func register<Version, CodedType, IdentifierType, Access>(
         datastore newDatastore: CodableDatastore.Datastore<Version, CodedType, IdentifierType, Access>
-    ) async throws -> DatastoreDescriptor? {
+    ) async throws {
         guard
             let datastorePersistence = newDatastore.persistence as? DiskPersistence,
             datastorePersistence === self
@@ -414,37 +414,19 @@ extension DiskPersistence {
         existingDatastores.append(WeakSpecificDatastore(datastore: newDatastore))
         
         registeredDatastores[newDatastore.key] = existingDatastores
-        
-        return try await datastoreDescriptor(for: newDatastore)
     }
     
-    func datastoreDescriptor<Version, CodedType, IdentifierType, Access>(
-        for datastore: CodableDatastore.Datastore<Version, CodedType, IdentifierType, Access>
-    ) async throws -> DatastoreDescriptor? {
-        guard
-            let datastorePersistence = datastore.persistence as? DiskPersistence,
-            datastorePersistence === self
-        else {
-            assertionFailure("The datastore is registered with another persistence. Make sure to only register a datastore with a single persistence. This will throw an error on release builds.")
-            throw DatastoreInterfaceError.multipleRegistrations
-        }
-        
-        return try await withCurrentSnapshot { snapshot in
-            let (datastoreActor, rootObject) = try await snapshot.withManifest { snapshotManifest in
-                await snapshot.loadDatastore(for: datastore.key, from: snapshotManifest)
-            }
-            
-            guard let rootObject else { return nil }
-            let datastoreInfo = try await datastoreActor.loadRootObject(for: rootObject)
-            return datastoreInfo.descriptor
-        }
-    }
-    
-    func apply(
-        descriptor: DatastoreDescriptor,
+    func persistenceDatastore(
         for datastoreKey: String
-    ) async throws {
-        preconditionFailure("Unimplemented")
+    ) async throws -> (Datastore, DatastoreRootIdentifier?) {
+        guard registeredDatastores[datastoreKey] != nil else {
+            throw DatastoreInterfaceError.datastoreNotFound
+        }
+        return try await withCurrentSnapshot { snapshot in
+            try await snapshot.withManifest { snapshotManifest in
+                await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
+            }
+        }
     }
 }
 
