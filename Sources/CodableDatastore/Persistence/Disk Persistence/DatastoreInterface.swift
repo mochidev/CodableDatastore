@@ -25,17 +25,20 @@ extension DiskPersistence.DatastoreInterface: DatastoreInterfaceProtocol {
         datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
         try await persistence.register(datastore: datastore)
-        return try await datastoreDescriptor(for: datastore)
+        return try await datastoreDescriptor(for: datastore.key)
     }
     
-    func datastoreDescriptor<Version, CodedType, IdentifierType, Access>(
-        for datastore: Datastore<Version, CodedType, IdentifierType, Access>
+    func datastoreDescriptor(
+        for datastoreKey: DatastoreKey
     ) async throws -> DatastoreDescriptor? {
         try await DiskPersistence.Transaction.currentTransaction
-            .datastoreDescriptor(for: datastore)
+            .datastoreDescriptor(for: datastoreKey)
     }
     
-    func apply(descriptor: DatastoreDescriptor, for datastoreKey: String) async throws {
+    func apply(
+        descriptor: DatastoreDescriptor,
+        for datastoreKey: DatastoreKey
+    ) async throws {
         preconditionFailure("Unimplemented")
     }
 }
@@ -45,7 +48,7 @@ extension DiskPersistence.DatastoreInterface: DatastoreInterfaceProtocol {
 extension DiskPersistence.DatastoreInterface {
     func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
         instanceData: Data,
@@ -60,7 +63,7 @@ extension DiskPersistence.DatastoreInterface {
     
     func primaryIndexCursor<IdentifierType: Indexable>(
         inserting identifier: IdentifierType,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         try await DiskPersistence.Transaction.currentTransaction
             .primaryIndexCursor(
@@ -73,7 +76,7 @@ extension DiskPersistence.DatastoreInterface {
         for index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
         instanceData: Data,
@@ -92,7 +95,7 @@ extension DiskPersistence.DatastoreInterface {
         inserting index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         try await DiskPersistence.Transaction.currentTransaction
             .directIndexCursor(
@@ -107,7 +110,7 @@ extension DiskPersistence.DatastoreInterface {
         for index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InstanceCursorProtocol {
         try await DiskPersistence.Transaction.currentTransaction
             .secondaryIndexCursor(
@@ -122,7 +125,7 @@ extension DiskPersistence.DatastoreInterface {
         inserting index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         try await DiskPersistence.Transaction.currentTransaction
             .secondaryIndexCursor(
@@ -142,7 +145,7 @@ extension DiskPersistence.DatastoreInterface {
         identifierValue: IdentifierType,
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .persistPrimaryIndexEntry(
@@ -156,7 +159,7 @@ extension DiskPersistence.DatastoreInterface {
     
     func deletePrimaryIndexEntry(
         cursor: some InstanceCursorProtocol,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .deletePrimaryIndexEntry(
@@ -166,7 +169,7 @@ extension DiskPersistence.DatastoreInterface {
     }
     
     func resetPrimaryIndex(
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .resetPrimaryIndex(
@@ -181,7 +184,7 @@ extension DiskPersistence.DatastoreInterface {
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .persistDirectIndexEntry(
@@ -198,7 +201,7 @@ extension DiskPersistence.DatastoreInterface {
     func deleteDirectIndexEntry(
         cursor: some InstanceCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .deleteDirectIndexEntry(
@@ -210,7 +213,7 @@ extension DiskPersistence.DatastoreInterface {
     
     func deleteDirectIndex(
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .deleteDirectIndex(
@@ -224,7 +227,7 @@ extension DiskPersistence.DatastoreInterface {
         identifierValue: IdentifierType,
         cursor: some InsertionCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .persistSecondaryIndexEntry(
@@ -239,7 +242,7 @@ extension DiskPersistence.DatastoreInterface {
     func deleteSecondaryIndexEntry(
         cursor: some InstanceCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .deleteSecondaryIndexEntry(
@@ -251,7 +254,7 @@ extension DiskPersistence.DatastoreInterface {
     
     func deleteSecondaryIndex(
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         try await DiskPersistence.Transaction.currentTransaction
             .deleteSecondaryIndex(

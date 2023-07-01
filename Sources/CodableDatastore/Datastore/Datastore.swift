@@ -16,7 +16,7 @@ public actor Datastore<
     AccessMode: _AccessMode
 > where Version.RawValue: Indexable & Comparable {
     let persistence: any Persistence
-    let key: String
+    let key: DatastoreKey
     let version: Version
     let encoder: (_ instance: CodedType) async throws -> Data
     let decoders: [Version: (_ data: Data) async throws -> CodedType]
@@ -36,7 +36,7 @@ public actor Datastore<
     
     public init(
         persistence: some Persistence<AccessMode>,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
@@ -57,7 +57,7 @@ public actor Datastore<
     
     public init(
         persistence: some Persistence,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
@@ -169,7 +169,7 @@ extension Datastore where AccessMode == ReadWrite {
     public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
         guard
             /// If we have no descriptor, then no data exists to be migrated.
-            let descriptor = try await persistence._datastoreInterface.datastoreDescriptor(for: self),
+            let descriptor = try await persistence._datastoreInterface.datastoreDescriptor(for: key),
             descriptor.size > 0,
             /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
             let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
@@ -188,7 +188,7 @@ extension Datastore where AccessMode == ReadWrite {
         /// Make sure we still need to do the work, as the warm up may have made changes anyways due to incompatible types.
         guard
             /// If we have no descriptor, then no data exists to be migrated.
-            let descriptor = try await persistence._datastoreInterface.datastoreDescriptor(for: self),
+            let descriptor = try await persistence._datastoreInterface.datastoreDescriptor(for: key),
             descriptor.size > 0,
             /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
             let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
@@ -513,7 +513,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
 extension Datastore where AccessMode == ReadWrite {
     public static func JSONStore(
         persistence: some Persistence<AccessMode>,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
@@ -544,7 +544,7 @@ extension Datastore where AccessMode == ReadWrite {
     
     public static func propertyListStore(
         persistence: some Persistence<AccessMode>,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
@@ -581,7 +581,7 @@ extension Datastore where AccessMode == ReadWrite {
 extension Datastore where AccessMode == ReadOnly {
     public static func readOnlyJSONStore(
         persistence: some Persistence,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
@@ -610,7 +610,7 @@ extension Datastore where AccessMode == ReadOnly {
     
     public static func readOnlyPropertyListStore(
         persistence: some Persistence,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
@@ -644,7 +644,7 @@ extension Datastore where AccessMode == ReadOnly {
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadWrite {
     public init(
         persistence: some Persistence<AccessMode>,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         encoder: @escaping (_ object: CodedType) async throws -> Data,
@@ -669,7 +669,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     
     public static func JSONStore(
         persistence: some Persistence<AccessMode>,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         encoder: JSONEncoder = JSONEncoder(),
@@ -696,7 +696,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     
     public static func propertyListStore(
         persistence: some Persistence<AccessMode>,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
@@ -723,7 +723,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadOnly {
     public init(
         persistence: some Persistence,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
@@ -746,7 +746,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     
     public static func readOnlyJSONStore(
         persistence: some Persistence,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         decoder: JSONDecoder = JSONDecoder(),
@@ -771,7 +771,7 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     
     public static func readOnlyPropertyListStore(
         persistence: some Persistence,
-        key: String,
+        key: DatastoreKey,
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],

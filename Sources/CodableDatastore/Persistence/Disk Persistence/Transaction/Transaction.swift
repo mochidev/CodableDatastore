@@ -18,7 +18,7 @@ extension DiskPersistence {
         private(set) var task: Task<Void, Error>!
         let options: TransactionOptions
         
-        var rootObjects: [String : Datastore.RootObject] = [:]
+        var rootObjects: [DatastoreKey : Datastore.RootObject] = [:]
         
         private init(
             persistence: DiskPersistence,
@@ -59,7 +59,7 @@ extension DiskPersistence {
             return task
         }
         
-        func apply(_ rootObjects: [String : Datastore.RootObject]) {
+        func apply(_ rootObjects: [DatastoreKey : Datastore.RootObject]) {
             for (key, value) in rootObjects {
                 self.rootObjects[key] = value
             }
@@ -129,7 +129,7 @@ extension DiskPersistence {
             return (transaction, task)
         }
         
-        func rootObject(for datastoreKey: String) async throws -> Datastore.RootObject? {
+        func rootObject(for datastoreKey: DatastoreKey) async throws -> Datastore.RootObject? {
             if let rootObject = rootObjects[datastoreKey] {
                 return rootObject
             }
@@ -176,17 +176,17 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
         datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
         try await persistence.register(datastore: datastore)
-        return try await datastoreDescriptor(for: datastore)
+        return try await datastoreDescriptor(for: datastore.key)
     }
     
-    func datastoreDescriptor<Version, CodedType, IdentifierType, Access>(
-        for datastore: Datastore<Version, CodedType, IdentifierType, Access>
+    func datastoreDescriptor(
+        for datastoreKey: DatastoreKey
     ) async throws -> DatastoreDescriptor? {
-        let rootObject = try await rootObject(for: datastore.key)
+        let rootObject = try await rootObject(for: datastoreKey)
         return try await rootObject?.descriptor
     }
     
-    func apply(descriptor: DatastoreDescriptor, for datastoreKey: String) async throws {
+    func apply(descriptor: DatastoreDescriptor, for datastoreKey: DatastoreKey) async throws {
         preconditionFailure("Unimplemented")
     }
 }
@@ -196,7 +196,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
 extension DiskPersistence.Transaction {
     func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
         instanceData: Data,
@@ -207,7 +207,7 @@ extension DiskPersistence.Transaction {
     
     func primaryIndexCursor<IdentifierType: Indexable>(
         inserting identifier: IdentifierType,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         preconditionFailure("Unimplemented")
     }
@@ -216,7 +216,7 @@ extension DiskPersistence.Transaction {
         for index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
         instanceData: Data,
@@ -229,7 +229,7 @@ extension DiskPersistence.Transaction {
         inserting index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         preconditionFailure("Unimplemented")
     }
@@ -238,7 +238,7 @@ extension DiskPersistence.Transaction {
         for index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InstanceCursorProtocol {
         preconditionFailure("Unimplemented")
     }
@@ -247,7 +247,7 @@ extension DiskPersistence.Transaction {
         inserting index: IndexType,
         identifier: IdentifierType,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         preconditionFailure("Unimplemented")
     }
@@ -261,20 +261,20 @@ extension DiskPersistence.Transaction {
         identifierValue: IdentifierType,
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
     
     func deletePrimaryIndexEntry(
         cursor: some InstanceCursorProtocol,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
     
     func resetPrimaryIndex(
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
@@ -286,7 +286,7 @@ extension DiskPersistence.Transaction {
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
@@ -294,14 +294,14 @@ extension DiskPersistence.Transaction {
     func deleteDirectIndexEntry(
         cursor: some InstanceCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
     
     func deleteDirectIndex(
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
@@ -311,7 +311,7 @@ extension DiskPersistence.Transaction {
         identifierValue: IdentifierType,
         cursor: some InsertionCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
@@ -319,14 +319,14 @@ extension DiskPersistence.Transaction {
     func deleteSecondaryIndexEntry(
         cursor: some InstanceCursorProtocol,
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }
     
     func deleteSecondaryIndex(
         indexName: String,
-        datastoreKey: String
+        datastoreKey: DatastoreKey
     ) async throws {
         preconditionFailure("Unimplemented")
     }

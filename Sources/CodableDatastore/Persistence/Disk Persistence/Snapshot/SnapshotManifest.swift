@@ -26,7 +26,7 @@ struct SnapshotManifest: Codable, Equatable, Identifiable {
     var modificationDate: Date
     
     /// The known datastores for this snapshot, and their roots.
-    var dataStores: [String: DatastoreInfo] = [:]
+    var dataStores: [String : DatastoreInfo] = [:]
 }
 
 extension SnapshotManifest {

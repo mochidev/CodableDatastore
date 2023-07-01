@@ -21,7 +21,7 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The loaded Snapshots
     var snapshots: [SnapshotIdentifier: Snapshot<AccessMode>] = [:]
     
-    var registeredDatastores: [String: [WeakDatastore]] = [:]
+    var registeredDatastores: [DatastoreKey : [WeakDatastore]] = [:]
     
     var lastTransaction: Transaction?
     
@@ -417,7 +417,7 @@ extension DiskPersistence {
     }
     
     func persistenceDatastore(
-        for datastoreKey: String
+        for datastoreKey: DatastoreKey
     ) async throws -> (Datastore, DatastoreRootIdentifier?) {
         guard registeredDatastores[datastoreKey] != nil else {
             throw DatastoreInterfaceError.datastoreNotFound
