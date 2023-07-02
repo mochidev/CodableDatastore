@@ -34,6 +34,18 @@ extension DiskPersistence.Datastore {
     }
 }
 
+// MARK: Hashable
+
+extension DiskPersistence.Datastore.Index: Hashable {
+    static func == (lhs: DiskPersistence<AccessMode>.Datastore.Index, rhs: DiskPersistence<AccessMode>.Datastore.Index) -> Bool {
+        lhs === rhs
+    }
+    
+    nonisolated func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 // MARK: - Helper Types
 
 extension DiskPersistence.Datastore.Index {

@@ -20,6 +20,14 @@ extension DiskPersistence {
         
         var rootObjects: [DatastoreKey : Datastore.RootObject] = [:]
         
+        var createdRootObjects: Set<Datastore.RootObject> = []
+        var createdIndexes: Set<Datastore.Index> = []
+        var createdPages: Set<Datastore.Page> = []
+        
+        var deletedRootObjects: Set<Datastore.RootObject> = []
+        var deletedIndexes: Set<Datastore.Index> = []
+        var deletedPages: Set<Datastore.Page> = []
+        
         private init(
             persistence: DiskPersistence,
             parent: Transaction?,
@@ -170,11 +178,108 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
         for datastoreKey: DatastoreKey
     ) async throws -> DatastoreDescriptor? {
         let rootObject = try await rootObject(for: datastoreKey)
-        return try await rootObject?.descriptor
+        return try await rootObject?.manifest.descriptor
     }
     
     func apply(descriptor: DatastoreDescriptor, for datastoreKey: DatastoreKey) async throws {
-        preconditionFailure("Unimplemented")
+        if let rootObject = try await rootObject(for: datastoreKey) {
+            var manifest = try await rootObject.manifest
+            
+            // TODO: Do a better merge of these descriptors, especially since size is something we want to preserve, amongst other properties
+            guard manifest.descriptor != descriptor else { return }
+            
+            manifest.id = DatastoreRootIdentifier()
+            manifest.modificationDate = Date()
+            manifest.descriptor = descriptor
+            
+            let newRoot = DiskPersistence.Datastore.RootObject(
+                datastore: rootObject.datastore,
+                id: manifest.id,
+                rootObject: manifest
+            )
+            rootObjects[datastoreKey] = newRoot
+            createdRootObjects.insert(newRoot)
+            await newRoot.datastore.adopt(rootObject: newRoot)
+            
+            // TODO: Don't forget to create the new index objects too!
+        } else {
+            let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+            
+            /// Create index objects first so they are available when requested.
+            let primaryManifestIdentifier = DatastoreIndexManifestIdentifier()
+            
+            let directIndexManifests = descriptor.directIndexes.map { (_, index) in
+                DatastoreRootManifest.IndexInfo(
+                    key: index.key,
+                    id: DatastoreIndexIdentifier(name: index.key),
+                    root: DatastoreIndexManifestIdentifier()
+                )
+            }
+            
+            let secondaryIndexManifests = descriptor.secondaryIndexes.map { (_, index) in
+                DatastoreRootManifest.IndexInfo(
+                    key: index.key,
+                    id: DatastoreIndexIdentifier(name: index.key),
+                    root: DatastoreIndexManifestIdentifier()
+                )
+            }
+            
+            let primaryIndex = DiskPersistence.Datastore.Index(
+                datastore: datastore,
+                id: .primary(manifest: primaryManifestIdentifier),
+                manifest: DatastoreIndexManifest(
+                    id: primaryManifestIdentifier,
+                    orderedPages: []
+                )
+            )
+            createdIndexes.insert(primaryIndex)
+            await datastore.adopt(index: primaryIndex)
+            
+            for indexInfo in directIndexManifests {
+                let index = DiskPersistence.Datastore.Index(
+                    datastore: datastore,
+                    id: .direct(index: indexInfo.id, manifest: indexInfo.root),
+                    manifest: DatastoreIndexManifest(
+                        id: indexInfo.root,
+                        orderedPages: []
+                    )
+                )
+                createdIndexes.insert(index)
+                await datastore.adopt(index: index)
+            }
+            
+            for indexInfo in secondaryIndexManifests {
+                let index = DiskPersistence.Datastore.Index(
+                    datastore: datastore,
+                    id: .secondary(index: indexInfo.id, manifest: indexInfo.root),
+                    manifest: DatastoreIndexManifest(
+                        id: indexInfo.root,
+                        orderedPages: []
+                    )
+                )
+                createdIndexes.insert(index)
+                await datastore.adopt(index: index)
+            }
+            
+            /// Create the root object from the indexes that were created
+            let manifest = DatastoreRootManifest(
+                id: DatastoreRootIdentifier(),
+                modificationDate: Date(),
+                descriptor: descriptor,
+                primaryIndexManifest: primaryManifestIdentifier,
+                directIndexManifests: directIndexManifests,
+                secondaryIndexManifests: secondaryIndexManifests
+            )
+            
+            let newRoot = DiskPersistence.Datastore.RootObject(
+                datastore: datastore,
+                id: manifest.id,
+                rootObject: manifest
+            )
+            rootObjects[datastoreKey] = newRoot
+            createdRootObjects.insert(newRoot)
+            await datastore.adopt(rootObject: newRoot)
+        }
     }
 }
 

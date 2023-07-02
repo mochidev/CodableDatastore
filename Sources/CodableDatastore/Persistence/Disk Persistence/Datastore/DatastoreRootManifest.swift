@@ -29,13 +29,13 @@ struct DatastoreRootManifest: Codable, Equatable, Identifiable {
     var descriptor: DatastoreDescriptor
     
     /// A pointer to the primary index's root object.
-    var primaryIndexManifest: IndexInfo
+    var primaryIndexManifest: DatastoreIndexManifestIdentifier
     
     /// A pointer to the direct indexes' root objects.
-    var directIndexManifests: [DatastoreIndexIdentifier: IndexInfo] = [:]
+    var directIndexManifests: [IndexInfo] = []
     
     /// A pointer to the secondary indexes' root objects.
-    var secondaryIndexManifests: [DatastoreIndexIdentifier: IndexInfo] = [:]
+    var secondaryIndexManifests: [IndexInfo] = []
 }
 
 extension DatastoreRootManifest {

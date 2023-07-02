@@ -33,6 +33,18 @@ extension DiskPersistence.Datastore {
     }
 }
 
+// MARK: Hashable
+
+extension DiskPersistence.Datastore.RootObject: Hashable {
+    static func == (lhs: DiskPersistence<AccessMode>.Datastore.RootObject, rhs: DiskPersistence<AccessMode>.Datastore.RootObject) -> Bool {
+        lhs === rhs
+    }
+    
+    nonisolated func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 // MARK: - Common URL Accessors
 
 extension DiskPersistence.Datastore.RootObject {
@@ -78,11 +90,11 @@ extension DiskPersistence.Datastore.RootObject {
     }
 }
 
-// MARK: - Descriptor
+// MARK: - Manifest
 
 extension DiskPersistence.Datastore.RootObject {
-    var descriptor: DatastoreDescriptor {
-        get async throws { try await rootObject.descriptor }
+    var manifest: DatastoreRootManifest {
+        get async throws { try await rootObject }
     }
 }
 
@@ -91,9 +103,9 @@ extension DiskPersistence.Datastore.RootObject {
 extension DiskPersistence.Datastore.RootObject {
     var primaryIndex: DiskPersistence.Datastore.Index {
         get async throws {
-            let primaryIndexInfo = try await rootObject.primaryIndexManifest
+            let primaryIndexManifest = try await rootObject.primaryIndexManifest
             
-            return await datastore.index(for: .primary(manifest: primaryIndexInfo.root))
+            return await datastore.index(for: .primary(manifest: primaryIndexManifest))
         }
     }
     
@@ -101,7 +113,7 @@ extension DiskPersistence.Datastore.RootObject {
         get async throws {
             var indexes: [DatastoreIndexIdentifier: DiskPersistence.Datastore.Index] = [:]
             
-            for (_, indexInfo) in try await rootObject.directIndexManifests {
+            for indexInfo in try await rootObject.directIndexManifests {
                 indexes[indexInfo.id] = await datastore.index(for: .direct(index: indexInfo.id, manifest: indexInfo.root))
             }
             
@@ -113,7 +125,7 @@ extension DiskPersistence.Datastore.RootObject {
         get async throws {
             var indexes: [DatastoreIndexIdentifier: DiskPersistence.Datastore.Index] = [:]
             
-            for (_, indexInfo) in try await rootObject.secondaryIndexManifests {
+            for indexInfo in try await rootObject.secondaryIndexManifests {
                 indexes[indexInfo.id] = await datastore.index(for: .secondary(index: indexInfo.id, manifest: indexInfo.root))
             }
             
