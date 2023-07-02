@@ -22,12 +22,12 @@ extension DiskPersistence {
         
         /// The root objects that are being tracked in memory.
         var trackedRootObjects: [RootObject.ID : RootObject] = [:]
-        var trackedIndex: [Index.ID : Index] = [:]
+        var trackedIndexes: [Index.ID : Index] = [:]
         var trackedPages: [Page.ID : Page] = [:]
         
         /// The root objects on the file system that are actively loaded in memory.
         var loadedRootObjects: Set<RootObject.ID> = []
-        var loadedIndex: Set<Index.ID> = []
+        var loadedIndexes: Set<Index.ID> = []
         var loadedPages: Set<Page.ID> = []
         
         init(
@@ -105,6 +105,10 @@ extension DiskPersistence.Datastore {
         return rootObject
     }
     
+    func adopt(rootObject: RootObject) {
+        trackedRootObjects[rootObject.id] = rootObject
+    }
+    
     func mark(identifier: RootObject.ID, asLoaded: Bool) {
         if asLoaded {
             loadedRootObjects.insert(identifier)
@@ -114,19 +118,23 @@ extension DiskPersistence.Datastore {
     }
     
     func index(for identifier: Index.ID) -> Index {
-        if let index = trackedIndex[identifier] {
+        if let index = trackedIndexes[identifier] {
             return index
         }
         let index = Index(datastore: self, id: identifier)
-        trackedIndex[identifier] = index
+        trackedIndexes[identifier] = index
         return index
+    }
+    
+    func adopt(index: Index) {
+        trackedIndexes[index.id] = index
     }
     
     func mark(identifier: Index.ID, asLoaded: Bool) {
         if asLoaded {
-            loadedIndex.insert(identifier)
+            loadedIndexes.insert(identifier)
         } else {
-            loadedIndex.remove(identifier)
+            loadedIndexes.remove(identifier)
         }
     }
     
@@ -137,6 +145,10 @@ extension DiskPersistence.Datastore {
         let page = Page(datastore: self, id: identifier)
         trackedPages[identifier] = page
         return page
+    }
+    
+    func adopt(page: Page) {
+        trackedPages[page.id] = page
     }
     
     func mark(identifier: Page.ID, asLoaded: Bool) {
