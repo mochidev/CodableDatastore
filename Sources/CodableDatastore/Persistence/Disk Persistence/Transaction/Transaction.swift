@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Bytes
 
 extension DiskPersistence {
     actor Transaction: AnyDiskTransaction {
@@ -294,6 +295,66 @@ extension DiskPersistence.Transaction {
         instanceData: Data,
         versionData: Data
     ) {
+        
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        let index = try await rootObject.primaryIndex
+        
+        let pages = try await index.orderedPages
+        
+        // See https://stackoverflow.com/questions/26678362/how-do-i-insert-an-element-at-the-correct-position-into-a-sorted-array-in-swift/70645571#70645571
+        // guard !pages.isEmpty else { return Cursor(index: index, after: nil)
+                        
+        var bytesForFirstEntry: Bytes?
+        
+        let middle = pages.count/2
+        pageIterator: for page in pages[middle...] {
+            let blocks = try await page.blocks
+            
+            for try await block in blocks {
+                switch block {
+                case .complete(let bytes):
+                    /// We have a complete entry, lets use it and stop scanning
+                    bytesForFirstEntry = bytes
+                    break pageIterator
+                case .head(let bytes):
+                    /// We are starting an entry, but will need to go to the next page.
+                    bytesForFirstEntry = bytes
+                case .slice(let bytes):
+                    /// In the first position, lets skip it.
+                    guard bytesForFirstEntry != nil else { continue }
+                    /// In the final position, lets save and continue.
+                    bytesForFirstEntry?.append(contentsOf: bytes)
+                case .tail(let bytes):
+                    /// In the first position, lets skip it.
+                    guard bytesForFirstEntry != nil else { continue }
+                    /// In the final position, lets save and stop.
+                    bytesForFirstEntry?.append(contentsOf: bytes)
+                    break pageIterator
+                }
+            }
+        }
+        
+        // let entry = try DatastorePageEntry(bytes: bytes)
+        let firstEntry = DatastorePageEntry(headers: [], content: [])
+        // guard entry.headers.count == 2 else { throw cannot decode page }
+//        let versionBytes = firstEntry.headers[0]
+        let identifierBytes = firstEntry.headers[1]
+        
+        let firstEntryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(identifierBytes))
+        
+        if firstEntryIdentifier < identifier {
+            // evaluate [index(after: middle)...]
+        } else {
+            // evaluate [..<middle]
+        }
+        // end of page search
+        
+        // We have the index we could insert the entry as a new page, but it could be located either on the previous page of the specified one, so check the previous page and check every entry from there, continuing to subsequent pages from there.
+        // Cursor should include the page _index_ as a hint, as the structure may change between loading the index and writing to it.
+        
+        
         preconditionFailure("Unimplemented")
     }
     

@@ -94,7 +94,7 @@ extension DiskPersistence.Datastore.Page {
         }
     }
     
-    private var blocks: MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>> {
+    var blocks: MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>> {
         get async throws {
             if let blocksReaderTask {
                 return try await blocksReaderTask.value

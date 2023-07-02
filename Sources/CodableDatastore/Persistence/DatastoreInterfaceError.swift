@@ -28,6 +28,9 @@ public enum DatastoreInterfaceError: LocalizedError {
     /// The requested insertion cursor conflicts with an already existing identifier.
     case instanceAlreadyExists
     
+    /// The datastore being manipulated does not yet exist in the persistence.
+    case datastoreKeyNotFound
+    
     public var errorDescription: String? {
         switch self {
         case .multipleRegistrations:
@@ -42,6 +45,8 @@ public enum DatastoreInterfaceError: LocalizedError {
             return "The requested instance could not be found with the specified identifier."
         case .instanceAlreadyExists:
             return "The requested insertion cursor conflicts with an already existing identifier."
+        case .datastoreKeyNotFound:
+            return "The datastore being manipulated does not yet exist in the persistence."
         }
     }
 }
