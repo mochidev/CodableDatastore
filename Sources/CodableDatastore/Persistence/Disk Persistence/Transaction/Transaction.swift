@@ -29,6 +29,10 @@ extension DiskPersistence {
         var deletedIndexes: Set<Datastore.Index> = []
         var deletedPages: Set<Datastore.Page> = []
         
+        // TODO: entryMutations, so we can send events to observers once the whole thing is finished.
+        
+        var isActive = false
+        
         private init(
             persistence: DiskPersistence,
             parent: Transaction?,
@@ -44,9 +48,11 @@ extension DiskPersistence {
             handler: @escaping () async throws -> T
         ) async -> Task<T, Error> {
             let task = Task {
+                isActive = true
                 let returnValue = try await TransactionTaskLocals.$transaction.withValue(self) {
                     try await handler()
                 }
+                isActive = false
                 
                 /// If we don't care to collate our writes, go ahead and wait for the persistence to stick
                 if !options.contains(.collateWrites) {
@@ -68,7 +74,16 @@ extension DiskPersistence {
             return task
         }
         
-        func apply(_ rootObjects: [DatastoreKey : Datastore.RootObject]) {
+        func checkIsActive() throws {
+            guard isActive else {
+                assertionFailure(DatastoreInterfaceError.transactionInactive.localizedDescription)
+                throw DatastoreInterfaceError.transactionInactive
+            }
+        }
+        
+        func apply(_ rootObjects: [DatastoreKey : Datastore.RootObject]) throws {
+            try checkIsActive()
+            
             for (key, value) in rootObjects {
                 self.rootObjects[key] = value
             }
@@ -76,13 +91,15 @@ extension DiskPersistence {
         
         private func persist() async throws {
             if let parent {
-                await parent.apply(rootObjects)
+                try await parent.apply(rootObjects)
                 return
             }
             
             for (_, root) in rootObjects {
                 try await root.persistIfNeeded()
             }
+            
+            try await persistence.persist(roots: rootObjects)
         }
         
         static func makeTransaction<T>(
@@ -128,6 +145,8 @@ extension DiskPersistence {
             childTransactions.append(transaction)
             
             let task = await transaction.attachTask(options: options) {
+                try self.checkIsActive()
+                
                 /// If the transaction is not read only, wait for the last transaction to properly finish before starting the next one.
                 if !options.contains(.readOnly) {
                     _ = try? await lastChild?.task.value
@@ -171,6 +190,8 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
     func register<Version, CodedType, IdentifierType, Access>(
         datastore: Datastore<Version, CodedType, IdentifierType, Access>
     ) async throws -> DatastoreDescriptor? {
+        try checkIsActive()
+        
         try await persistence.register(datastore: datastore)
         return try await datastoreDescriptor(for: datastore.key)
     }
@@ -178,11 +199,15 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
     func datastoreDescriptor(
         for datastoreKey: DatastoreKey
     ) async throws -> DatastoreDescriptor? {
+        try checkIsActive()
+        
         let rootObject = try await rootObject(for: datastoreKey)
         return try await rootObject?.manifest.descriptor
     }
     
     func apply(descriptor: DatastoreDescriptor, for datastoreKey: DatastoreKey) async throws {
+        try checkIsActive()
+        
         if let rootObject = try await rootObject(for: datastoreKey) {
             var manifest = try await rootObject.manifest
             
@@ -295,6 +320,7 @@ extension DiskPersistence.Transaction {
         instanceData: Data,
         versionData: Data
     ) {
+        try checkIsActive()
         
         guard let rootObject = try await rootObject(for: datastoreKey)
         else { throw DatastoreInterfaceError.datastoreKeyNotFound }
@@ -362,6 +388,8 @@ extension DiskPersistence.Transaction {
         inserting identifier: IdentifierType,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -375,6 +403,8 @@ extension DiskPersistence.Transaction {
         instanceData: Data,
         versionData: Data
     ) {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -384,6 +414,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -393,6 +425,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws -> any InstanceCursorProtocol {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -402,6 +436,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
 }
@@ -416,6 +452,8 @@ extension DiskPersistence.Transaction {
         cursor: some InsertionCursorProtocol,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -423,12 +461,16 @@ extension DiskPersistence.Transaction {
         cursor: some InstanceCursorProtocol,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
     func resetPrimaryIndex(
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -441,6 +483,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -449,6 +493,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -456,6 +502,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -466,6 +514,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -474,6 +524,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
     
@@ -481,6 +533,8 @@ extension DiskPersistence.Transaction {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws {
+        try checkIsActive()
+        
         preconditionFailure("Unimplemented")
     }
 }

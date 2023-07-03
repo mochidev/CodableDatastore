@@ -431,12 +431,40 @@ extension DiskPersistence {
             try await transaction(interface)
         }
         
-        /// Save the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
-        if !options.contains(.readOnly) {
+        /// Save the last non-concurrent top-level transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
+        if !options.contains(.readOnly), transaction.parent == nil {
             lastTransaction = transaction
         }
         
         return try await task.value
+    }
+    
+    func persist(roots: [DatastoreKey : Datastore.RootObject]) async throws {
+        /// If we are read-only, make sure no edits have been made
+        guard let self = self as? DiskPersistence<ReadWrite> else {
+            try await self.withCurrentSnapshot { snapshot in
+                try await snapshot.withManifest { manifest in
+                    for (key, root) in roots {
+                        guard manifest.dataStores[key.rawValue]?.root == root.id
+                        else { throw DiskPersistenceError.cannotWrite }
+                    }
+                }
+            }
+            return
+        }
+        
+        /// If we are read-write, apply the updated root objects to the snapshot.
+        try await self.withCurrentSnapshot { snapshot in
+            try await snapshot.withManifest { manifest in
+                for (key, root) in roots {
+                    manifest.dataStores[key.rawValue] = SnapshotManifest.DatastoreInfo(
+                        key: key.rawValue,
+                        id: root.datastore.id,
+                        root: root.id
+                    )
+                }
+            }
+        }
     }
 }
 
