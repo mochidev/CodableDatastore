@@ -249,6 +249,7 @@ extension DiskPersistence {
     ///
     /// - Parameter accessor: An accessor that takes an immutable reference to a store info, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
+    @_disfavoredOverload
     func withStoreInfo<T>(accessor: @escaping (_ storeInfo: StoreInfo) async throws -> T) async throws -> T where AccessMode == ReadOnly {
         try await updateStoreInfo(accessor: accessor).value
     }
@@ -341,6 +342,7 @@ extension DiskPersistence {
     /// - Parameter dateUpdate: The method to which to update the date of the main store with.
     /// - Parameter accessor: An accessor that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
+    @_disfavoredOverload
     func withCurrentSnapshot<T>(
         accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) async throws -> T {

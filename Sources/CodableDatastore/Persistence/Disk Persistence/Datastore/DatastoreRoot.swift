@@ -74,7 +74,7 @@ extension DiskPersistence.Datastore.RootObject {
         }
     }
     
-    func persistIfNeeded() throws {
+    func persistIfNeeded() async throws {
         guard !isPersisted else { return }
         guard let rootObject = _rootObject else {
             assertionFailure("Persisting a root that does not exist.")
@@ -87,6 +87,14 @@ extension DiskPersistence.Datastore.RootObject {
         /// Encode the provided manifest, and write it to disk.
         let data = try JSONEncoder.shared.encode(rootObject)
         try data.write(to: rootObjectURL, options: .atomic)
+        
+        try await primaryIndex.persistIfNeeded()
+        for (_, directIndex) in try await directIndexes {
+            try await directIndex.persistIfNeeded()
+        }
+        for (_, secondaryIndex) in try await secondaryIndexes {
+            try await secondaryIndex.persistIfNeeded()
+        }
     }
 }
 
