@@ -417,9 +417,18 @@ extension DiskPersistence {
         guard registeredDatastores[datastoreKey] != nil else {
             throw DatastoreInterfaceError.datastoreNotFound
         }
-        return try await withCurrentSnapshot { snapshot in
-            try await snapshot.withManifest { snapshotManifest in
-                await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
+        if let self = self as? DiskPersistence<ReadWrite> {
+            let (datastore, rootID) = try await self.withCurrentSnapshot { snapshot in
+                try await snapshot.withManifest { snapshotManifest in
+                    await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
+                }
+            }
+            return (datastore as! DiskPersistence<AccessMode>.Datastore, rootID)
+        } else {
+            return try await withCurrentSnapshot { snapshot in
+                try await snapshot.withManifest { snapshotManifest in
+                    await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
+                }
             }
         }
     }
@@ -442,18 +451,22 @@ extension DiskPersistence {
     }
     
     func persist(roots: [DatastoreKey : Datastore.RootObject]) async throws {
-        /// If we are read-only, make sure no edits have been made
-        guard let self = self as? DiskPersistence<ReadWrite> else {
-            try await self.withCurrentSnapshot { snapshot in
-                try await snapshot.withManifest { manifest in
-                    for (key, root) in roots {
-                        guard manifest.dataStores[key.rawValue]?.root == root.id
-                        else { throw DiskPersistenceError.cannotWrite }
-                    }
+        let containsEdits = try await withCurrentSnapshot { snapshot in
+            try await snapshot.withManifest { manifest in
+                for (key, root) in roots {
+                    guard manifest.dataStores[key.rawValue]?.root == root.id
+                    else { return true }
                 }
+                return false
             }
-            return
         }
+        
+        /// If nothing changed, don't bother writing anything.
+        if !containsEdits { return }
+        
+        /// If we are read-only, make sure no edits have been made
+        guard let self = self as? DiskPersistence<ReadWrite>
+        else { throw DiskPersistenceError.cannotWrite }
         
         /// If we are read-write, apply the updated root objects to the snapshot.
         try await self.withCurrentSnapshot { snapshot in
