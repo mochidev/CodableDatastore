@@ -31,6 +31,9 @@ public enum DatastoreInterfaceError: LocalizedError {
     /// The datastore being manipulated does not yet exist in the persistence.
     case datastoreKeyNotFound
     
+    /// The transaction was accessed outside of its activity window.
+    case transactionInactive
+    
     public var errorDescription: String? {
         switch self {
         case .multipleRegistrations:
@@ -47,6 +50,8 @@ public enum DatastoreInterfaceError: LocalizedError {
             return "The requested insertion cursor conflicts with an already existing identifier."
         case .datastoreKeyNotFound:
             return "The datastore being manipulated does not yet exist in the persistence."
+        case .transactionInactive:
+            return "The transaction was accessed outside of its activity window. Please make sure the transaction wasn't escaped."
         }
     }
 }
