@@ -1,0 +1,67 @@
+//
+//  DiskTransactionTests.swift
+//  CodableDatastore
+//
+//  Created by Dimitri Bouniol on 2023-07-02.
+//  Copyright © 2023 Mochi Development, Inc. All rights reserved.
+//
+
+import XCTest
+@testable import CodableDatastore
+
+final class DiskTransactionTests: XCTestCase {
+    var temporaryStoreURL: URL = FileManager.default.temporaryDirectory
+    
+    override func setUp() async throws {
+        temporaryStoreURL = FileManager.default.temporaryDirectory.appendingPathComponent(ProcessInfo.processInfo.globallyUniqueString, isDirectory: true);
+    }
+    
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: temporaryStoreURL)
+    }
+    
+    func testApplyDescriptor() async throws {
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        enum Version: Int, CaseIterable {
+            case zero
+        }
+        
+        struct TestStruct: Codable {}
+        
+        let datastore = Datastore(
+            persistence: persistence,
+            key: "test",
+            version: Version.zero,
+            codedType: TestStruct.self,
+            identifierType: UUID.self,
+            decoders: [.zero: { _ in TestStruct() }],
+            directIndexes: [],
+            computedIndexes: [],
+            configuration: .init()
+        )
+        
+        let descriptor = DatastoreDescriptor(
+            version: Data([0x00]),
+            codedType: "TestStruct",
+            identifierType: "UUID",
+            directIndexes: [:],
+            secondaryIndexes: [:],
+            size: 0
+        )
+        
+        try await persistence._withTransaction(options: []) { transaction in
+            let existingDescriptor = try await transaction.register(datastore: datastore)
+            XCTAssertNil(existingDescriptor)
+        }
+        
+        try await persistence._withTransaction(options: []) { transaction in
+            try await transaction.apply(descriptor: descriptor, for: "test")
+        }
+        
+        try await persistence._withTransaction(options: []) { transaction in
+            let existingDescriptor = try await transaction.datastoreDescriptor(for: "test")
+            XCTAssertEqual(existingDescriptor, descriptor)
+        }
+    }
+}
