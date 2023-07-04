@@ -150,7 +150,7 @@ extension DiskPersistence.Datastore.Index {
     ///  0 + 3/2 -> 1.5 -> 1
     ///     1 <= 5 ✓
     ///    [1, 2]
-    /// 1 + 2/2 -> 2
+    ///     1 + 2/2 -> 2
     ///        2 <= 5 ✓
     ///       [2]
     /// ```
@@ -340,7 +340,7 @@ extension DiskPersistence.Datastore.Index {
                 }
                 
                 /// If we had to advance a page and didn't yet start accumulating data, move our middle since it would be pointless to check that page again if the proposed entry was ordered after the persisted one we found.
-                if bytesForFirstEntry == nil {
+                if bytesForFirstEntry == nil, firstEntryOfPage == nil {
                     middle = slice.index(middle, offsetBy: 1)
                     /// If we've gone past the slice, stop here.
                     guard middle < slice.endIndex
@@ -348,7 +348,7 @@ extension DiskPersistence.Datastore.Index {
                 }
             }
             
-            guard bytesForFirstEntry != nil else {
+            guard bytesForFirstEntry != nil || firstEntryOfPage != nil else {
                 /// If we didn't encounter a single start sequence, a real one must be located before this point, so don't bother checking _any_ of the pages we scanned through a second time.
                 slice = slice[..<originalMiddle]
                 continue
