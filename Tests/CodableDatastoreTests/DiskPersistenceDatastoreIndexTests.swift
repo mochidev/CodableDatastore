@@ -259,4 +259,58 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
         try await assertPageSearch(proposedEntry: 5, pages: pages, expectedIndex: 10)
         try await assertPageSearch(proposedEntry: 6, pages: pages, expectedIndex: 10)
     }
+    
+    func testInMemorySearchSpeed() async throws {
+        /// 100,000 pages with 10 entries per page
+        let pageBlocks = (UInt64.zero..<100000).map { n in
+            (n*10..<(n+1)*10).flatMap { m in
+                DatastorePageEntry(headers: [m.bigEndianBytes], content: m.bigEndianBytes).blocks(remainingPageSpace: 1024, maxPageSpace: 1024)
+            }
+        }
+        
+        let persistence = DiskPersistence(readOnlyURL: temporaryStoreURL)
+        let snapshot = Snapshot(
+            id: .init(rawValue: "Snapshot"),
+            persistence: persistence
+        )
+        let datastore = DiskPersistence.Datastore(
+            id: .init(rawValue: "Datastore"),
+            snapshot: snapshot
+        )
+        let index = DiskPersistence.Datastore.Index(
+            datastore: datastore,
+            id: .primary(manifest: .init(rawValue: "Index")),
+            manifest: DatastoreIndexManifest(
+                id: .init(rawValue: "Index"),
+                orderedPages: pageBlocks.enumerated().map { (index, _) in
+                        .existing(.init(rawValue: "Page \(index)"))
+                }
+            )
+        )
+        
+        let pages: [DiskPersistence<ReadOnly>.Datastore.Page] = pageBlocks.enumerated().map { (index, blocks) in
+            DiskPersistence<ReadOnly>.Datastore.Page(
+                datastore: datastore,
+                id: .init(
+                    index: .primary(manifest: .init(rawValue: "Index")),
+                    page: .init(rawValue: "Page \(index)")
+                ),
+                blocks: blocks
+            )
+        }
+        
+        measure {
+            let exp = expectation(description: "Finished")
+            Task {
+                for _ in 0..<1000 {
+                    _ = try await index.pageIndex(for: UInt64.random(in: 0..<1000000), in: pages) { lhs, rhs in
+                        lhs.sortOrder(comparedTo: try UInt64(bigEndianBytes: rhs.headers[0]))
+                    }
+                }
+                
+                exp.fulfill()
+            }
+            wait(for: [exp], timeout: 200.0)
+        }
+    }
 }
