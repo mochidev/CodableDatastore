@@ -9,7 +9,7 @@
 import Foundation
 
 /// A ``DiskPersistence``-specific error.
-public enum DiskPersistenceError: LocalizedError {
+public enum DiskPersistenceError: LocalizedError, Equatable {
     /// The specified URL for the persistence store is not a file URL.
     case notFileURL
     
