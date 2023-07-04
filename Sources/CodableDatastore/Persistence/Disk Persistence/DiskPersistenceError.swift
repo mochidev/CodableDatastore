@@ -27,6 +27,9 @@ public enum DiskPersistenceError: LocalizedError {
     /// The page was in a format that could not be understood.
     case invalidPageFormat
     
+    /// The entry was in a format that could not be understood.
+    case invalidEntryFormat
+    
     /// The persistence is read only and cannot be written to.
     case cannotWrite
     
@@ -42,6 +45,8 @@ public enum DiskPersistenceError: LocalizedError {
             return "The index manifest was in a format that could not be understood."
         case .invalidPageFormat:
             return "The page was in a format that could not be understood."
+        case .invalidEntryFormat:
+            return "The entry was in a format that could not be understood."
         case .cannotWrite:
             return "The persistence is read only and cannot be written to."
         }
