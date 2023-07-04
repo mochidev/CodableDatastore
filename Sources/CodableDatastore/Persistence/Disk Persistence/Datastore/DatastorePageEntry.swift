@@ -27,8 +27,11 @@ extension DatastorePageEntry {
         let space = " ".utf8Bytes[0]
         let newline = "\n".utf8Bytes[0]
         
-        /// First, check for a new line. If we get one, the header section is done.
-        while let nextByte = iterator.next(), nextByte != newline {
+        repeat {
+            /// First, check for a new line. If we get one, the header section is done.
+            let nextByte = try iterator.next(Bytes.self, count: 1)[0]
+            guard nextByte != newline else { break }
+            
             /// Accumulate the following bytes until we encounter a space
             var headerSizeBytes = [nextByte]
             while let nextByte = iterator.next(), nextByte != space {
@@ -45,7 +48,7 @@ extension DatastorePageEntry {
             
             /// Make sure it ends in a new line
             try iterator.check(utf8: "\n")
-        }
+        } while true
         
         /// Just collect the rest of the bytes as the content.
         self.content = iterator.next(Bytes.self, max: bytes.count)
