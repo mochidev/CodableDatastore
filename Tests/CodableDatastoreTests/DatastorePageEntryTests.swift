@@ -238,4 +238,235 @@ final class DatastorePageEntryTests: XCTestCase {
         )
     }
     
+    func testBlockDecomposition() {
+        let smallEntry = DatastorePageEntry(headers: [[1]], content: [1])
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 1024, maxPageSpace: 1024),
+            [
+                .complete(
+                    """
+                    1 \u{1}
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 4, maxPageSpace: 1024),
+            [
+                .complete(
+                    """
+                    1 \u{1}
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 5, maxPageSpace: 1024),
+            [
+                .head(
+                    """
+                    1
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                     \u{1}
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 6, maxPageSpace: 1024),
+            [
+                .head(
+                    """
+                    1\u{20}
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    \u{1}
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 7, maxPageSpace: 1024),
+            [
+                .head(
+                    """
+                    1 \u{1}
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 8, maxPageSpace: 1024),
+            [
+                .head(
+                    """
+                    1 \u{1}
+                    
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 7, maxPageSpace: 7),
+            [
+                .head(
+                    """
+                    1 \u{1}
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 6, maxPageSpace: 7),
+            [
+                .head(
+                    """
+                    1\u{20}
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                    \u{1}
+                    
+                    
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 6, maxPageSpace: 6),
+            [
+                .head(
+                    """
+                    1\u{20}
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                    \u{1}
+                    
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 5, maxPageSpace: 6),
+            [
+                .head(
+                    """
+                    1
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                     \u{1}
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                    
+                    
+                    
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+        
+        XCTAssertEqual(
+            smallEntry.blocks(remainingPageSpace: 5, maxPageSpace: 5),
+            [
+                .head(
+                    """
+                    1
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                     
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                    \u{1}
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                    
+                    
+                    """.utf8Bytes
+                ),
+                .slice(
+                    """
+                    
+                    
+                    """.utf8Bytes
+                ),
+                .tail(
+                    """
+                    \u{1}
+                    """.utf8Bytes
+                )
+            ]
+        )
+    }
 }
