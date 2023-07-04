@@ -99,7 +99,7 @@ extension DatastorePageEntry {
                 return [.complete(Bytes(remainingSlice))]
             }
             
-            let slice = remainingSlice[..<usableSpace]
+            let slice = remainingSlice.prefix(usableSpace)
             remainingSlice = remainingSlice.dropFirst(usableSpace)
             blocks.append(.head(Bytes(slice)))
         }
@@ -121,7 +121,7 @@ extension DatastorePageEntry {
                 return blocks
             }
             
-            let slice = remainingSlice[..<usableSpace]
+            let slice = remainingSlice.prefix(usableSpace)
             remainingSlice = remainingSlice.dropFirst(usableSpace)
             
             if blocks.isEmpty {
