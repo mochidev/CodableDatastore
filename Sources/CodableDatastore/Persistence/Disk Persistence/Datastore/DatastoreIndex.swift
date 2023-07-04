@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Bytes
 
 typealias DatastoreIndexIdentifier = TypedIdentifier<DiskPersistence<ReadOnly>.Datastore.Index>
 
@@ -129,5 +130,339 @@ extension DiskPersistence.Datastore.Index {
             
             return pages
         }
+    }
+    
+    /// Return the page index where a proposed entry would reside on, wether it exists or not.
+    ///
+    /// This page would have at least one entry with which to achor itself to. For instance, if a page is missing any anchorable information (ie. its header is on a previous page), it won't be returned, instead opting for a page before or after it.
+    ///
+    /// This means that if a page is returned, and the first complete entry appears mid-way on the page, but a new entry were to be positioned before it, the caller can assume it would reside _after_ any imcomplete entries, but _before_ the first complete one.
+    ///
+    /// If the returned page contains the start of an entry which would be located before the proposed entry, it is up to the caller to scan forward until that entry is finished and insert the proposed entry after that point.
+    ///
+    /// ### Examples
+    ///
+    /// Below are some examples of how this algorithm is expected to perform.
+    ///
+    /// `5` in `[0, 1, 2]`:
+    /// ```
+    /// [0, 1, 2]
+    ///  0 + 3/2 -> 1.5 -> 1
+    ///     1 <= 5 ✓
+    ///    [1, 2]
+    /// 1 + 2/2 -> 2
+    ///        2 <= 5 ✓
+    ///       [2]
+    /// ```
+    ///
+    /// `2` in `[0, 1, 2]`:
+    /// ```
+    /// [0, 1, 2]
+    ///  0 + 3/2 -> 1.5 -> 1
+    ///     1 <= 2 ✓
+    ///    [1, 2]
+    ///     1 + 2/2 -> 2
+    ///        2 <= 2 ✓
+    ///       [2]
+    /// ```
+    ///
+    /// `1.1` in `[0, 1, 2]`:
+    /// ```
+    /// [0, 1, 2]
+    ///  0 + 3/2 -> 1.5 -> 1
+    ///     1 <= 1.1 ✓
+    ///    [1, 2]
+    ///     1 + 2/2 -> 2
+    ///        2 <= 1.1 ×
+    ///    [1]
+    /// ```
+    ///
+    /// `1` in `[0, 1, 2]`:
+    /// ```
+    /// [0, 1, 2]
+    ///  0 + 3/2 -> 1.5 -> 1
+    ///     1 <= 1 ✓
+    ///    [1, 2]
+    ///     1 + 2/2 -> 2
+    ///        2 <= 1 ×
+    ///    [1]
+    /// ```
+    ///
+    /// `0.5` in `[0, 1, 2]`:
+    /// ```
+    /// [0, 1, 2]
+    ///  0 + 3/2 -> 1.5 -> 1
+    ///     1 <= 0.5 ×
+    /// [0]
+    /// ```
+    ///
+    /// `0` in `[0, 1, 2]`:
+    /// ```
+    /// [0, 1, 2]
+    ///  0 + 3/2 -> 1.5 -> 1
+    ///     1 <= 0 ×
+    /// [0]
+    /// ```
+    ///
+    /// `-1` in `[0, 1, 2]`:
+    /// ```
+    /// [0, 1, 2]
+    ///  0 + 3/2 -> 1.5 -> 1
+    ///     1 <= -1 ×
+    /// [0]
+    /// ```
+    ///
+    /// `6` in `[0, 1, 2, 3, 4, 5]`:
+    /// ```
+    /// [0, 1, 2, 3, 4, 5]
+    ///           ^
+    ///           3 <= 6 ✓
+    ///          [3, 4, 5]
+    ///              ^
+    ///              4 <= 6 ✓
+    ///             [4, 5]
+    ///                 ^
+    ///                 5 <= 6 ✓
+    ///                [5]
+    /// ```
+    ///
+    /// `3.5` in `[0, 1, 2, 3, 4, 5]`:
+    /// ```
+    /// [0, 1, 2, 3, 4, 5]
+    ///           ^
+    ///           3 <= 3.5 ✓
+    ///          [3, 4, 5]
+    ///              ^
+    ///              4 <= 3.5 ×
+    ///          [3]
+    /// ```
+    ///
+    /// `2.1` in `[0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]`:
+    /// ```
+    /// [0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]
+    ///                 >-----------^
+    ///                             2 <= 2.1 ✓
+    ///                            [2, 2]
+    ///                                >×
+    ///                            [2] // Caller should scan forward at this point
+    /// ```
+    ///
+    /// `1.1` in `[0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]`:
+    /// ```
+    /// [0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]
+    ///                 >-----------^
+    ///                             2 <= 1.1 ×
+    /// [0, 1, 1, 1, 1, 1, 1, 1, 1]
+    ///              >------------×
+    /// [0, 1, 1, 1]
+    ///        >---×
+    /// [0, 1]
+    ///     ^--^--^--^--^--^--^--^ // Scanning will stop after enough header data for the entry is aquired, usually after a single page or two.
+    ///     1 <= 1.1 ✓
+    ///    [1]
+    /// ```
+    ///
+    /// `0.1` in `[0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]`:
+    /// ```
+    /// [0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]
+    ///                 >-----------^
+    ///                             2 <= 0.1 ×
+    /// [0, 1, 1, 1, 1, 1, 1, 1, 1]
+    ///              >------------×
+    /// [0, 1, 1, 1]
+    ///        >---×
+    /// [0, 1]
+    ///     ^--^--^--^--^--^--^--^
+    ///     1 <= 0.1 ×
+    /// [0]
+    /// ```
+    /// - Parameters:
+    ///   - proposedEntry: The entry to use in comparison with other persisted entries.
+    ///   - pages: A collection of pages to check against.
+    ///   - comparator: A comparator to determine order and equality between the proposed entry and a persisted one.
+    /// - Returns: The index within the pages collection where the entry would reside.
+    func pageIndex<T>(
+        for proposedEntry: T,
+        in pages: [DiskPersistence.Datastore.Page],
+        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+    ) async throws -> Int? {
+        var slice = pages[...]
+        
+        /// Cursor should point to making the first page.
+        guard !slice.isEmpty
+        else { return nil }
+        
+        /// Loosely based off of https://stackoverflow.com/questions/26678362/how-do-i-insert-an-element-at-the-correct-position-into-a-sorted-array-in-swift/70645571#70645571
+        /// Continue the process until we have a slice with a single entry in it.
+        while slice.count > 1 {
+            /// Grab the middle index of our slice. We keep the original and a mutable variant that can scan ahead for ranges of pages.
+            let originalMiddle = slice.index(slice.startIndex, offsetBy: slice.count/2)
+            var middle = slice.index(slice.startIndex, offsetBy: slice.count/2)
+            
+            var bytesForFirstEntry: Bytes?
+            var firstEntryOfPage: DatastorePageEntry?
+            
+            /// Start checking the page at the middle index, continuing to scan until we build up enough of an entry to compare to.
+            pageIterator: for page in pages[middle...] {
+                let blocks = try await page.blocks
+                
+                /// Start scanning the page block-by-block, continuing to scan until we build up enough of an entry to compare to.
+                for try await block in blocks {
+                    switch block {
+                    case .complete(let bytes):
+                        /// We have a complete entry, lets use it and stop scanning
+                        firstEntryOfPage = try DatastorePageEntry(bytes: bytes, isPartial: false)
+                        break pageIterator
+                    case .head(let bytes):
+                        /// We are starting an entry, but will need to go to the next page.
+                        bytesForFirstEntry = bytes
+                    case .slice(let bytes):
+                        /// In the first position, lets skip it.
+                        guard bytesForFirstEntry != nil else { continue }
+                        /// In the final position, lets save and continue.
+                        bytesForFirstEntry?.append(contentsOf: bytes)
+                    case .tail(let bytes):
+                        /// In the first position, lets skip it.
+                        guard bytesForFirstEntry != nil else { continue }
+                        /// In the final position, lets save and stop.
+                        bytesForFirstEntry?.append(contentsOf: bytes)
+                        firstEntryOfPage = try DatastorePageEntry(bytes: bytesForFirstEntry!, isPartial: false)
+                        break pageIterator
+                    }
+                    
+                    /// If we have some bytes, attempt to decode them into an entry.
+                    if let bytesForFirstEntry {
+                        firstEntryOfPage = try? DatastorePageEntry(bytes: bytesForFirstEntry, isPartial: false)
+                    }
+                    
+                    /// If we have an entry, stop scanning as we can go ahead and operate on it.
+                    if firstEntryOfPage != nil { break pageIterator }
+                }
+                
+                /// If we had to advance a page and didn't yet start accumulating data, move our middle since it would be pointless to check that page again if the proposed entry was ordered after the persisted one we found.
+                if bytesForFirstEntry == nil {
+                    middle = slice.index(middle, offsetBy: 1)
+                    /// If we've gone past the slice, stop here.
+                    guard middle < slice.endIndex
+                    else { break }
+                }
+            }
+            
+            guard bytesForFirstEntry != nil else {
+                /// If we didn't encounter a single start sequence, a real one must be located before this point, so don't bother checking _any_ of the pages we scanned through a second time.
+                slice = slice[..<originalMiddle]
+                continue
+            }
+            
+            /// If we don't have a first entry by now, stop here.
+            guard let firstEntryOfPage
+            else { throw DiskPersistenceError.invalidPageFormat }
+            
+            if try comparator(proposedEntry, firstEntryOfPage) == .ascending {
+                /// If the proposed entry is strictly before the first of the page, repeat the search prior to this page.
+                slice = slice[..<middle]
+            } else {
+                /// If the proposed entry is equal to the first of the page, or comes after it, use the later half to repeat the search.
+                slice = slice[middle...]
+            }
+        }
+        
+        return slice.startIndex
+    }
+    
+    func entry<T>(
+        for proposedEntry: T,
+        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+    ) async throws -> (
+        cursor: DiskPersistence.InstanceCursor,
+        entry: DatastorePageEntry
+    ) {
+        try await entry(for: proposedEntry, in: try await orderedPages, comparator: comparator)
+    }
+    
+    func entry<T>(
+        for proposedEntry: T,
+        in pages: [DiskPersistence.Datastore.Page],
+        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+    ) async throws -> (
+        cursor: DiskPersistence.InstanceCursor,
+        entry: DatastorePageEntry
+    ) {
+        /// Get the page the entry should reside on
+        guard let startingPageIndex = try await pageIndex(for: proposedEntry, in: pages, comparator: comparator)
+        else { throw DatastoreInterfaceError.instanceNotFound }
+        
+        
+        var bytesForEntry: Bytes?
+        var isEntryComplete = false
+        var blocksForEntry: [DiskPersistence.CursorBlock] = []
+        var pageIndex = startingPageIndex
+        
+        pageIterator: for page in pages[startingPageIndex...] {
+            defer { pageIndex += 1 }
+            let blocks = try await page.blocks
+            var blockIndex = 0
+            
+            for try await block in blocks {
+                defer { blockIndex += 1 }
+                switch block {
+                case .complete(let bytes):
+                    /// We have a complete entry, lets use it and stop scanning
+                    bytesForEntry = bytes
+                    isEntryComplete = true
+                case .head(let bytes):
+                    /// We are starting an entry, but will need to go to the next page.
+                    bytesForEntry = bytes
+                case .slice(let bytes):
+                    /// In the first position, lets skip it.
+                    guard bytesForEntry != nil else { continue }
+                    /// In the final position, lets save and continue.
+                    bytesForEntry?.append(contentsOf: bytes)
+                case .tail(let bytes):
+                    /// In the first position, lets skip it.
+                    guard bytesForEntry != nil else { continue }
+                    /// In the final position, lets save and stop.
+                    bytesForEntry?.append(contentsOf: bytes)
+                    isEntryComplete = true
+                }
+                
+                blocksForEntry.append(DiskPersistence.CursorBlock(
+                    pageIndex: pageIndex,
+                    page: pages[pageIndex],
+                    blockIndex: blockIndex
+                ))
+                
+                if let bytes = bytesForEntry, isEntryComplete {
+                    let entry = try DatastorePageEntry(bytes: bytes, isPartial: false)
+                    
+                    switch try comparator(proposedEntry, entry) {
+                    case .descending:
+                        /// Move on to the next entry.
+                        break
+                    case .equal:
+                        /// We found the entry, so return it.
+                        return (
+                            cursor: DiskPersistence.InstanceCursor(
+                                persistence: datastore.snapshot.persistence,
+                                datastore: datastore,
+                                index: self,
+                                blocks: blocksForEntry
+                            ),
+                            entry: entry
+                        )
+                    case .ascending:
+                        /// We must have passed the entry, which could only happen if it didn't exist.
+                        throw DatastoreInterfaceError.instanceNotFound
+                    }
+                    
+                    isEntryComplete = false
+                    bytesForEntry = nil
+                    blocksForEntry = []
+                }
+            }
+        }
+        
+        /// If we got this far, we didn't encounter the entry, and must have passed every entry along the way.
+        throw DatastoreInterfaceError.instanceNotFound
     }
 }

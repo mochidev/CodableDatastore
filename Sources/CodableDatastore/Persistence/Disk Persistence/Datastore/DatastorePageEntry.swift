@@ -13,8 +13,46 @@ import Bytes
 struct DatastorePageEntry: Hashable {
     var headers: [Bytes]
     var content: Bytes
+    var isPartial: Bool = false
 }
 
+// MARK: - Decoding
+
+extension DatastorePageEntry {
+    init(bytes: Bytes, isPartial: Bool) throws {
+        var iterator = bytes.makeIterator()
+        
+        var headers: [Bytes] = []
+        
+        let space = " ".utf8Bytes[0]
+        let newline = "\n".utf8Bytes[0]
+        
+        /// First, check for a new line. If we get one, the header section is done.
+        while let nextByte = iterator.next(), nextByte != newline {
+            /// Accumulate the following bytes until we encounter a space
+            var headerSizeBytes = [nextByte]
+            while let nextByte = iterator.next(), nextByte != space {
+                headerSizeBytes.append(nextByte)
+            }
+            
+            /// Decode those bytes as a decimal number
+            let decimalSizeString = String(utf8Bytes: headerSizeBytes)
+            guard let headerSize = Int(decimalSizeString), headerSize > 0, headerSize <= 8*1024
+            else { throw DiskPersistenceError.invalidEntryFormat }
+            
+            /// Save the header
+            headers.append(try iterator.next(Bytes.self, count: headerSize))
+            
+            /// Make sure it ends in a new line
+            try iterator.check(utf8: "\n")
+        }
+        
+        /// Just collect the rest of the bytes as the content.
+        self.content = iterator.next(Bytes.self, max: bytes.count)
+        self.headers = headers
+        self.isPartial = isPartial
+    }
+}
 
 // MARK: - Encoding
 
