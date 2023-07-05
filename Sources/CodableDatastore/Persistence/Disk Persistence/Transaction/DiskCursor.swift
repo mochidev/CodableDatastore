@@ -18,6 +18,8 @@ extension DiskPersistence {
         var persistence: DiskPersistence
         var datastore: Datastore
         var index: Datastore.Index
+        
+        /// The location to insert a new item. If nil, it should be located in the first position of the datastore.
         var insertAfter: CursorBlock?
     }
     

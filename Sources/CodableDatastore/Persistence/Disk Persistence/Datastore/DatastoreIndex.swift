@@ -465,4 +465,99 @@ extension DiskPersistence.Datastore.Index {
         /// If we got this far, we didn't encounter the entry, and must have passed every entry along the way.
         throw DatastoreInterfaceError.instanceNotFound
     }
+    
+    func insertionCursor<T>(
+        for proposedEntry: T,
+        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+    ) async throws -> DiskPersistence.InsertionCursor {
+        try await insertionCursor(for: proposedEntry, in: try await orderedPages, comparator: comparator)
+    }
+    
+    func insertionCursor<T>(
+        for proposedEntry: T,
+        in pages: [DiskPersistence.Datastore.Page],
+        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+    ) async throws -> DiskPersistence.InsertionCursor {
+        /// Get the page the entry should reside on
+        guard let startingPageIndex = try await pageIndex(for: proposedEntry, in: pages, comparator: comparator)
+        else {
+            return DiskPersistence.InsertionCursor(
+                persistence: datastore.snapshot.persistence,
+                datastore: datastore,
+                index: self,
+                insertAfter: nil
+            )
+        }
+        
+        
+        var bytesForEntry: Bytes?
+        var isEntryComplete = false
+        var previousBlock: DiskPersistence.CursorBlock? = nil
+        var currentBlock: DiskPersistence.CursorBlock? = nil
+        var pageIndex = startingPageIndex
+        
+        pageIterator: for page in pages[startingPageIndex...] {
+            defer { pageIndex += 1 }
+            let blocks = try await page.blocks
+            var blockIndex = 0
+            
+            for try await block in blocks {
+                defer { blockIndex += 1 }
+                switch block {
+                case .complete(let bytes):
+                    /// We have a complete entry, lets use it and stop scanning
+                    bytesForEntry = bytes
+                    isEntryComplete = true
+                case .head(let bytes):
+                    /// We are starting an entry, but will need to go to the next page.
+                    bytesForEntry = bytes
+                case .slice(let bytes):
+                    /// In the first position, lets skip it.
+                    guard bytesForEntry != nil else { continue }
+                    /// In the final position, lets save and continue.
+                    bytesForEntry?.append(contentsOf: bytes)
+                case .tail(let bytes):
+                    /// In the first position, lets skip it.
+                    guard bytesForEntry != nil else { continue }
+                    /// In the final position, lets save and stop.
+                    bytesForEntry?.append(contentsOf: bytes)
+                    isEntryComplete = true
+                }
+                
+                currentBlock = DiskPersistence.CursorBlock(
+                    pageIndex: pageIndex,
+                    page: pages[pageIndex],
+                    blockIndex: blockIndex
+                )
+                defer { previousBlock = currentBlock }
+                
+                if let bytes = bytesForEntry, isEntryComplete {
+                    let entry = try DatastorePageEntry(bytes: bytes, isPartial: false)
+                    
+                    switch try comparator(proposedEntry, entry) {
+                    case .descending:
+                        /// Move on to the next entry.
+                        break
+                    case .equal:
+                        /// We found an exact matching entry, stop here.
+                        throw DatastoreInterfaceError.instanceAlreadyExists
+                    case .ascending:
+                        /// We just passed the proposed entry's location, so return the previous block.
+                        return DiskPersistence.InsertionCursor(
+                            persistence: datastore.snapshot.persistence,
+                            datastore: datastore,
+                            index: self,
+                            insertAfter: previousBlock
+                        )
+                    }
+                    
+                    isEntryComplete = false
+                    bytesForEntry = nil
+                }
+            }
+        }
+        
+        /// If we got this far, we didn't encounter the entry, and must have passed every entry along the way.
+        throw DatastoreInterfaceError.instanceNotFound
+    }
 }
