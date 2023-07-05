@@ -63,6 +63,14 @@ extension DiskPersistence.Datastore.Index {
                 return id
             }
         }
+        
+        func with(manifestID: DatastoreIndexManifestIdentifier) -> Self {
+            switch self {
+            case .primary: return .primary(manifest: manifestID)
+            case .direct(let indexID, _): return .direct(index: indexID, manifest: manifestID)
+            case .secondary(let indexID, _): return .secondary(index: indexID, manifest: manifestID)
+            }
+        }
     }
 }
 
@@ -101,7 +109,7 @@ extension DiskPersistence.Datastore.Index {
         }
     }
     
-    func persistIfNeeded() throws {
+    func persistIfNeeded() async throws {
         guard !isPersisted else { return }
         guard let manifest = _manifest else {
             assertionFailure("Persisting a manifest that does not exist.")
@@ -114,6 +122,8 @@ extension DiskPersistence.Datastore.Index {
         /// Encode the provided manifest, and write it to disk.
         let data = Data(manifest.bytes)
         try data.write(to: manifestURL, options: .atomic)
+        isPersisted = true
+        await datastore.mark(identifier: id, asLoaded: true)
     }
 }
 
@@ -559,5 +569,107 @@ extension DiskPersistence.Datastore.Index {
         
         /// If we got this far, we didn't encounter the entry, and must have passed every entry along the way.
         throw DatastoreInterfaceError.instanceNotFound
+    }
+}
+
+// MARK: - Mutations
+
+extension DiskPersistence.Datastore.Index {
+    func manifest(
+        inserting entry: DatastorePageEntry,
+        at insertionCursor: DiskPersistence.InsertionCursor,
+        targetPageSize: Int = 32*1024
+    ) async throws -> (
+        manifest: DatastoreIndexManifest,
+        createdPages: [DiskPersistence.Datastore.Page]
+    ) {
+        let actualPageSize = min(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
+        
+        guard
+            insertionCursor.datastore === datastore,
+            insertionCursor.index === self
+        else { throw DatastoreInterfaceError.staleCursor }
+        
+        var manifest = try await manifest
+        
+        /// Prepare the list of existing pages, removing old entries.
+        var orderedPageInfos = manifest.orderedPageIDs.map { DatastoreIndexManifest.PageInfo.existing($0) }
+        
+        let newIndexID = id.with(manifestID: DatastoreIndexManifestIdentifier())
+        var createdPages: [DiskPersistence.Datastore.Page] = []
+        
+        switch (insertionCursor.insertAfter, orderedPageInfos.isEmpty) {
+        case (.none, true):
+            /// We have no pages yet, so simply create blocks out of the entry and create a page with each.
+            let newPageBlocks = entry.blocks(
+                remainingPageSpace: actualPageSize,
+                maxPageSpace: actualPageSize
+            ).map { [$0] }
+            for pageBlocks in newPageBlocks {
+                let page = DiskPersistence.Datastore.Page(
+                    datastore: datastore,
+                    id: .init(index: newIndexID, page: DatastorePageIdentifier()),
+                    blocks: pageBlocks
+                )
+                createdPages.append(page)
+                orderedPageInfos.append(.added(page.id.page))
+            }
+        case (.none, false):
+            /// Insert the new entries before any existing entries. If the page after these entries is small enough to fix, include it.
+            
+            /// First, separate the new entry into the necessary amount of pages it'll need.
+            var newPageBlocks = entry.blocks(
+                remainingPageSpace: targetPageSize,
+                maxPageSpace: targetPageSize
+            ).map { [$0] }
+            
+            /// Load the first page to see how large it is compared to the amount of space we have left on our final new page
+            let firstPage = await datastore.page(for: .init(index: id, page: orderedPageInfos[0].id))
+            let firstPageBlocks = try await firstPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+            
+            /// Calculate how much space remains on the final new page, and insert the existing blocks if they all fit.
+            /// Note that we are guaranteed to have at least one new page.
+            let remainingSpace = actualPageSize - newPageBlocks.last!.encodedSize
+            var insertionIndex = 0
+            if firstPageBlocks.encodedSize <= remainingSpace {
+                /// Mark the page we are removing accordingly
+                orderedPageInfos[0] = .removed(orderedPageInfos[0].id)
+                insertionIndex += 1
+                
+                /// Import the blocks into the last page.
+                newPageBlocks[newPageBlocks.count - 1].append(contentsOf: firstPageBlocks)
+            }
+            
+            /// Create the page objects for the newly-segmented blocks.
+            for pageBlocks in newPageBlocks {
+                defer { insertionIndex += 1 }
+                let page = DiskPersistence.Datastore.Page(
+                    datastore: datastore,
+                    id: .init(index: newIndexID, page: DatastorePageIdentifier()),
+                    blocks: pageBlocks
+                )
+                createdPages.append(page)
+                orderedPageInfos.insert(.added(page.id.page), at: insertionIndex)
+            }
+        case (.some(_), _): break
+        }
+        
+        if !createdPages.isEmpty {
+            manifest.id = newIndexID.manifestID
+            manifest.orderedPages = orderedPageInfos
+        }
+        
+        return (manifest: manifest, createdPages: createdPages)
+    }
+    
+    func manifest(
+        replacing entry: DatastorePageEntry,
+        at instanceCursor: DiskPersistence.InstanceCursor,
+        targetPageSize: Int = 32*1024
+    ) async throws -> (
+        manifest: DatastoreIndexManifest,
+        createdPages: [DiskPersistence.Datastore.Page]
+    ) {
+        preconditionFailure("Unimplemented")
     }
 }

@@ -34,6 +34,12 @@ public enum DatastoreInterfaceError: LocalizedError {
     /// The transaction was accessed outside of its activity window.
     case transactionInactive
     
+    /// The cursor does not match the one provided by the persistence.
+    case unknownCursor
+    
+    /// The cursor no longer refers to fresh data.
+    case staleCursor
+    
     public var errorDescription: String? {
         switch self {
         case .multipleRegistrations:
@@ -52,6 +58,10 @@ public enum DatastoreInterfaceError: LocalizedError {
             return "The datastore being manipulated does not yet exist in the persistence."
         case .transactionInactive:
             return "The transaction was accessed outside of its activity window. Please make sure the transaction wasn't escaped."
+        case .unknownCursor:
+            return "The cursor does not match the one provided by the persistence."
+        case .staleCursor:
+            return "The cursor no longer refers to fresh data. Please make sure to use them as soon as possible and not interspaced with other writes."
         }
     }
 }

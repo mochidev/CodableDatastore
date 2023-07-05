@@ -87,14 +87,8 @@ extension DiskPersistence.Datastore.RootObject {
         /// Encode the provided manifest, and write it to disk.
         let data = try JSONEncoder.shared.encode(rootObject)
         try data.write(to: rootObjectURL, options: .atomic)
-        
-        try await primaryIndex.persistIfNeeded()
-        for (_, directIndex) in try await directIndexes {
-            try await directIndex.persistIfNeeded()
-        }
-        for (_, secondaryIndex) in try await secondaryIndexes {
-            try await secondaryIndex.persistIfNeeded()
-        }
+        isPersisted = true
+        await datastore.mark(identifier: id, asLoaded: true)
     }
 }
 
@@ -139,6 +133,43 @@ extension DiskPersistence.Datastore.RootObject {
             
             return indexes
         }
+    }
+}
+
+// MARK: - Mutations
+
+extension DiskPersistence.Datastore.RootObject {
+    func manifest(
+        replacing index: DiskPersistence.Datastore.Index.ID
+    ) async throws -> DatastoreRootManifest {
+        let manifest = try await manifest
+        var updatedManifest = manifest
+        
+        switch index {
+        case .primary(let manifestID):
+            updatedManifest.primaryIndexManifest = manifestID
+        case .direct(let indexID, let manifestID):
+            updatedManifest.directIndexManifests = manifest.directIndexManifests.map { indexInfo in
+                if indexInfo.id == indexID {
+                    var indexInfo = indexInfo
+                    indexInfo.root = manifestID
+                }
+                return indexInfo
+            }
+        case .secondary(let indexID, let manifestID):
+            updatedManifest.secondaryIndexManifests = updatedManifest.secondaryIndexManifests.map { indexInfo in
+                if indexInfo.id == indexID {
+                    var indexInfo = indexInfo
+                    indexInfo.root = manifestID
+                }
+                return indexInfo
+            }
+        }
+        
+        if manifest != updatedManifest {
+            updatedManifest.id = DatastoreRootIdentifier()
+        }
+        return updatedManifest
     }
 }
 

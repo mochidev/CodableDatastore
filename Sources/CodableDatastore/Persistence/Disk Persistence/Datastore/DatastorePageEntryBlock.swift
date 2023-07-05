@@ -109,3 +109,32 @@ extension DatastorePageEntryBlock {
         return bytes
     }
 }
+
+// MARK: - Sizing
+
+extension DatastorePageEntryBlock {
+    var contents: Bytes {
+        switch self {
+        case .tail(let contents),
+             .complete(let contents),
+             .head(let contents),
+             .slice(let contents):
+            return contents
+        }
+    }
+    
+    var encodedSize: Int {
+        let payload = contents
+        let payloadSize = String(payload.count).utf8Bytes
+        
+        return 1 + payloadSize.count + 1 + payload.count + 1
+    }
+}
+
+extension RandomAccessCollection where Element == DatastorePageEntryBlock {
+    var encodedSize: Int {
+        self.reduce(into: 0) { partialResult, block in
+            partialResult += block.encodedSize
+        }
+    }
+}
