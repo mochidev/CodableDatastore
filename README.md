@@ -17,6 +17,7 @@ A pure-Swift implementation of a database-like persistent store for use in apps 
 ## Quick Links
 
 - [Documentation](https://swiftpackageindex.com/mochidev/CodableDatastore/documentation)
+- [Updates on Mastodon](https://mastodon.social/tags/CodableDatastore)
 
 ## Installation
 
@@ -43,7 +44,49 @@ targets: [
 
 `CodableDatastore` is a collection of types that make it easy to interface with large data stores of independent types without loading the entire data store in memory.
 
-### Goals
+> **Warning**
+> DO NOT USE THIS IN PRODOCUTION PROJECTS. As this project is currently still in its alpha phase, I cannot stress how important it is to not ship anything that relies on this code, or you will experience data loss. There is a chance the underlying model may continue to change day to day, or I will not be able to ever finish it.
+> Until then, please enjoy the code as a spectator or play around with it in toy projects to submit feedback!
+
+### Road to 0.1 Betas
+
+As this project matures towards its first beta, a number of features still need to be fleshed out:
+- Writing to any part of the datastore
+- Loading entries
+- Deleting entries
+- Keeping track of the number of entries
+- Update snapshots to have multiple manifests
+- Fleshing out historical edit metadata
+- Migrating entries
+- Ranged reads
+- Observations
+
+The above list will be kept up to date during development and will likely see additions during that process.
+
+### Road to 1.0
+
+Once an initial beta is released, the project will start focussing on the functionality and work listed below:
+- Cleaning up old resources in memory
+- Cleaning up old resources on disk
+- Reversed ranged reads
+- Controls for the edit history
+- Helper types to use with SwiftUI/Observability/Combine that can make data available on the main actor and filter and stay up to date
+- Comprehensive test coverage
+- Comprehensive usage guides
+- An example app
+- A memory persistence useful for testing apps with
+- A pre-configured data store tuned to storing pure Data, useful for types like Images
+
+### Beyond 1.0
+
+Once the 1.0 release has been made, it'll be time to start working on additional features:
+- Snapshots and Backups
+- A companion app to open, inspect, and modify datastores
+- Other kinds of persistences, such as a distributed one for multi-server deployments
+- Compression and encryption on a per-datastore basis
+- External writes to a shared inbox
+
+### Original Goals
 
 <details open>
 <summary><strong>Use Codable and Identifiable to as the only requirements for types saved to the data store.</strong></summary>
@@ -185,3 +228,7 @@ If you are designing a scalable system that runs multiple processes, consider se
 Contribution is welcome! Please take a look at the issues already available, or start a new discussion to propose a new feature. Although guarantees can't be made regarding feature requests, PRs that fit within the goals of the project and that have been discussed beforehand are more than welcome!
 
 Please make sure that all submissions have clean commit histories, are well documented, and thoroughly tested. **Please rebase your PR** before submission rather than merge in `main`. Linear histories are required, so merge commits in PRs will not be accepted.
+
+## Support
+
+To support this project, consider following [@dimitribouniol](https://mastodon.social/@dimitribouniol) on Mastodon, listening to Spencer and Dimitri on [Code Completion](https://mastodon.social/@codecompletion), or downloading Dimitri's wife Linh's app, [Not Phở](https://notpho.app/).
