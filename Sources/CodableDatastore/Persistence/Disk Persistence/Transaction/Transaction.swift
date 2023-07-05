@@ -310,6 +310,17 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
 
 // MARK: - Cursor Lookups
 
+private func primaryIndexComparator<IdentifierType: Indexable>(lhs: IdentifierType, rhs: DatastorePageEntry) throws -> SortOrder {
+    guard rhs.headers.count == 2
+    else { throw DiskPersistenceError.invalidEntryFormat }
+    
+    let identifierBytes = rhs.headers[1]
+    
+    let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(identifierBytes))
+    
+    return lhs.sortOrder(comparedTo: entryIdentifier)
+}
+
 extension DiskPersistence.Transaction {
     func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
@@ -326,16 +337,7 @@ extension DiskPersistence.Transaction {
         
         let index = try await rootObject.primaryIndex
         
-        let (cursor, entry) = try await index.entry(for: identifier) { lhs, rhs in
-            guard rhs.headers.count == 2
-            else { throw DiskPersistenceError.invalidEntryFormat }
-            
-            let identifierBytes = rhs.headers[1]
-            
-            let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(identifierBytes))
-            
-            return lhs.sortOrder(comparedTo: entryIdentifier)
-        }
+        let (cursor, entry) = try await index.entry(for: identifier, comparator: primaryIndexComparator)
         guard entry.headers.count == 2
         else { throw DiskPersistenceError.invalidEntryFormat }
         
@@ -352,7 +354,12 @@ extension DiskPersistence.Transaction {
     ) async throws -> any InsertionCursorProtocol {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        let index = try await rootObject.primaryIndex
+        
+        return try await index.insertionCursor(for: identifier, comparator: primaryIndexComparator)
     }
     
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
