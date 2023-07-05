@@ -73,7 +73,7 @@ extension DiskPersistence.Datastore.Page {
             .appendingPathComponent(components.year, isDirectory: true)
             .appendingPathComponent(components.monthDay, isDirectory: true)
             .appendingPathComponent(components.hourMinute, isDirectory: true)
-            .appendingPathComponent("\(id).datastorepage", isDirectory: false)
+            .appendingPathComponent("\(id.page).datastorepage", isDirectory: false)
     }
 }
 
@@ -105,7 +105,7 @@ extension DiskPersistence.Datastore.Page {
                 
                 var iterator = sequence.makeAsyncIterator()
                 
-                try await iterator.check(utf8: "PAGE\n")
+                try await iterator.check(Self.header)
                 
                 /// Pages larger than 1 GB are unsupported.
                 let transformation = try await iterator.collect(max: 1024*1024*1024) { sequence in
@@ -129,6 +129,24 @@ extension DiskPersistence.Datastore.Page {
             return try await readerTask.value
         }
     }
+    
+    func persistIfNeeded() async throws {
+        guard !isPersisted else { return }
+        let blocks = try await blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+        let bytes = blocks.reduce(into: Self.header) { $0.append(contentsOf: $1.bytes) }
+        
+        let pageURL = pageURL
+        /// Make sure the directories exists first.
+        try FileManager.default.createDirectory(at: pageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        
+        /// Write the bytes for the page to disk.
+        try Data(bytes).write(to: pageURL, options: .atomic)
+        isPersisted = true
+        await datastore.mark(identifier: id, asLoaded: true)
+    }
+    
+    static var header: Bytes { "PAGE\n".utf8Bytes }
+    static var headerSize: Int { header.count }
 }
 
 actor MultiplexedAsyncSequence<Base: AsyncSequence>: AsyncSequence {

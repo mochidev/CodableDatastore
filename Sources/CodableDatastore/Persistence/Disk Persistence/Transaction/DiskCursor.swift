@@ -23,6 +23,11 @@ extension DiskPersistence {
         var insertAfter: CursorBlock?
     }
     
+    enum Cursor {
+        case instance(InstanceCursor)
+        case insertion(InsertionCursor)
+    }
+    
     struct CursorBlock {
         var pageIndex: Int
         var page: DiskPersistence.Datastore.Page
