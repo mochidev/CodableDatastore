@@ -570,8 +570,13 @@ extension DiskPersistence.Datastore.Index {
             }
         }
         
-        /// If we got this far, we didn't encounter the entry, and must have passed every entry along the way.
-        throw DatastoreInterfaceError.instanceNotFound
+        /// If we got this far, we didn't encounter anything sorted after the proposed entry, so it must go last in the index.
+        return DiskPersistence.InsertionCursor(
+            persistence: datastore.snapshot.persistence,
+            datastore: datastore,
+            index: self,
+            insertAfter: previousBlock
+        )
     }
 }
 
@@ -586,7 +591,7 @@ extension DiskPersistence.Datastore.Index {
         manifest: DatastoreIndexManifest,
         createdPages: [DiskPersistence.Datastore.Page]
     ) {
-        let actualPageSize = min(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
+        let actualPageSize = max(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
         
         guard
             insertionCursor.datastore === datastore,
@@ -602,13 +607,14 @@ extension DiskPersistence.Datastore.Index {
         var createdPages: [DiskPersistence.Datastore.Page] = []
         
         switch (insertionCursor.insertAfter, orderedPageInfos.isEmpty) {
+        /// We have no pages yet, so simply create blocks out of the entry and create a page with each.
         case (.none, true):
-            /// We have no pages yet, so simply create blocks out of the entry and create a page with each.
             let newPageBlocks = entry.blocks(
                 remainingPageSpace: actualPageSize,
                 maxPageSpace: actualPageSize
             ).map { [$0] }
             for pageBlocks in newPageBlocks {
+                assert(pageBlocks.encodedSize <= actualPageSize)
                 let page = DiskPersistence.Datastore.Page(
                     datastore: datastore,
                     id: .init(index: newIndexID, page: DatastorePageIdentifier()),
@@ -617,13 +623,13 @@ extension DiskPersistence.Datastore.Index {
                 createdPages.append(page)
                 orderedPageInfos.append(.added(page.id.page))
             }
-        case (.none, false):
-            /// Insert the new entries before any existing entries. If the page after these entries is small enough to fix, include it.
             
+        /// Insert the new entries before any existing entries. If the page after these entries is small enough to fix, include it.
+        case (.none, false):
             /// First, separate the new entry into the necessary amount of pages it'll need.
             var newPageBlocks = entry.blocks(
-                remainingPageSpace: targetPageSize,
-                maxPageSpace: targetPageSize
+                remainingPageSpace: actualPageSize,
+                maxPageSpace: actualPageSize
             ).map { [$0] }
             
             /// Load the first page to see how large it is compared to the amount of space we have left on our final new page
@@ -646,6 +652,7 @@ extension DiskPersistence.Datastore.Index {
             /// Create the page objects for the newly-segmented blocks.
             for pageBlocks in newPageBlocks {
                 defer { insertionIndex += 1 }
+                assert(pageBlocks.encodedSize <= actualPageSize)
                 let page = DiskPersistence.Datastore.Page(
                     datastore: datastore,
                     id: .init(index: newIndexID, page: DatastorePageIdentifier()),
