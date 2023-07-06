@@ -139,23 +139,23 @@ extension DiskPersistence.Datastore {
     }
     
     func page(for identifier: Page.ID) -> Page {
-        if let page = trackedPages[identifier] {
+        if let page = trackedPages[identifier.withoutManifest] {
             return page
         }
         let page = Page(datastore: self, id: identifier)
-        trackedPages[identifier] = page
+        trackedPages[identifier.withoutManifest] = page
         return page
     }
     
     func adopt(page: Page) {
-        trackedPages[page.id] = page
+        trackedPages[page.id.withoutManifest] = page
     }
     
     func mark(identifier: Page.ID, asLoaded: Bool) {
         if asLoaded {
-            loadedPages.insert(identifier)
+            loadedPages.insert(identifier.withoutManifest)
         } else {
-            loadedPages.remove(identifier)
+            loadedPages.remove(identifier.withoutManifest)
         }
     }
 }
