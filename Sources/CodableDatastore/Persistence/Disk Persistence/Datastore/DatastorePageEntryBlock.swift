@@ -56,8 +56,6 @@ extension AsyncIteratorProtocol where Element == Byte {
         guard let blockSize = Int(decimalSizeString), blockSize > 0
         else { throw DiskPersistenceError.invalidPageFormat }
         
-        try await check(utf8: "\n")
-        
         let payload = try await next(Bytes.self, count: blockSize)
         
         try await check(utf8: "\n")
