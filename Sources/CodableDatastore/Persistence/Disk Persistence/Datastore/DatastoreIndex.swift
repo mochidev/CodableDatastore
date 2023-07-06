@@ -661,7 +661,63 @@ extension DiskPersistence.Datastore.Index {
                 createdPages.append(page)
                 orderedPageInfos.insert(.added(page.id.page), at: insertionIndex)
             }
-        case (.some(_), _): break
+            
+        /// We'll be adding an entry to an existing page, replacing it with one or more in the process.
+        case (.some(let insertAfter), _):
+            let existingPageBlocks = try await insertAfter.page.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+            let firstHalf = existingPageBlocks[...insertAfter.blockIndex]
+            let remainingBlocks = existingPageBlocks[(insertAfter.blockIndex+1)...]
+            
+            var remainingSpace = actualPageSize - firstHalf.encodedSize
+            let entryBlocks = entry.blocks(remainingPageSpace: remainingSpace, maxPageSpace: actualPageSize)
+            
+            var newPageBlocks: [[DatastorePageEntryBlock]] = [Array(firstHalf)]
+            var insertionIndex = 0
+            for block in entryBlocks {
+                defer { insertionIndex += 1 }
+                if insertionIndex == 0, remainingSpace >= block.encodedSize {
+                    insertionIndex += 1
+                }
+                if insertionIndex == newPageBlocks.count {
+                    newPageBlocks.append([])
+                }
+                newPageBlocks[insertionIndex].append(block)
+            }
+            
+            var pageInsertionIndex = insertAfter.pageIndex
+            if newPageBlocks[0].count == firstHalf.count {
+                newPageBlocks.remove(at: 0)
+            } else {
+                orderedPageInfos[pageInsertionIndex] = .removed(orderedPageInfos[pageInsertionIndex].id)
+            }
+            pageInsertionIndex += 1
+            
+            remainingSpace = actualPageSize - newPageBlocks.last!.encodedSize
+            for block in remainingBlocks {
+                if block.encodedSize > remainingSpace {
+                    newPageBlocks.append([])
+                    remainingSpace = actualPageSize
+                }
+                
+                // TODO: Also chop/re-combine blocks to efficiently pack them here
+                newPageBlocks[newPageBlocks.count-1].append(block)
+                remainingSpace -= block.encodedSize
+            }
+            
+            // TODO: Load next page as well, and if it fits, collate it.
+            
+            /// Create the page objects for the newly-segmented blocks.
+            for pageBlocks in newPageBlocks {
+                defer { pageInsertionIndex += 1 }
+                assert(pageBlocks.encodedSize <= actualPageSize)
+                let page = DiskPersistence.Datastore.Page(
+                    datastore: datastore,
+                    id: .init(index: newIndexID, page: DatastorePageIdentifier()),
+                    blocks: pageBlocks
+                )
+                createdPages.append(page)
+                orderedPageInfos.insert(.added(page.id.page), at: pageInsertionIndex)
+            }
         }
         
         if !createdPages.isEmpty {
