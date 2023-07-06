@@ -505,7 +505,6 @@ extension DiskPersistence.Transaction {
         /// No change occured, bail early
         guard rootObject.id != rootManifest.id else { return }
         
-        print(rootManifest)
         let newRoot = DiskPersistence.Datastore.RootObject(
             datastore: rootObject.datastore,
             id: rootManifest.id,
