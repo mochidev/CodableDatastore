@@ -47,7 +47,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             )
         )
         
-        let pages: [DiskPersistence<ReadOnly>.Datastore.Page] = pages.enumerated().map { (index, blocks) in
+        let pages = pages.enumerated().map { (index, blocks) in
             DiskPersistence<ReadOnly>.Datastore.Page(
                 datastore: datastore,
                 id: .init(
@@ -56,7 +56,8 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
                 ),
                 blocks: blocks
             )
-        }
+        }.map { page in LazyTask { page } }
+        
         let result = try await index.pageIndex(for: proposedEntry, in: pages) { lhs, rhs in
             lhs.sortOrder(comparedTo: rhs.headers[0][0])
         }
@@ -288,7 +289,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             )
         )
         
-        let pages: [DiskPersistence<ReadOnly>.Datastore.Page] = pageBlocks.enumerated().map { (index, blocks) in
+        let pages = pageBlocks.enumerated().map { (index, blocks) in
             DiskPersistence<ReadOnly>.Datastore.Page(
                 datastore: datastore,
                 id: .init(
@@ -297,7 +298,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
                 ),
                 blocks: blocks
             )
-        }
+        }.map { page in LazyTask { page } }
         
         measure {
             let exp = expectation(description: "Finished")
