@@ -24,7 +24,7 @@ struct DatastoreIndexManifest: Equatable, Identifiable {
     
     /// Pointers to the pageIDs currently in use by the index.
     var orderedPageIDs: some Sequence<DatastorePageIdentifier> {
-        orderedPages.lazy.compactMap { pageInfo -> DatastorePageIdentifier? in
+        orderedPages.compactMap { pageInfo -> DatastorePageIdentifier? in
             if case .removed = pageInfo { return nil }
             
             return pageInfo.id
