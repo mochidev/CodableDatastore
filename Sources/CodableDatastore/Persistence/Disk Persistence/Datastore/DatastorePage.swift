@@ -57,6 +57,13 @@ extension DiskPersistence.Datastore.Page {
     struct ID: Hashable {
         let index: DiskPersistence.Datastore.Index.ID
         let page: DatastorePageIdentifier
+        
+        var withoutManifest: Self {
+            Self.init(
+                index: index.with(manifestID: .init(rawValue: "")),
+                page: page
+            )
+        }
     }
 }
 
