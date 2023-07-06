@@ -46,4 +46,42 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         try await datastore.persist(TestStruct(id: "2", value: "My name is Dimitri"))
         try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
     }
+    
+    func testWritingManyEntries() async throws {
+        enum Version: Int, CaseIterable {
+            case zero
+        }
+        
+        struct TestStruct: Codable, Identifiable {
+            var id: UUID = UUID()
+            var value: String
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        try await persistence.createPersistenceIfNecessary()
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            key: "test",
+            version: Version.zero,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestStruct.self, from: data)
+                }
+            ]
+        )
+        
+        let valueBank = ["Hello, World!", "My name is Dimitri", "Writen using CodableDatastore", "Swift is better than Objective-C, there, I said it"]
+        
+        let start = ProcessInfo.processInfo.systemUptime
+        for n in 1...100 {
+            let time = ProcessInfo.processInfo.systemUptime
+            for _ in 0..<100 {
+                try await datastore.persist(TestStruct(value: valueBank.randomElement()!))
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            print("\(n*100): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
+        }
+        print("hi")
+    }
 }
