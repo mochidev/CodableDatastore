@@ -282,6 +282,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
             )
             rootObjects[datastoreKey] = newRoot
             createdRootObjects.insert(newRoot)
+            deletedRootObjects.insert(rootObject)
             await newRoot.datastore.adopt(rootObject: newRoot)
             
             // TODO: Don't forget to create the new index objects too!
@@ -481,10 +482,12 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        guard let rootObject = try await rootObject(for: datastoreKey)
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
         else { throw DatastoreInterfaceError.datastoreKeyNotFound }
         
-        let index = try await rootObject.primaryIndex
+        let datastore = existingRootObject.datastore
+        
+        let existingIndex = try await existingRootObject.primaryIndex
         
         let entry = DatastorePageEntry(
             headers: [
@@ -494,44 +497,47 @@ extension DiskPersistence.Transaction {
             content: Bytes(instanceData)
         )
         
-        let (indexManifest, newPages) = try await {
+        let (indexManifest, newPages, removedPages) = try await {
             switch try cursor(for: someCursor) {
             case .insertion(let cursor):
-                return try await index.manifest(inserting: entry, at: cursor)
+                return try await existingIndex.manifest(inserting: entry, at: cursor)
             case .instance(let cursor):
-                return try await index.manifest(replacing: entry, at: cursor)
+                return try await existingIndex.manifest(replacing: entry, at: cursor)
             }
         }()
         
         /// No change occured, bail early
-        guard index.id.manifestID != indexManifest.id else { return }
+        guard existingIndex.id.manifestID != indexManifest.id else { return }
         
         for newPage in newPages {
             createdPages.insert(newPage)
-            await index.datastore.adopt(page: newPage)
+            await datastore.adopt(page: newPage)
         }
+        deletedPages.formUnion(removedPages)
         
-        let primaryIndex = DiskPersistence.Datastore.Index(
-            datastore: index.datastore,
+        let newPrimaryIndex = DiskPersistence.Datastore.Index(
+            datastore: datastore,
             id: .primary(manifest: indexManifest.id),
             manifest: indexManifest
         )
-        createdIndexes.insert(primaryIndex)
-        await index.datastore.adopt(index: primaryIndex)
+        createdIndexes.insert(newPrimaryIndex)
+        deletedIndexes.insert(existingIndex)
+        await datastore.adopt(index: newPrimaryIndex)
         
-        let rootManifest = try await rootObject.manifest(replacing: primaryIndex.id)
+        let rootManifest = try await existingRootObject.manifest(replacing: newPrimaryIndex.id)
         
         /// No change occured, bail early
-        guard rootObject.id != rootManifest.id else { return }
+        guard existingRootObject.id != rootManifest.id else { return }
         
-        let newRoot = DiskPersistence.Datastore.RootObject(
-            datastore: rootObject.datastore,
+        let newRootObject = DiskPersistence.Datastore.RootObject(
+            datastore: existingRootObject.datastore,
             id: rootManifest.id,
             rootObject: rootManifest
         )
-        createdRootObjects.insert(newRoot)
-        await index.datastore.adopt(rootObject: newRoot)
-        rootObjects[datastoreKey] = newRoot
+        createdRootObjects.insert(newRootObject)
+        deletedRootObjects.insert(existingRootObject)
+        await datastore.adopt(rootObject: newRootObject)
+        rootObjects[datastoreKey] = newRootObject
     }
     
     func deletePrimaryIndexEntry(
