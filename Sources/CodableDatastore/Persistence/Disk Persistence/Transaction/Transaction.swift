@@ -95,6 +95,25 @@ extension DiskPersistence {
             for (key, value) in rootObjects {
                 self.rootObjects[key] = value
             }
+            
+            /// We only want to persist the new objects that we didn't also create in this transaction, so if we deleted any objects that we previously just created, remove any references to them as they will only cause bloat once we persist to disk.
+            let transientRootObjects = self.createdRootObjects.intersection(deletedRootObjects)
+            let deletedRootObjects = deletedRootObjects.subtracting(transientRootObjects)
+            self.createdRootObjects.subtract(transientRootObjects)
+            self.createdRootObjects.formUnion(createdRootObjects)
+            self.deletedRootObjects.formUnion(deletedRootObjects)
+            
+            let transientIndexes = self.createdIndexes.intersection(deletedIndexes)
+            let deletedIndexes = deletedIndexes.subtracting(transientIndexes)
+            self.createdIndexes.subtract(transientIndexes)
+            self.createdIndexes.formUnion(createdIndexes)
+            self.deletedIndexes.formUnion(deletedIndexes)
+            
+            let transientPages = self.createdPages.intersection(deletedPages)
+            let deletedPages = deletedPages.subtracting(transientPages)
+            self.createdPages.subtract(transientPages)
+            self.createdPages.formUnion(createdPages)
+            self.deletedPages.formUnion(deletedPages)
         }
         
         private func persist() async throws {
