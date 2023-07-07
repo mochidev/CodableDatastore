@@ -43,8 +43,9 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             ]
         )
         
-        try await datastore.persist(TestStruct(id: "2", value: "My name is Dimitri"))
+        try await datastore.persist(TestStruct(id: "3", value: "My name is Dimitri"))
         try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
+        try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
     }
     
     func testWritingManyEntries() async throws {
