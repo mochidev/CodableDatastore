@@ -16,7 +16,7 @@ struct TypedIdentifier<T>: TypedIdentifierProtocol {
     }
 }
 
-protocol TypedIdentifierProtocol: RawRepresentable, Codable, Equatable, Hashable, CustomStringConvertible {
+protocol TypedIdentifierProtocol: RawRepresentable, Codable, Equatable, Hashable, CustomStringConvertible, Comparable {
     var rawValue: String { get }
     init(rawValue: String)
 }
@@ -52,5 +52,11 @@ extension TypedIdentifierProtocol {
         
         let stringToken = String(token, radix: 16, uppercase: true)
         self.init(rawValue: "\(fileSafeName)-\(String(repeating: "0", count: 16-stringToken.count))\(stringToken)")
+    }
+}
+
+extension TypedIdentifierProtocol {
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        lhs.rawValue < rhs.rawValue
     }
 }
