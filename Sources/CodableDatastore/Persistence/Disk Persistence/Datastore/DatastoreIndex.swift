@@ -633,7 +633,7 @@ extension DiskPersistence.Datastore.Index {
         targetPageSize: Int = 4*1024
     ) async throws -> (
         manifest: DatastoreIndexManifest,
-        createdPages: [DiskPersistence.Datastore.Page],
+        createdPages: Set<DiskPersistence.Datastore.Page>,
         removedPages: Set<DiskPersistence.Datastore.Page>
     ) {
         let actualPageSize = max(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
@@ -646,7 +646,7 @@ extension DiskPersistence.Datastore.Index {
         var manifest = try await manifest
         
         let newIndexID = id.with(manifestID: DatastoreIndexManifestIdentifier())
-        var createdPages: [DiskPersistence.Datastore.Page] = []
+        var createdPages: Set<DiskPersistence.Datastore.Page> = []
         var removedPages: Set<DiskPersistence.Datastore.Page> = []
         
         var newOrderedPages: [DatastoreIndexManifest.PageInfo] = []
@@ -776,7 +776,7 @@ extension DiskPersistence.Datastore.Index {
                             id: .init(index: newIndexID, page: newPageID),
                             blocks: pageBlocks
                         )
-                        createdPages.append(page)
+                        createdPages.insert(page)
                         newOrderedPages.append(.added(newPageID))
                     }
                     
@@ -809,7 +809,7 @@ extension DiskPersistence.Datastore.Index {
                     id: .init(index: newIndexID, page: newPageID),
                     blocks: pageBlocks
                 )
-                createdPages.append(page)
+                createdPages.insert(page)
                 newOrderedPages.append(.added(newPageID))
             }
         }
@@ -828,7 +828,7 @@ extension DiskPersistence.Datastore.Index {
         targetPageSize: Int = 32*1024
     ) async throws -> (
         manifest: DatastoreIndexManifest,
-        createdPages: [DiskPersistence.Datastore.Page],
+        createdPages: Set<DiskPersistence.Datastore.Page>,
         removedPages: Set<DiskPersistence.Datastore.Page>
     ) {
         preconditionFailure("Unimplemented")
