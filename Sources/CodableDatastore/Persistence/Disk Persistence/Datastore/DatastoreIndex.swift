@@ -588,7 +588,7 @@ extension DiskPersistence.Datastore.Index {
     func manifest(
         inserting entry: DatastorePageEntry,
         at insertionCursor: DiskPersistence.InsertionCursor,
-        targetPageSize: Int = 32*1024
+        targetPageSize: Int = 4*1024
     ) async throws -> (
         manifest: DatastoreIndexManifest,
         createdPages: [DiskPersistence.Datastore.Page]
