@@ -292,11 +292,13 @@ extension DiskPersistence.Datastore.Index {
     /// - Parameters:
     ///   - proposedEntry: The entry to use in comparison with other persisted entries.
     ///   - pages: A collection of pages to check against.
+    ///   - pageBuilder: A closure that provides a cached Page object for the loaded page.
     ///   - comparator: A comparator to determine order and equality between the proposed entry and a persisted one.
     /// - Returns: The index within the pages collection where the entry would reside.
     func pageIndex<T>(
         for proposedEntry: T,
-        in pages: [LazyTask<DiskPersistence.Datastore.Page>?],
+        in pages: [DatastoreIndexManifest.PageInfo],
+        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
         comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> Int? {
         var slice = pages[...]
@@ -316,41 +318,45 @@ extension DiskPersistence.Datastore.Index {
             var firstEntryOfPage: DatastorePageEntry?
             
             /// Start checking the page at the middle index, continuing to scan until we build up enough of an entry to compare to.
-            pageIterator: for page in pages[middle...] {
-                guard let page else { continue }
-                let blocks = try await page.value.blocks
-                
-                /// Start scanning the page block-by-block, continuing to scan until we build up enough of an entry to compare to.
-                for try await block in blocks {
-                    switch block {
-                    case .complete(let bytes):
-                        /// We have a complete entry, lets use it and stop scanning
-                        firstEntryOfPage = try DatastorePageEntry(bytes: bytes, isPartial: false)
-                        break pageIterator
-                    case .head(let bytes):
-                        /// We are starting an entry, but will need to go to the next page.
-                        bytesForFirstEntry = bytes
-                    case .slice(let bytes):
-                        /// In the first position, lets skip it.
-                        guard bytesForFirstEntry != nil else { continue }
-                        /// In the final position, lets save and continue.
-                        bytesForFirstEntry?.append(contentsOf: bytes)
-                    case .tail(let bytes):
-                        /// In the first position, lets skip it.
-                        guard bytesForFirstEntry != nil else { continue }
-                        /// In the final position, lets save and stop.
-                        bytesForFirstEntry?.append(contentsOf: bytes)
-                        firstEntryOfPage = try DatastorePageEntry(bytes: bytesForFirstEntry!, isPartial: false)
-                        break pageIterator
-                    }
+            pageIterator: for pageInfo in pages[middle...] {
+                switch pageInfo {
+                case .removed: break
+                case .added(let pageID), .existing(let pageID):
+                    let page = await pageBuilder(pageID)
+                    let blocks = try await page.blocks
                     
-                    /// If we have some bytes, attempt to decode them into an entry.
-                    if let bytesForFirstEntry {
-                        firstEntryOfPage = try? DatastorePageEntry(bytes: bytesForFirstEntry, isPartial: false)
+                    /// Start scanning the page block-by-block, continuing to scan until we build up enough of an entry to compare to.
+                    for try await block in blocks {
+                        switch block {
+                        case .complete(let bytes):
+                            /// We have a complete entry, lets use it and stop scanning
+                            firstEntryOfPage = try DatastorePageEntry(bytes: bytes, isPartial: false)
+                            break pageIterator
+                        case .head(let bytes):
+                            /// We are starting an entry, but will need to go to the next page.
+                            bytesForFirstEntry = bytes
+                        case .slice(let bytes):
+                            /// In the first position, lets skip it.
+                            guard bytesForFirstEntry != nil else { continue }
+                            /// In the final position, lets save and continue.
+                            bytesForFirstEntry?.append(contentsOf: bytes)
+                        case .tail(let bytes):
+                            /// In the first position, lets skip it.
+                            guard bytesForFirstEntry != nil else { continue }
+                            /// In the final position, lets save and stop.
+                            bytesForFirstEntry?.append(contentsOf: bytes)
+                            firstEntryOfPage = try DatastorePageEntry(bytes: bytesForFirstEntry!, isPartial: false)
+                            break pageIterator
+                        }
+                        
+                        /// If we have some bytes, attempt to decode them into an entry.
+                        if let bytesForFirstEntry {
+                            firstEntryOfPage = try? DatastorePageEntry(bytes: bytesForFirstEntry, isPartial: false)
+                        }
+                        
+                        /// If we have an entry, stop scanning as we can go ahead and operate on it.
+                        if firstEntryOfPage != nil { break pageIterator }
                     }
-                    
-                    /// If we have an entry, stop scanning as we can go ahead and operate on it.
-                    if firstEntryOfPage != nil { break pageIterator }
                 }
                 
                 /// If we had to advance a page and didn't yet start accumulating data, move our middle since it would be pointless to check that page again if the proposed entry was ordered after the persisted one we found.
@@ -390,19 +396,31 @@ extension DiskPersistence.Datastore.Index {
         cursor: DiskPersistence.InstanceCursor,
         entry: DatastorePageEntry
     ) {
-        try await entry(for: proposedEntry, in: try await orderedPages, comparator: comparator)
+        try await entry(
+            for: proposedEntry,
+            in: try await manifest.orderedPages,
+            pageBuilder: { await datastore.page(for: .init(index: self.id, page: $0)) },
+            comparator: comparator
+        )
     }
     
     func entry<T>(
         for proposedEntry: T,
-        in pages: [LazyTask<DiskPersistence.Datastore.Page>?],
+        in pages: [DatastoreIndexManifest.PageInfo],
+        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
         comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> (
         cursor: DiskPersistence.InstanceCursor,
         entry: DatastorePageEntry
     ) {
         /// Get the page the entry should reside on
-        guard let startingPageIndex = try await pageIndex(for: proposedEntry, in: pages, comparator: comparator)
+        guard
+            let startingPageIndex = try await pageIndex(
+                for: proposedEntry,
+                in: pages,
+                pageBuilder: pageBuilder,
+                comparator: comparator
+            )
         else { throw DatastoreInterfaceError.instanceNotFound }
         
         var bytesForEntry: Bytes?
@@ -410,10 +428,16 @@ extension DiskPersistence.Datastore.Index {
         var blocksForEntry: [DiskPersistence.CursorBlock] = []
         var pageIndex = startingPageIndex
         
-        pageIterator: for lazyPage in pages[startingPageIndex...] {
+        pageIterator: for pageInfo in pages[startingPageIndex...] {
             defer { pageIndex += 1 }
-            guard let lazyPage else { continue }
-            let page = await lazyPage.value
+            
+            let page: DiskPersistence.Datastore.Page
+            switch pageInfo {
+            case .removed: continue
+            case .existing(let pageID), .added(let pageID):
+                page = await pageBuilder(pageID)
+            }
+            
             let blocks = try await page.blocks
             var blockIndex = 0
             
@@ -484,16 +508,28 @@ extension DiskPersistence.Datastore.Index {
         for proposedEntry: T,
         comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> DiskPersistence.InsertionCursor {
-        try await insertionCursor(for: proposedEntry, in: try await orderedPages, comparator: comparator)
+        try await insertionCursor(
+            for: proposedEntry,
+            in: try await manifest.orderedPages,
+            pageBuilder: { await datastore.page(for: .init(index: self.id, page: $0)) },
+            comparator: comparator
+        )
     }
     
     func insertionCursor<T>(
         for proposedEntry: T,
-        in pages: [LazyTask<DiskPersistence.Datastore.Page>?],
+        in pages: [DatastoreIndexManifest.PageInfo],
+        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
         comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> DiskPersistence.InsertionCursor {
         /// Get the page the entry should reside on
-        guard let startingPageIndex = try await pageIndex(for: proposedEntry, in: pages, comparator: comparator)
+        guard
+            let startingPageIndex = try await pageIndex(
+                for: proposedEntry,
+                in: pages,
+                pageBuilder: pageBuilder,
+                comparator: comparator
+            )
         else {
             return DiskPersistence.InsertionCursor(
                 persistence: datastore.snapshot.persistence,
@@ -509,10 +545,16 @@ extension DiskPersistence.Datastore.Index {
         var currentBlock: DiskPersistence.CursorBlock? = nil
         var pageIndex = startingPageIndex
         
-        pageIterator: for lazyPage in pages[startingPageIndex...] {
+        pageIterator: for pageInfo in pages[startingPageIndex...] {
             defer { pageIndex += 1 }
-            guard let lazyPage else { continue }
-            let page = await lazyPage.value
+            
+            let page: DiskPersistence.Datastore.Page
+            switch pageInfo {
+            case .removed: continue
+            case .existing(let pageID), .added(let pageID):
+                page = await pageBuilder(pageID)
+            }
+            
             let blocks = try await page.blocks
             var blockIndex = 0
             

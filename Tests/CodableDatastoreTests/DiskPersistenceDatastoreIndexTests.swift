@@ -47,18 +47,26 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             )
         )
         
-        let pages = pages.enumerated().map { (index, blocks) in
-            DiskPersistence<ReadOnly>.Datastore.Page(
+        var pageLookup: [DatastorePageIdentifier : DiskPersistence<ReadOnly>.Datastore.Page] = [:]
+        var pageInfos: [DatastoreIndexManifest.PageInfo] = []
+        
+        for (index, blocks) in pages.enumerated() {
+            let pageID = DatastorePageIdentifier(rawValue: "Page \(index)")
+            let page = DiskPersistence<ReadOnly>.Datastore.Page(
                 datastore: datastore,
                 id: .init(
                     index: .primary(manifest: .init(rawValue: "Index")),
-                    page: .init(rawValue: "Page \(index)")
+                    page: pageID
                 ),
                 blocks: blocks
             )
-        }.map { page in LazyTask { page } }
+            pageLookup[pageID] = page
+            pageInfos.append(.existing(pageID))
+        }
         
-        let result = try await index.pageIndex(for: proposedEntry, in: pages) { lhs, rhs in
+        let result = try await index.pageIndex(for: proposedEntry, in: pageInfos) { pageID in
+            pageLookup[pageID]!
+        } comparator: { lhs, rhs in
             lhs.sortOrder(comparedTo: rhs.headers[0][0])
         }
         
@@ -289,22 +297,30 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             )
         )
         
-        let pages = pageBlocks.enumerated().map { (index, blocks) in
-            DiskPersistence<ReadOnly>.Datastore.Page(
+        var pageLookup: [DatastorePageIdentifier : DiskPersistence<ReadOnly>.Datastore.Page] = [:]
+        var pageInfos: [DatastoreIndexManifest.PageInfo] = []
+        
+        for (index, blocks) in pageBlocks.enumerated() {
+            let pageID = DatastorePageIdentifier(rawValue: "Page \(index)")
+            let page = DiskPersistence<ReadOnly>.Datastore.Page(
                 datastore: datastore,
                 id: .init(
                     index: .primary(manifest: .init(rawValue: "Index")),
-                    page: .init(rawValue: "Page \(index)")
+                    page: pageID
                 ),
                 blocks: blocks
             )
-        }.map { page in LazyTask { page } }
+            pageLookup[pageID] = page
+            pageInfos.append(.existing(pageID))
+        }
         
         measure {
             let exp = expectation(description: "Finished")
-            Task {
+            Task { [pageInfos, pageLookup] in
                 for _ in 0..<1000 {
-                    _ = try await index.pageIndex(for: UInt64.random(in: 0..<1000000), in: pages) { lhs, rhs in
+                    _ = try await index.pageIndex(for: UInt64.random(in: 0..<1000000), in: pageInfos) { pageID in
+                        pageLookup[pageID]!
+                    } comparator: { lhs, rhs in
                         lhs.sortOrder(comparedTo: try UInt64(bigEndianBytes: rhs.headers[0]))
                     }
                 }
