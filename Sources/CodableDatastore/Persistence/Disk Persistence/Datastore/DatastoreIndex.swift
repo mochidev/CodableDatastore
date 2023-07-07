@@ -633,7 +633,8 @@ extension DiskPersistence.Datastore.Index {
         targetPageSize: Int = 4*1024
     ) async throws -> (
         manifest: DatastoreIndexManifest,
-        createdPages: [DiskPersistence.Datastore.Page]
+        createdPages: [DiskPersistence.Datastore.Page],
+        removedPages: Set<DiskPersistence.Datastore.Page>
     ) {
         let actualPageSize = max(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
         
@@ -646,6 +647,7 @@ extension DiskPersistence.Datastore.Index {
         
         let newIndexID = id.with(manifestID: DatastoreIndexManifestIdentifier())
         var createdPages: [DiskPersistence.Datastore.Page] = []
+        var removedPages: Set<DiskPersistence.Datastore.Page> = []
         
         var newOrderedPages: [DatastoreIndexManifest.PageInfo] = []
         let insertionPage = insertionCursor.insertAfter?.pageIndex ?? 0
@@ -656,7 +658,8 @@ extension DiskPersistence.Datastore.Index {
         let originalOrderedPages = manifest.orderedPages
         for (index, pageInfo) in originalOrderedPages.enumerated() {
             switch pageInfo {
-            case .removed:
+            case .removed(let pageID):
+                removedPages.insert(await datastore.page(for: .init(index: id, page: pageID)))
                 /// Skip previously removed entries — for now, we don't want to list them.
                 continue
             case .existing(let pageID), .added(let pageID):
@@ -816,7 +819,7 @@ extension DiskPersistence.Datastore.Index {
             manifest.orderedPages = newOrderedPages
         }
         
-        return (manifest: manifest, createdPages: createdPages)
+        return (manifest: manifest, createdPages: createdPages, removedPages: removedPages)
     }
     
     func manifest(
@@ -825,7 +828,8 @@ extension DiskPersistence.Datastore.Index {
         targetPageSize: Int = 32*1024
     ) async throws -> (
         manifest: DatastoreIndexManifest,
-        createdPages: [DiskPersistence.Datastore.Page]
+        createdPages: [DiskPersistence.Datastore.Page],
+        removedPages: Set<DiskPersistence.Datastore.Page>
     ) {
         preconditionFailure("Unimplemented")
     }

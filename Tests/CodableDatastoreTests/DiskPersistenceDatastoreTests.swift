@@ -72,7 +72,13 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             ]
         )
         
-        let valueBank = ["Hello, World!", "My name is Dimitri", "Writen using CodableDatastore", "Swift is better than Objective-C, there, I said it"]
+        let valueBank = [
+            "Hello, World!",
+            "My name is Dimitri",
+            "Writen using CodableDatastore",
+            "Swift is better than Objective-C, there, I said it",
+            "Twenty Three is Number One"
+        ]
         
         let start = ProcessInfo.processInfo.systemUptime
         for n in 1...100 {
@@ -83,6 +89,50 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let now = ProcessInfo.processInfo.systemUptime
             print("\(n*100): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
         }
-        print("hi")
+    }
+    
+    func testWritingManyEntriesInTransactions() async throws {
+        enum Version: Int, CaseIterable {
+            case zero
+        }
+        
+        struct TestStruct: Codable, Identifiable {
+            var id: UUID = UUID()
+            var value: String
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        try await persistence.createPersistenceIfNecessary()
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            key: "test",
+            version: Version.zero,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestStruct.self, from: data)
+                }
+            ]
+        )
+        
+        let valueBank = [
+            "Hello, World!",
+            "My name is Dimitri",
+            "Writen using CodableDatastore",
+            "Swift is better than Objective-C, there, I said it",
+            "Twenty Three is Number One"
+        ]
+        
+        let start = ProcessInfo.processInfo.systemUptime
+        for n in 1...5 {
+            try await persistence.perform { persistence in
+                let time = ProcessInfo.processInfo.systemUptime
+                for _ in 0..<5000 {
+                    try await datastore.persist(TestStruct(value: valueBank.randomElement()!))
+                }
+                let now = ProcessInfo.processInfo.systemUptime
+                print("\(n*5000): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
+            }
+        }
     }
 }
