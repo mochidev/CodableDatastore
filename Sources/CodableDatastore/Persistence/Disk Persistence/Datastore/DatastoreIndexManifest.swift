@@ -68,6 +68,21 @@ extension DatastoreIndexManifest {
                 return id
             }
         }
+        
+        var isExisting: Bool {
+            if case .existing = self { return true }
+            return false
+        }
+        
+        var isRemoved: Bool {
+            if case .removed = self { return true }
+            return false
+        }
+        
+        var isAdded: Bool {
+            if case .added = self { return true }
+            return false
+        }
     }
 }
 
