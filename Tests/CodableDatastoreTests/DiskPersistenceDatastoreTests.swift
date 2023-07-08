@@ -125,14 +125,14 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         
         let start = ProcessInfo.processInfo.systemUptime
         for n in 1...5 {
+            let time = ProcessInfo.processInfo.systemUptime
             try await persistence.perform { persistence in
-                let time = ProcessInfo.processInfo.systemUptime
                 for _ in 0..<5000 {
                     try await datastore.persist(TestStruct(value: valueBank.randomElement()!))
                 }
-                let now = ProcessInfo.processInfo.systemUptime
-                print("\(n*5000): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
             }
+            let now = ProcessInfo.processInfo.systemUptime
+            print("\(n*5000): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
         }
     }
 }
