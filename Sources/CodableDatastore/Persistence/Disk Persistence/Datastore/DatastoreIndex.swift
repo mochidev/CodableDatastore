@@ -658,15 +658,22 @@ extension DiskPersistence.Datastore.Index {
         let originalOrderedPages = manifest.orderedPages
         for (index, pageInfo) in originalOrderedPages.enumerated() {
             switch pageInfo {
-            case .removed(let pageID):
-                removedPages.insert(await datastore.page(for: .init(index: id, page: pageID)))
-                /// Skip previously removed entries — for now, we don't want to list them.
+            case .removed:
+                /// Skip previously removed entries, unless this index is based on a transient index, and the removed entry was from before the transaction began.
+                if !isPersisted {
+                    newOrderedPages.append(pageInfo)
+                }
                 continue
             case .existing(let pageID), .added(let pageID):
-                /// If we are processing an earlier page, just include it as an existing page. If we are finished inserting, actually create the pages first, then import the existing page.
+                /// If we are processing an earlier page or are finished inserting, just include it as an existing page.
                 guard index >= insertionPage, !finishedInserting else {
-                    /// Add the specified page as an existing page.
-                    newOrderedPages.append(.existing(pageID))
+                    if isPersisted {
+                        /// Add the specified page as an existing page, since this is an index based on persisted data.
+                        newOrderedPages.append(.existing(pageID))
+                    } else {
+                        /// Add the specified page as is since we are working off a transient index, and would lose the fact that it may have been recently added otherwise.
+                        newOrderedPages.append(pageInfo)
+                    }
                     continue
                 }
                 
@@ -678,8 +685,10 @@ extension DiskPersistence.Datastore.Index {
                             throw DatastoreInterfaceError.staleCursor
                         }
                         
+                        let existingPage = insertAfter.page
+                        
                         /// Split the existing page into two halves.
-                        let existingPageBlocks = try await insertAfter.page.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                        let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
                         let firstHalf = existingPageBlocks[...insertAfter.blockIndex]
                         let remainingBlocks = existingPageBlocks[(insertAfter.blockIndex+1)...]
                         
@@ -702,8 +711,12 @@ extension DiskPersistence.Datastore.Index {
                                 newPageBlocks[insertionIndex].append(block)
                             }
                             
-                            /// Mark the existing page as one that no longer exists
-                            newOrderedPages.append(.removed(pageID))
+                            /// If the index had data on disk, or it existed prior to the transaction, mark it as removed.
+                            /// Otherwise, simply skip the page, since we added it in a transient index.
+                            removedPages.insert(existingPage)
+                            if isPersisted || pageInfo.isExisting {
+                                newOrderedPages.append(.removed(pageID))
+                            }
                             
                             /// Calculate how much room is left on the last page we are making, so we can finish importing the remaining blocks form the original page, creating new pages if necessary.
                             remainingSpace = actualPageSize - newPageBlocks[newPageBlocks.count-1].encodedSize
@@ -719,7 +732,13 @@ extension DiskPersistence.Datastore.Index {
                             }
                         } else {
                             /// If if doesn't, leave the page as is, and insert the rest of the new blocks as pages following this one.
-                            newOrderedPages.append(.existing(pageID))
+                            if isPersisted {
+                                /// Add the specified page as an existing page, since this is an index based on persisted data.
+                                newOrderedPages.append(.existing(pageID))
+                            } else {
+                                /// Add the specified page as is since we are working off a transient index, and would lose the fact that it may have been recently added otherwise.
+                                newOrderedPages.append(pageInfo)
+                            }
                             newPageBlocks = entryBlocks.map { [$0] }
                         }
                     } else {
@@ -748,8 +767,12 @@ extension DiskPersistence.Datastore.Index {
                     /// Note that we are guaranteed to have at least one new page by this point, since we are inserting and not replacing.
                     let remainingSpace = actualPageSize - newPageBlocks[newPageBlocks.count - 1].encodedSize
                     if existingPageBlocks.encodedSize <= remainingSpace {
-                        /// Mark the page we are removing accordingly
-                        newOrderedPages.append(.removed(pageID))
+                        /// If the index had data on disk, or it existed prior to the transaction, mark it as removed.
+                        /// Otherwise, simply skip the page, since we added it in a transient index.
+                        removedPages.insert(existingPage)
+                        if isPersisted || pageInfo.isExisting {
+                            newOrderedPages.append(.removed(pageID))
+                        }
                         
                         /// Import the blocks into the last page.
                         newPageBlocks[newPageBlocks.count - 1].append(contentsOf: existingPageBlocks)
@@ -780,8 +803,15 @@ extension DiskPersistence.Datastore.Index {
                         newOrderedPages.append(.added(newPageID))
                     }
                     
+                    /// Conditionally import the current page after we inserted everything.
                     if importCurrentPage {
-                        newOrderedPages.append(.existing(pageID))
+                        if isPersisted {
+                            /// Add the specified page as an existing page, since this is an index based on persisted data.
+                            newOrderedPages.append(.existing(pageID))
+                        } else {
+                            /// Add the specified page as is since we are working off a transient index, and would lose the fact that it may have been recently added otherwise.
+                            newOrderedPages.append(pageInfo)
+                        }
                     }
                 }
             }
