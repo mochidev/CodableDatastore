@@ -238,7 +238,24 @@ extension Datastore where AccessMode == ReadWrite {
 
 extension Datastore {
     public func load(_ idenfifier: IdentifierType) async throws -> CodedType? {
-        return nil
+        try await warmupIfNeeded()
+        
+        return try await persistence._withTransaction(options: [.idempotent, .readOnly]) { transaction in
+            
+            do {
+                let persistedEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+                
+                let entryVersion = try Version(persistedEntry.versionData)
+                let decoder = try await self.decoder(for: entryVersion)
+                let instance = try await decoder(persistedEntry.instanceData)
+                
+                return instance
+            } catch DatastoreInterfaceError.instanceNotFound {
+                return nil
+            } catch {
+                throw error
+            }
+        }
     }
     
     public func load(_ range: any IndexRangeExpression<IdentifierType>) async throws -> AsyncStream<CodedType> {
