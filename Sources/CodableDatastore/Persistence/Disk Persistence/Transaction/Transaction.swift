@@ -403,7 +403,7 @@ extension DiskPersistence.Transaction {
         return (
             cursor: cursor,
             instanceData: Data(entry.content),
-            versionData: Data(entry.headers[1])
+            versionData: Data(entry.headers[0])
         )
     }
     
