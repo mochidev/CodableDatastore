@@ -1049,4 +1049,173 @@ extension DiskPersistence.Datastore.Index {
         
         return (manifest: manifest, createdPages: createdPages, removedPages: removedPages)
     }
+    
+    func manifest(
+        deletingEntryAt instanceCursor: DiskPersistence.InstanceCursor,
+        targetPageSize: Int = 4*1024
+    ) async throws -> (
+        manifest: DatastoreIndexManifest,
+        createdPages: Set<DiskPersistence.Datastore.Page>,
+        removedPages: Set<DiskPersistence.Datastore.Page>
+    ) {
+        guard
+            instanceCursor.datastore === datastore,
+            instanceCursor.index === self,
+            let firstInstanceBlock = instanceCursor.blocks.first,
+            let lastInstanceBlock = instanceCursor.blocks.last,
+            firstInstanceBlock.pageIndex <= lastInstanceBlock.pageIndex,
+            firstInstanceBlock.pageIndex != lastInstanceBlock.pageIndex || firstInstanceBlock.blockIndex <= lastInstanceBlock.blockIndex
+        else { throw DatastoreInterfaceError.staleCursor }
+        
+        let actualPageSize = max(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
+        
+        var manifest = try await manifest
+        
+        let newIndexID = id.with(manifestID: DatastoreIndexManifestIdentifier())
+        var createdPages: Set<DiskPersistence.Datastore.Page> = []
+        var removedPages: Set<DiskPersistence.Datastore.Page> = []
+        
+        var newOrderedPages: [DatastoreIndexManifest.PageInfo] = []
+        var newPageBlocks: [[DatastorePageEntryBlock]] = []
+        var finishedInserting = false
+        
+        let originalOrderedPages = manifest.orderedPages
+        for (index, pageInfo) in originalOrderedPages.enumerated() {
+            switch pageInfo {
+            case .removed:
+                /// Skip previously removed entries, unless this index is based on a transient index, and the removed entry was from before the transaction began.
+                if !isPersisted {
+                    newOrderedPages.append(pageInfo)
+                }
+                continue
+            case .existing(let pageID), .added(let pageID):
+                /// If we are processing an earlier page or are finished inserting, just include it as an existing page.
+                guard index >= firstInstanceBlock.pageIndex, !finishedInserting else {
+                    if isPersisted {
+                        /// Add the specified page as an existing page, since this is an index based on persisted data.
+                        newOrderedPages.append(.existing(pageID))
+                    } else {
+                        /// Add the specified page as is since we are working off a transient index, and would lose the fact that it may have been recently added otherwise.
+                        newOrderedPages.append(pageInfo)
+                    }
+                    continue
+                }
+                
+                var importCurrentPage = false
+                
+                /// If this is our first time reaching this point, we have some new blocks to insert.
+                if index <= lastInstanceBlock.pageIndex {
+                    let existingPage = await datastore.page(for: .init(index: self.id, page: pageID))
+                    let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                    
+                    /// Grab the index range that we are replacing on this page
+                    let startingIndex = index == firstInstanceBlock.pageIndex ? firstInstanceBlock.blockIndex : 0
+                    let endingIndex = index == lastInstanceBlock.pageIndex ? lastInstanceBlock.blockIndex : (existingPageBlocks.count-1)
+                    
+                    /// Split the existing page into three parts: what comes before what we are replacing, what comes after, and the middle.
+                    let firstHalf = existingPageBlocks[..<startingIndex]
+                    let lastHalf = existingPageBlocks[(endingIndex+1)...]
+                    
+                    /// Make sure that the data is not going to be corrupted by our replacement.
+                    guard
+                        index == firstInstanceBlock.pageIndex || firstHalf.isEmpty,
+                        index == lastInstanceBlock.pageIndex || lastHalf.isEmpty
+                    else { throw DatastoreInterfaceError.staleCursor }
+                    
+                    /// If the index had data on disk, or it existed prior to the transaction, mark it as removed.
+                    /// Otherwise, simply skip the page, since we added it in a transient index.
+                    removedPages.insert(existingPage)
+                    if isPersisted || pageInfo.isExisting {
+                        newOrderedPages.append(.removed(pageID))
+                    }
+                    
+                    /// If we are at the start of the range, go ahead and prep the entry for insertion.
+                    if index == firstInstanceBlock.pageIndex {
+                        /// Add the first half of the existing entries to the pages we'll create, since it will always change in some way.
+                        newPageBlocks.append(Array(firstHalf))
+                    }
+                    
+                    /// If we are at the end of the range, collate the end of the page to what we are adding.
+                    if index == lastInstanceBlock.pageIndex  {
+                        /// Calculate how much room is left on the last page we are making, so we can finish importing the remaining blocks form the original page, creating new pages if necessary.
+                        var remainingSpace = actualPageSize - newPageBlocks[newPageBlocks.count-1].encodedSize
+                        for block in lastHalf {
+                            if block.encodedSize > remainingSpace {
+                                newPageBlocks.append([])
+                                remainingSpace = actualPageSize
+                            }
+                            
+                            // TODO: Also chop/re-combine blocks to efficiently pack them here
+                            newPageBlocks[newPageBlocks.count-1].append(block)
+                            remainingSpace -= block.encodedSize
+                        }
+                    }
+                } else {
+                    /// We finished processing the insert by now, so attempt to collate the next page if we can.
+                    
+                    /// Load the first page to see how large it is compared to the amount of space we have left on our final new page
+                    let existingPage = await datastore.page(for: .init(index: id, page: pageID))
+                    let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                    
+                    /// Calculate how much space remains on the final new page, and insert the existing blocks if they all fit.
+                    /// Note that we are guaranteed to have at least one new page by this point, since we are inserting and not replacing.
+                    let remainingSpace = actualPageSize - newPageBlocks[newPageBlocks.count - 1].encodedSize
+                    if existingPageBlocks.encodedSize <= remainingSpace {
+                        /// If the index had data on disk, or it existed prior to the transaction, mark it as removed.
+                        /// Otherwise, simply skip the page, since we added it in a transient index.
+                        removedPages.insert(existingPage)
+                        if isPersisted || pageInfo.isExisting {
+                            newOrderedPages.append(.removed(pageID))
+                        }
+                        
+                        /// Import the blocks into the last page.
+                        newPageBlocks[newPageBlocks.count - 1].append(contentsOf: existingPageBlocks)
+                    } else {
+                        /// We didn't have enough room for the whole thing, so just use the page as is.
+                        importCurrentPage = true
+                    }
+                    
+                    /// Now that we've checked to see if this page fits, stop generating new pages
+                    finishedInserting = true
+                }
+                
+                /// Finally, insert the pages we've created if we are done, or if we don't have a next iteration.
+                if finishedInserting || index == originalOrderedPages.count - 1 {
+                    /// Get a pre-sorted list of IDs for our sanity when looking up pages
+                    let newPageIDs = newPageBlocks.map { _ in
+                        DatastorePageIdentifier()
+                    }.sorted()
+                    /// Create the page objects for the newly-segmented blocks.
+                    for (newPageID, pageBlocks) in zip(newPageIDs, newPageBlocks) {
+                        assert(pageBlocks.encodedSize <= actualPageSize)
+                        let page = DiskPersistence.Datastore.Page(
+                            datastore: datastore,
+                            id: .init(index: newIndexID, page: newPageID),
+                            blocks: pageBlocks
+                        )
+                        createdPages.insert(page)
+                        newOrderedPages.append(.added(newPageID))
+                    }
+                    
+                    /// Conditionally import the current page after we inserted everything.
+                    if importCurrentPage {
+                        if isPersisted {
+                            /// Add the specified page as an existing page, since this is an index based on persisted data.
+                            newOrderedPages.append(.existing(pageID))
+                        } else {
+                            /// Add the specified page as is since we are working off a transient index, and would lose the fact that it may have been recently added otherwise.
+                            newOrderedPages.append(pageInfo)
+                        }
+                    }
+                }
+            }
+        }
+        
+        if !createdPages.isEmpty {
+            manifest.id = newIndexID.manifestID
+            manifest.orderedPages = newOrderedPages
+        }
+        
+        return (manifest: manifest, createdPages: createdPages, removedPages: removedPages)
+    }
 }
