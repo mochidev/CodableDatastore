@@ -51,9 +51,6 @@ targets: [
 ### Road to 0.1 Betas
 
 As this project matures towards its first beta, a number of features still need to be fleshed out:
-- Writing to any part of the datastore
-- Loading entries
-- Deleting entries
 - Keeping track of the number of entries
 - Update snapshots to have multiple manifests
 - Fleshing out historical edit metadata
