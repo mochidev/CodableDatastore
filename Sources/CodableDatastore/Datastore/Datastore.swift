@@ -499,7 +499,92 @@ extension Datastore where AccessMode == ReadWrite {
     }
     
     public func delete(_ idenfifier: IdentifierType) async throws {
-        
+        try await warmupIfNeeded()
+                
+        try await persistence._withTransaction(options: [.idempotent]) { transaction in
+            
+            /// Get a cursor to the entry within the primary index.
+            let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+            
+            /// Delete the instance at that cursor.
+            try await transaction.deletePrimaryIndexEntry(cursor: existingEntry.cursor, datastoreKey: self.key)
+            
+            /// Load the instance completely so we can delete the entry within the direct and secondary indexes too.
+            let existingVersion = try Version(existingEntry.versionData)
+            let decoder = try await self.decoder(for: existingVersion)
+            let existingInstance = try await decoder(existingEntry.instanceData)
+            
+            
+            var queriedIndexes: Set<String> = []
+            
+            /// Persist the direct indexes with full copies
+            for indexPath in self.directIndexes {
+                let indexName = indexPath.path
+                guard !queriedIndexes.contains(indexName) else { continue }
+                queriedIndexes.insert(indexName)
+                
+                let existingValue = existingInstance[keyPath: indexPath]
+                
+                /// Grab a cursor to the old value in the index.
+                let existingValueCursor = try await transaction.directIndexCursor(
+                    for: existingValue.indexed,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+                
+                /// Delete it.
+                try await transaction.deleteDirectIndexEntry(
+                    cursor: existingValueCursor.cursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
+            
+            /// Next, go through any remaining computed indexes as secondary indexes.
+            for indexPath in self.computedIndexes {
+                let indexName = indexPath.path
+                guard !queriedIndexes.contains(indexName) else { continue }
+                queriedIndexes.insert(indexName)
+                
+                let existingValue = existingInstance[keyPath: indexPath]
+                
+                /// Grab a cursor to the old value in the index.
+                let existingValueCursor = try await transaction.secondaryIndexCursor(
+                    for: existingValue.indexed,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+                
+                /// Delete it.
+                try await transaction.deleteSecondaryIndexEntry(
+                    cursor: existingValueCursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
+            
+            /// Remove any remaining indexed values from the old instance.
+            try await Mirror.indexedChildren(from: existingInstance) { indexName, value in
+                guard !queriedIndexes.contains(indexName) else { return }
+                
+                /// Grab a cursor to the old value in the index.
+                let existingValueCursor = try await transaction.secondaryIndexCursor(
+                    for: value,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+                
+                /// Delete it.
+                try await transaction.deleteSecondaryIndexEntry(
+                    cursor: existingValueCursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
+        }
     }
     
     /// A read-only view into the data store.

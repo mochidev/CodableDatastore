@@ -546,7 +546,52 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard
+            cursor.persistence as? DiskPersistence === persistence,
+            let cursor = cursor as? DiskPersistence.InstanceCursor
+        else { throw DatastoreInterfaceError.unknownCursor }
+        
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        let datastore = existingRootObject.datastore
+        
+        let existingIndex = try await existingRootObject.primaryIndex
+        
+        let (indexManifest, newPages, removedPages) = try await existingIndex.manifest(deletingEntryAt: cursor)
+        
+        /// No change occured, bail early
+        guard existingIndex.id.manifestID != indexManifest.id else { return }
+        
+        for newPage in newPages {
+            createdPages.insert(newPage)
+            await datastore.adopt(page: newPage)
+        }
+        deletedPages.formUnion(removedPages)
+        
+        let newPrimaryIndex = DiskPersistence.Datastore.Index(
+            datastore: datastore,
+            id: .primary(manifest: indexManifest.id),
+            manifest: indexManifest
+        )
+        createdIndexes.insert(newPrimaryIndex)
+        deletedIndexes.insert(existingIndex)
+        await datastore.adopt(index: newPrimaryIndex)
+        
+        let rootManifest = try await existingRootObject.manifest(replacing: newPrimaryIndex.id)
+        
+        /// No change occured, bail early
+        guard existingRootObject.id != rootManifest.id else { return }
+        
+        let newRootObject = DiskPersistence.Datastore.RootObject(
+            datastore: existingRootObject.datastore,
+            id: rootManifest.id,
+            rootObject: rootManifest
+        )
+        createdRootObjects.insert(newRootObject)
+        deletedRootObjects.insert(existingRootObject)
+        await datastore.adopt(rootObject: newRootObject)
+        rootObjects[datastoreKey] = newRootObject
     }
     
     func resetPrimaryIndex(
