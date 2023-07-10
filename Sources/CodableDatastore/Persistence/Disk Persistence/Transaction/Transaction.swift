@@ -265,27 +265,28 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
     func apply(descriptor: DatastoreDescriptor, for datastoreKey: DatastoreKey) async throws {
         try checkIsActive()
         
-        if let rootObject = try await rootObject(for: datastoreKey) {
-            var manifest = try await rootObject.manifest
+        if let existingRootObject = try await rootObject(for: datastoreKey) {
+            let datastore = existingRootObject.datastore
             
-            // TODO: Do a better merge of these descriptors, especially since size is something we want to preserve, amongst other properties
-            guard manifest.descriptor != descriptor else { return }
+            let (rootManifest, newIndexes) = try await existingRootObject.manifest(applying: descriptor)
             
-            manifest.id = DatastoreRootIdentifier()
-            manifest.modificationDate = Date()
-            manifest.descriptor = descriptor
+            /// No change occured, bail early
+            guard existingRootObject.id != rootManifest.id else { return }
             
-            let newRoot = DiskPersistence.Datastore.RootObject(
-                datastore: rootObject.datastore,
-                id: manifest.id,
-                rootObject: manifest
+            for newIndex in newIndexes {
+                createdIndexes.insert(newIndex)
+                await datastore.adopt(index: newIndex)
+            }
+            
+            let newRootObject = DiskPersistence.Datastore.RootObject(
+                datastore: datastore,
+                id: rootManifest.id,
+                rootObject: rootManifest
             )
-            rootObjects[datastoreKey] = newRoot
-            createdRootObjects.insert(newRoot)
-            deletedRootObjects.insert(rootObject)
-            await newRoot.datastore.adopt(rootObject: newRoot)
-            
-            // TODO: Don't forget to create the new index objects too!
+            createdRootObjects.insert(newRootObject)
+            deletedRootObjects.insert(existingRootObject)
+            await datastore.adopt(rootObject: newRootObject)
+            rootObjects[datastoreKey] = newRootObject
         } else {
             let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
             
@@ -344,6 +345,9 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
                 createdIndexes.insert(index)
                 await datastore.adopt(index: index)
             }
+            
+            var descriptor = descriptor
+            descriptor.size = 0
             
             /// Create the root object from the indexes that were created
             let manifest = DatastoreRootManifest(
@@ -555,12 +559,13 @@ extension DiskPersistence.Transaction {
         
         let datastore = existingRootObject.datastore
         
-        let (indexManifest, newPages, removedPages) = try await {
+        /// Depending on the cursor type, insert or replace the entry in the index, capturing the new manifesr, added and removed pages, and change in the number of entries.
+        let ((indexManifest, newPages, removedPages), newEntryCount) = try await {
             switch try cursor(for: someCursor) {
             case .insertion(let cursor):
-                return try await existingIndex.manifest(inserting: entry, at: cursor)
+                return (try await existingIndex.manifest(inserting: entry, at: cursor), 1)
             case .instance(let cursor):
-                return try await existingIndex.manifest(replacing: entry, at: cursor)
+                return (try await existingIndex.manifest(replacing: entry, at: cursor), 0)
             }
         }()
         
@@ -582,7 +587,12 @@ extension DiskPersistence.Transaction {
         deletedIndexes.insert(existingIndex)
         await datastore.adopt(index: newIndex)
         
-        let rootManifest = try await existingRootObject.manifest(replacing: newIndex.id)
+        var rootManifest = try await existingRootObject.manifest(replacing: newIndex.id)
+        
+        /// If the index we are modifying is the primary one, update the number of entries we are managing.
+        if case .primary = newIndex.id {
+            rootManifest.descriptor.size += newEntryCount
+        }
         
         /// No change occured, bail early
         guard existingRootObject.id != rootManifest.id else { return }
@@ -652,16 +662,21 @@ extension DiskPersistence.Transaction {
         }
         deletedPages.formUnion(removedPages)
         
-        let newPrimaryIndex = DiskPersistence.Datastore.Index(
+        let newIndex = DiskPersistence.Datastore.Index(
             datastore: datastore,
             id: existingIndex.id.with(manifestID: indexManifest.id),
             manifest: indexManifest
         )
-        createdIndexes.insert(newPrimaryIndex)
+        createdIndexes.insert(newIndex)
         deletedIndexes.insert(existingIndex)
-        await datastore.adopt(index: newPrimaryIndex)
+        await datastore.adopt(index: newIndex)
         
-        let rootManifest = try await existingRootObject.manifest(replacing: newPrimaryIndex.id)
+        var rootManifest = try await existingRootObject.manifest(replacing: newIndex.id)
+        
+        /// If the index we are modifying is the primary one, update the number of entries we are managing.
+        if case .primary = newIndex.id {
+            rootManifest.descriptor.size -= 1
+        }
         
         /// No change occured, bail early
         guard existingRootObject.id != rootManifest.id else { return }
