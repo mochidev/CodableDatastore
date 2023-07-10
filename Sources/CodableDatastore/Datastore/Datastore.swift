@@ -237,6 +237,18 @@ extension Datastore where AccessMode == ReadWrite {
 // MARK: - Loading
 
 extension Datastore {
+    /// The number of objects in the datastore.
+    ///
+    /// - Note: This count may not reflect an up to dat value while data is being written concurrently, but will be acurate after such a transaction finishes.
+    public var count: Int {
+        get async throws {
+            return try await persistence._withTransaction(options: [.idempotent, .readOnly]) { transaction in
+                let descriptor = try await transaction.datastoreDescriptor(for: self.key)
+                return descriptor?.size ?? 0
+            }
+        }
+    }
+    
     public func load(_ idenfifier: IdentifierType) async throws -> CodedType? {
         try await warmupIfNeeded()
         

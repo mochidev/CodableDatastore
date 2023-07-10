@@ -140,6 +140,91 @@ extension DiskPersistence.Datastore.RootObject {
 
 extension DiskPersistence.Datastore.RootObject {
     func manifest(
+        applying descriptor: DatastoreDescriptor
+    ) async throws -> (
+        manifest: DatastoreRootManifest,
+        createdIndexes: Set<DiskPersistence.Datastore.Index>
+        /// Note that indexes are not removed here.
+    ) {
+        let originalManifest = try await manifest
+        var manifest = originalManifest
+        
+        manifest.descriptor.version = descriptor.version
+        manifest.descriptor.codedType = descriptor.codedType
+        manifest.descriptor.identifierType = descriptor.identifierType
+        
+        var createdIndexes: Set<DiskPersistence.Datastore.Index> = []
+        
+        for (_, indexDescriptor) in descriptor.directIndexes {
+            let key = indexDescriptor.key
+            let indexType = indexDescriptor.indexType
+            var version = indexDescriptor.version
+            
+            if let originalVersion = originalManifest.descriptor.directIndexes[key]?.version {
+                version = originalVersion
+            } else {
+                let indexInfo = DatastoreRootManifest.IndexInfo(
+                    key: key,
+                    id: DatastoreIndexIdentifier(name: key),
+                    root: DatastoreIndexManifestIdentifier()
+                )
+                let index = DiskPersistence.Datastore.Index(
+                    datastore: datastore,
+                    id: .direct(index: indexInfo.id, manifest: indexInfo.root),
+                    manifest: DatastoreIndexManifest(
+                        id: indexInfo.root,
+                        orderedPages: []
+                    )
+                )
+                createdIndexes.insert(index)
+            }
+            
+            manifest.descriptor.directIndexes[key] = DatastoreDescriptor.IndexDescriptor(
+                version: version,
+                key: key,
+                indexType: indexType
+            )
+        }
+        
+        for (_, indexDescriptor) in descriptor.secondaryIndexes {
+            let key = indexDescriptor.key
+            let indexType = indexDescriptor.indexType
+            var version = indexDescriptor.version
+            
+            if let originalVersion = originalManifest.descriptor.secondaryIndexes[key]?.version {
+                version = originalVersion
+            } else {
+                let indexInfo = DatastoreRootManifest.IndexInfo(
+                    key: key,
+                    id: DatastoreIndexIdentifier(name: key),
+                    root: DatastoreIndexManifestIdentifier()
+                )
+                let index = DiskPersistence.Datastore.Index(
+                    datastore: datastore,
+                    id: .secondary(index: indexInfo.id, manifest: indexInfo.root),
+                    manifest: DatastoreIndexManifest(
+                        id: indexInfo.root,
+                        orderedPages: []
+                    )
+                )
+                createdIndexes.insert(index)
+            }
+            
+            manifest.descriptor.secondaryIndexes[key] = DatastoreDescriptor.IndexDescriptor(
+                version: version,
+                key: key,
+                indexType: indexType
+            )
+        }
+        
+        if originalManifest.descriptor != manifest.descriptor {
+            manifest.id = DatastoreRootIdentifier()
+            manifest.modificationDate = Date()
+        }
+        return (manifest: manifest, createdIndexes: createdIndexes)
+    }
+    
+    func manifest(
         replacing index: DiskPersistence.Datastore.Index.ID
     ) async throws -> DatastoreRootManifest {
         let manifest = try await manifest
@@ -168,6 +253,7 @@ extension DiskPersistence.Datastore.RootObject {
         
         if manifest != updatedManifest {
             updatedManifest.id = DatastoreRootIdentifier()
+            updatedManifest.modificationDate = Date()
         }
         return updatedManifest
     }
