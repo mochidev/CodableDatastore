@@ -111,24 +111,24 @@ extension DiskPersistence.Datastore.RootObject {
         }
     }
     
-    var directIndexes: [DatastoreIndexIdentifier: DiskPersistence.Datastore.Index] {
+    var directIndexes: [String: DiskPersistence.Datastore.Index] {
         get async throws {
-            var indexes: [DatastoreIndexIdentifier: DiskPersistence.Datastore.Index] = [:]
+            var indexes: [String: DiskPersistence.Datastore.Index] = [:]
             
             for indexInfo in try await rootObject.directIndexManifests {
-                indexes[indexInfo.id] = await datastore.index(for: .direct(index: indexInfo.id, manifest: indexInfo.root))
+                indexes[indexInfo.key] = await datastore.index(for: .direct(index: indexInfo.id, manifest: indexInfo.root))
             }
             
             return indexes
         }
     }
     
-    var secondaryIndexes: [DatastoreIndexIdentifier: DiskPersistence.Datastore.Index] {
+    var secondaryIndexes: [String: DiskPersistence.Datastore.Index] {
         get async throws {
-            var indexes: [DatastoreIndexIdentifier: DiskPersistence.Datastore.Index] = [:]
+            var indexes: [String: DiskPersistence.Datastore.Index] = [:]
             
             for indexInfo in try await rootObject.secondaryIndexManifests {
-                indexes[indexInfo.id] = await datastore.index(for: .secondary(index: indexInfo.id, manifest: indexInfo.root))
+                indexes[indexInfo.key] = await datastore.index(for: .secondary(index: indexInfo.id, manifest: indexInfo.root))
             }
             
             return indexes
@@ -150,16 +150,16 @@ extension DiskPersistence.Datastore.RootObject {
             updatedManifest.primaryIndexManifest = manifestID
         case .direct(let indexID, let manifestID):
             updatedManifest.directIndexManifests = manifest.directIndexManifests.map { indexInfo in
+                var indexInfo = indexInfo
                 if indexInfo.id == indexID {
-                    var indexInfo = indexInfo
                     indexInfo.root = manifestID
                 }
                 return indexInfo
             }
         case .secondary(let indexID, let manifestID):
             updatedManifest.secondaryIndexManifests = updatedManifest.secondaryIndexManifests.map { indexInfo in
+                var indexInfo = indexInfo
                 if indexInfo.id == indexID {
-                    var indexInfo = indexInfo
                     indexInfo.root = manifestID
                 }
                 return indexInfo

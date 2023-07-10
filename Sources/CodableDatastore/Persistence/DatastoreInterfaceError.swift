@@ -31,6 +31,9 @@ public enum DatastoreInterfaceError: LocalizedError {
     /// The datastore being manipulated does not yet exist in the persistence.
     case datastoreKeyNotFound
     
+    /// The index being manipulated does not yet exist in the datastore.
+    case indexNotFound
+    
     /// The transaction was accessed outside of its activity window.
     case transactionInactive
     
@@ -56,6 +59,8 @@ public enum DatastoreInterfaceError: LocalizedError {
             return "The requested insertion cursor conflicts with an already existing identifier."
         case .datastoreKeyNotFound:
             return "The datastore being manipulated does not yet exist in the persistence."
+        case .indexNotFound:
+            return "The index being manipulated does not yet exist in the datastore."
         case .transactionInactive:
             return "The transaction was accessed outside of its activity window. Please make sure the transaction wasn't escaped."
         case .unknownCursor:
