@@ -380,6 +380,42 @@ private func primaryIndexComparator<IdentifierType: Indexable>(lhs: IdentifierTy
     return lhs.sortOrder(comparedTo: entryIdentifier)
 }
 
+private func directIndexComparator<IndexType: Indexable, IdentifierType: Indexable>(lhs: (index: IndexType, identifier: IdentifierType), rhs: DatastorePageEntry) throws -> SortOrder {
+    guard rhs.headers.count == 3
+    else { throw DiskPersistenceError.invalidEntryFormat }
+    
+    let indexBytes = rhs.headers[1]
+    
+    let indexedValue = try JSONDecoder.shared.decode(IndexType.self, from: Data(indexBytes))
+    
+    let sortOrder = lhs.index.sortOrder(comparedTo: indexedValue)
+    guard sortOrder == .equal else { return sortOrder }
+    
+    let identifierBytes = rhs.headers[2]
+    
+    let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(identifierBytes))
+    
+    return lhs.identifier.sortOrder(comparedTo: entryIdentifier)
+}
+
+private func secondaryIndexComparator<IndexType: Indexable, IdentifierType: Indexable>(lhs: (index: IndexType, identifier: IdentifierType), rhs: DatastorePageEntry) throws -> SortOrder {
+    guard rhs.headers.count == 1
+    else { throw DiskPersistenceError.invalidEntryFormat }
+    
+    let indexBytes = rhs.headers[0]
+    
+    let indexedValue = try JSONDecoder.shared.decode(IndexType.self, from: Data(indexBytes))
+    
+    let sortOrder = lhs.index.sortOrder(comparedTo: indexedValue)
+    guard sortOrder == .equal else { return sortOrder }
+    
+    let identifierBytes = rhs.content
+    
+    let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(identifierBytes))
+    
+    return lhs.identifier.sortOrder(comparedTo: entryIdentifier)
+}
+
 extension DiskPersistence.Transaction {
     func primaryIndexCursor<IdentifierType: Indexable>(
         for identifier: IdentifierType,
@@ -422,7 +458,7 @@ extension DiskPersistence.Transaction {
     }
     
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        for index: IndexType,
+        for indexValue: IndexType,
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: DatastoreKey
@@ -433,69 +469,91 @@ extension DiskPersistence.Transaction {
     ) {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let index = try await rootObject.directIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        let (cursor, entry) = try await index.entry(for: (indexValue, identifier), comparator: directIndexComparator)
+        guard entry.headers.count == 3
+        else { throw DiskPersistenceError.invalidEntryFormat }
+        
+        return (
+            cursor: cursor,
+            instanceData: Data(entry.content),
+            versionData: Data(entry.headers[0])
+        )
     }
     
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        inserting index: IndexType,
+        inserting indexValue: IndexType,
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let index = try await rootObject.directIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        return try await index.insertionCursor(for: (indexValue, identifier), comparator: directIndexComparator)
     }
     
     func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        for index: IndexType,
+        for indexValue: IndexType,
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws -> any InstanceCursorProtocol {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let index = try await rootObject.secondaryIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        let (cursor, _) = try await index.entry(for: (indexValue, identifier), comparator: secondaryIndexComparator)
+        
+        return cursor
     }
     
     func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
-        inserting index: IndexType,
+        inserting indexValue: IndexType,
         identifier: IdentifierType,
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let index = try await rootObject.secondaryIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        return try await index.insertionCursor(for: (indexValue, identifier), comparator: secondaryIndexComparator)
     }
 }
 
 // MARK: - Entry Manipulation
 
 extension DiskPersistence.Transaction {
-    func persistPrimaryIndexEntry<IdentifierType: Indexable>(
-        versionData: Data,
-        identifierValue: IdentifierType,
-        instanceData: Data,
-        cursor someCursor: some InsertionCursorProtocol,
+    func persist(
+        entry: DatastorePageEntry,
+        at someCursor: some InsertionCursorProtocol,
+        existingRootObject: DiskPersistence.Datastore.RootObject,
+        existingIndex: DiskPersistence.Datastore.Index?,
         datastoreKey: DatastoreKey
     ) async throws {
-        try checkIsActive()
-        
-        guard let existingRootObject = try await rootObject(for: datastoreKey)
-        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        guard let existingIndex
+        else { throw DatastoreInterfaceError.indexNotFound }
         
         let datastore = existingRootObject.datastore
-        
-        let existingIndex = try await existingRootObject.primaryIndex
-        
-        let entry = DatastorePageEntry(
-            headers: [
-                Bytes(versionData),
-                Bytes(try JSONEncoder.shared.encode(identifierValue))
-            ],
-            content: Bytes(instanceData)
-        )
         
         let (indexManifest, newPages, removedPages) = try await {
             switch try cursor(for: someCursor) {
@@ -515,9 +573,88 @@ extension DiskPersistence.Transaction {
         }
         deletedPages.formUnion(removedPages)
         
+        let newIndex = DiskPersistence.Datastore.Index(
+            datastore: datastore,
+            id: existingIndex.id.with(manifestID: indexManifest.id),
+            manifest: indexManifest
+        )
+        createdIndexes.insert(newIndex)
+        deletedIndexes.insert(existingIndex)
+        await datastore.adopt(index: newIndex)
+        
+        let rootManifest = try await existingRootObject.manifest(replacing: newIndex.id)
+        
+        /// No change occured, bail early
+        guard existingRootObject.id != rootManifest.id else { return }
+        
+        let newRootObject = DiskPersistence.Datastore.RootObject(
+            datastore: existingRootObject.datastore,
+            id: rootManifest.id,
+            rootObject: rootManifest
+        )
+        createdRootObjects.insert(newRootObject)
+        deletedRootObjects.insert(existingRootObject)
+        await datastore.adopt(rootObject: newRootObject)
+        rootObjects[datastoreKey] = newRootObject
+    }
+    
+    func persistPrimaryIndexEntry<IdentifierType: Indexable>(
+        versionData: Data,
+        identifierValue: IdentifierType,
+        instanceData: Data,
+        cursor: some InsertionCursorProtocol,
+        datastoreKey: DatastoreKey
+    ) async throws {
+        try checkIsActive()
+        
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        try await persist(
+            entry: DatastorePageEntry(
+                headers: [
+                    Bytes(versionData),
+                    Bytes(try JSONEncoder.shared.encode(identifierValue))
+                ],
+                content: Bytes(instanceData)
+            ),
+            at: cursor,
+            existingRootObject: existingRootObject,
+            existingIndex: try await existingRootObject.primaryIndex,
+            datastoreKey: datastoreKey
+        )
+    }
+    
+    func delete(
+        cursor: some InstanceCursorProtocol,
+        existingRootObject: DiskPersistence.Datastore.RootObject,
+        existingIndex: DiskPersistence.Datastore.Index?,
+        datastoreKey: DatastoreKey
+    ) async throws {
+        guard let existingIndex
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        guard
+            cursor.persistence as? DiskPersistence === persistence,
+            let cursor = cursor as? DiskPersistence.InstanceCursor
+        else { throw DatastoreInterfaceError.unknownCursor }
+        
+        let datastore = existingRootObject.datastore
+        
+        let (indexManifest, newPages, removedPages) = try await existingIndex.manifest(deletingEntryAt: cursor)
+        
+        /// No change occured, bail early
+        guard existingIndex.id.manifestID != indexManifest.id else { return }
+        
+        for newPage in newPages {
+            createdPages.insert(newPage)
+            await datastore.adopt(page: newPage)
+        }
+        deletedPages.formUnion(removedPages)
+        
         let newPrimaryIndex = DiskPersistence.Datastore.Index(
             datastore: datastore,
-            id: .primary(manifest: indexManifest.id),
+            id: existingIndex.id.with(manifestID: indexManifest.id),
             manifest: indexManifest
         )
         createdIndexes.insert(newPrimaryIndex)
@@ -546,52 +683,15 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        guard
-            cursor.persistence as? DiskPersistence === persistence,
-            let cursor = cursor as? DiskPersistence.InstanceCursor
-        else { throw DatastoreInterfaceError.unknownCursor }
-        
         guard let existingRootObject = try await rootObject(for: datastoreKey)
         else { throw DatastoreInterfaceError.datastoreKeyNotFound }
         
-        let datastore = existingRootObject.datastore
-        
-        let existingIndex = try await existingRootObject.primaryIndex
-        
-        let (indexManifest, newPages, removedPages) = try await existingIndex.manifest(deletingEntryAt: cursor)
-        
-        /// No change occured, bail early
-        guard existingIndex.id.manifestID != indexManifest.id else { return }
-        
-        for newPage in newPages {
-            createdPages.insert(newPage)
-            await datastore.adopt(page: newPage)
-        }
-        deletedPages.formUnion(removedPages)
-        
-        let newPrimaryIndex = DiskPersistence.Datastore.Index(
-            datastore: datastore,
-            id: .primary(manifest: indexManifest.id),
-            manifest: indexManifest
+        try await delete(
+            cursor: cursor,
+            existingRootObject: existingRootObject,
+            existingIndex: try await existingRootObject.primaryIndex,
+            datastoreKey: datastoreKey
         )
-        createdIndexes.insert(newPrimaryIndex)
-        deletedIndexes.insert(existingIndex)
-        await datastore.adopt(index: newPrimaryIndex)
-        
-        let rootManifest = try await existingRootObject.manifest(replacing: newPrimaryIndex.id)
-        
-        /// No change occured, bail early
-        guard existingRootObject.id != rootManifest.id else { return }
-        
-        let newRootObject = DiskPersistence.Datastore.RootObject(
-            datastore: existingRootObject.datastore,
-            id: rootManifest.id,
-            rootObject: rootManifest
-        )
-        createdRootObjects.insert(newRootObject)
-        deletedRootObjects.insert(existingRootObject)
-        await datastore.adopt(rootObject: newRootObject)
-        rootObjects[datastoreKey] = newRootObject
     }
     
     func resetPrimaryIndex(
@@ -613,7 +713,23 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        try await persist(
+            entry: DatastorePageEntry(
+                headers: [
+                    Bytes(versionData),
+                    Bytes(try JSONEncoder.shared.encode(indexValue)),
+                    Bytes(try JSONEncoder.shared.encode(identifierValue))
+                ],
+                content: Bytes(instanceData)
+            ),
+            at: cursor,
+            existingRootObject: existingRootObject,
+            existingIndex: try await existingRootObject.directIndexes[indexName],
+            datastoreKey: datastoreKey
+        )
     }
     
     func deleteDirectIndexEntry(
@@ -623,7 +739,15 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        try await delete(
+            cursor: cursor,
+            existingRootObject: existingRootObject,
+            existingIndex: try await existingRootObject.directIndexes[indexName],
+            datastoreKey: datastoreKey
+        )
     }
     
     func deleteDirectIndex(
@@ -644,7 +768,21 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        try await persist(
+            entry: DatastorePageEntry(
+                headers: [
+                    Bytes(try JSONEncoder.shared.encode(indexValue))
+                ],
+                content: Bytes(try JSONEncoder.shared.encode(identifierValue))
+            ),
+            at: cursor,
+            existingRootObject: existingRootObject,
+            existingIndex: try await existingRootObject.secondaryIndexes[indexName],
+            datastoreKey: datastoreKey
+        )
     }
     
     func deleteSecondaryIndexEntry(
@@ -654,7 +792,15 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        try await delete(
+            cursor: cursor,
+            existingRootObject: existingRootObject,
+            existingIndex: try await existingRootObject.secondaryIndexes[indexName],
+            datastoreKey: datastoreKey
+        )
     }
     
     func deleteSecondaryIndex(

@@ -48,6 +48,34 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
     }
     
+    func testWritingEntryWithIndex() async throws {
+        enum Version: Int, CaseIterable {
+            case zero
+        }
+        
+        struct TestStruct: Codable, Identifiable {
+            var id: String
+            @Indexed var value: String
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            key: "test",
+            version: Version.zero,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestStruct.self, from: data)
+                }
+            ]
+        )
+        
+        try await datastore.persist(TestStruct(id: "3", value: "My name is Dimitri"))
+        try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
+        try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
+    }
+    
     func testWritingManyEntries() async throws {
         enum Version: Int, CaseIterable {
             case zero
