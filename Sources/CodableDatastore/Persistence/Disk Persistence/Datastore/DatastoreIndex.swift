@@ -129,22 +129,9 @@ extension DiskPersistence.Datastore.Index {
     }
 }
 
-// MARK: - Pages
+// MARK: - Page Lookups
 
 extension DiskPersistence.Datastore.Index {
-    var orderedPages: [LazyTask<DiskPersistence.Datastore.Page>?] {
-        get async throws {
-            if let cachedOrderedPages { return try await cachedOrderedPages.value }
-            let task = Task {
-                try await manifest.orderedPageIDs.map { $0.map {  pageID in
-                    LazyTask { await self.datastore.page(for: .init(index: self.id, page: pageID)) }
-                }}
-            }
-            cachedOrderedPages = task
-            return try await task.value
-        }
-    }
-    
     /// Return the page index where a proposed entry would reside on, wether it exists or not.
     ///
     /// This page would have at least one entry with which to achor itself to. For instance, if a page is missing any anchorable information (ie. its header is on a previous page), it won't be returned, instead opting for a page before or after it.
