@@ -609,6 +609,158 @@ extension DiskPersistence.Datastore.Index {
             insertAfter: previousBlock
         )
     }
+    
+    func forwardScanEntries(
+        after startCursor: DiskPersistence.InsertionCursor,
+        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+    ) async throws {
+        try await forwardScanEntries(
+            after: startCursor,
+            in: try await manifest.orderedPages,
+            pageBuilder: { await datastore.page(for: .init(index: self.id, page: $0)) },
+            entryHandler: entryHandler
+        )
+    }
+    
+    func forwardScanEntries(
+        after startCursor: DiskPersistence.InsertionCursor,
+        in pages: [DatastoreIndexManifest.PageInfo],
+        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
+        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+    ) async throws {
+        guard
+            startCursor.datastore === datastore,
+            startCursor.index === self
+        else { throw DatastoreInterfaceError.staleCursor }
+        
+        guard !pages.isEmpty else { return }
+        
+        let pageStartIndex = startCursor.insertAfter?.pageIndex ?? 0
+        
+        var bytesForEntry: Bytes = []
+        var isEntryComplete = false
+        
+        for (pageOffsetIndex, pageInfo) in pages[pageStartIndex...].enumerated() {
+            switch pageInfo {
+            case .removed: continue
+            case .added(let pageID), .existing(let pageID):
+                let page = await pageBuilder(pageID)
+                let blocks = try await page.blocks
+                
+                var blockStartIndex = 0
+                /// If we are on the first page, use the real block index
+                if pageOffsetIndex == 0 {
+                    blockStartIndex = startCursor.insertAfter?.blockIndex ?? 0
+                }
+                
+                for try await block in blocks.dropFirst(blockStartIndex) {
+                    switch block {
+                    case .complete(let bytes):
+                        /// We have a complete entry, lets use it and stop scanning
+                        bytesForEntry = bytes
+                        isEntryComplete = true
+                    case .head(let bytes):
+                        /// We are starting an entry, but will need to go to the next page.
+                        bytesForEntry = bytes
+                    case .slice(let bytes):
+                        /// In the final position, lets save and continue.
+                        bytesForEntry.append(contentsOf: bytes)
+                    case .tail(let bytes):
+                        /// In the final position, lets save and stop.
+                        bytesForEntry.append(contentsOf: bytes)
+                        isEntryComplete = true
+                    }
+                    
+                    if isEntryComplete {
+                        let entry = try DatastorePageEntry(bytes: bytesForEntry, isPartial: false)
+                        
+                        let shouldContinue = try await entryHandler(entry)
+                        guard shouldContinue else { return }
+                        
+                        bytesForEntry = []
+                        isEntryComplete = false
+                    }
+                }
+            }
+        }
+    }
+    
+    func reverseScanEntries(
+        before startCursor: DiskPersistence.InsertionCursor,
+        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+    ) async throws {
+        try await reverseScanEntries(
+            before: startCursor,
+            in: try await manifest.orderedPages,
+            pageBuilder: { await datastore.page(for: .init(index: self.id, page: $0)) },
+            entryHandler: entryHandler
+        )
+    }
+    
+    func reverseScanEntries(
+        before startCursor: DiskPersistence.InsertionCursor,
+        in pages: [DatastoreIndexManifest.PageInfo],
+        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
+        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+    ) async throws {
+        guard
+            startCursor.datastore === datastore,
+            startCursor.index === self
+        else { throw DatastoreInterfaceError.staleCursor }
+        
+        guard !pages.isEmpty else { return }
+        
+        let pageStartIndex = startCursor.insertAfter?.pageIndex ?? 0
+        
+        var bytesForEntry: Bytes = []
+        var isEntryComplete = false
+        
+        for (pageOffsetIndex, pageInfo) in pages[...pageStartIndex].reversed().enumerated() {
+            switch pageInfo {
+            case .removed: continue
+            case .added(let pageID), .existing(let pageID):
+                let page = await pageBuilder(pageID)
+                
+                var blockStartIndex = Int.max
+                /// If we are on the first page, use the real block index
+                if pageOffsetIndex == 0, let blockIndex = startCursor.insertAfter?.blockIndex {
+                    blockStartIndex = blockIndex
+                }
+                
+                let blocks = try await page.blocks.prefix(blockStartIndex).reduce(into: []) { $0.append($1) }
+                
+                
+                for block in blocks.reversed() {
+                    switch block {
+                    case .complete(let bytes):
+                        /// We have a complete entry, lets use it and stop scanning
+                        bytesForEntry = bytes
+                        isEntryComplete = true
+                    case .tail(let bytes):
+                        /// We are starting an entry, but will need to go to the next page.
+                        bytesForEntry = bytes
+                    case .slice(let bytes):
+                        /// In the final position, lets save and continue.
+                        bytesForEntry.insert(contentsOf: bytes, at: 0)
+                    case .head(let bytes):
+                        /// In the final position, lets save and stop.
+                        bytesForEntry.insert(contentsOf: bytes, at: 0)
+                        isEntryComplete = true
+                    }
+                    
+                    if isEntryComplete {
+                        let entry = try DatastorePageEntry(bytes: bytesForEntry, isPartial: false)
+                        
+                        let shouldContinue = try await entryHandler(entry)
+                        guard shouldContinue else { return }
+                        
+                        bytesForEntry = []
+                        isEntryComplete = false
+                    }
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Mutations
