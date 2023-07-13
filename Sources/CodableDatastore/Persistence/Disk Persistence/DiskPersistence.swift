@@ -420,7 +420,9 @@ extension DiskPersistence {
         if let self = self as? DiskPersistence<ReadWrite> {
             let (datastore, rootID) = try await self.withCurrentSnapshot { snapshot in
                 try await snapshot.withManifest { snapshotManifest in
-                    await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
+                    let (datastore, root) = await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
+                    snapshotManifest.dataStores[datastoreKey.rawValue] = .init(key: datastoreKey.rawValue, id: datastore.id, root: root)
+                    return (datastore, root)
                 }
             }
             return (datastore as! DiskPersistence<AccessMode>.Datastore, rootID)
