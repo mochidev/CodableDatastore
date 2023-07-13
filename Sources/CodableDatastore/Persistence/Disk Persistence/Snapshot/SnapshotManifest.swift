@@ -38,6 +38,6 @@ extension SnapshotManifest {
         var id: DatastoreIdentifier
         
         /// The root object for the datastore.
-        var root: DatastoreRootIdentifier
+        var root: DatastoreRootIdentifier?
     }
 }
