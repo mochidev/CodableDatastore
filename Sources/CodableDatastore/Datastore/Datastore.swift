@@ -288,15 +288,9 @@ extension Datastore {
 
 // MARK: - Observation
 
-public enum Observation<CodedType, IdentifierType> {
-    case created(value: CodedType, identifier: IdentifierType)
-    case updated(oldValue: CodedType, newValue: CodedType, identifier: IdentifierType)
-    case deleted(value: CodedType, identifier: IdentifierType)
-}
-
 extension Datastore {
-    public func observe(_ idenfifier: IdentifierType) -> AsyncStream<Observation<CodedType, IdentifierType>> {
-        return AsyncStream<Observation<CodedType, IdentifierType>> { continuation in
+    public func observe(_ idenfifier: IdentifierType) -> AsyncStream<ObservedEvent<CodedType, IdentifierType>> {
+        return AsyncStream<ObservedEvent<CodedType, IdentifierType>> { continuation in
             continuation.finish()
         }
     }
@@ -623,8 +617,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         try await self.load(instance.id)
     }
     
-    public func observe(_ instance: CodedType) -> AsyncStream<Observation<CodedType, IdentifierType>> {
-        return AsyncStream<Observation<CodedType, IdentifierType>> { continuation in
+    public func observe(_ instance: CodedType) -> AsyncStream<ObservedEvent<CodedType, IdentifierType>> {
+        return AsyncStream<ObservedEvent<CodedType, IdentifierType>> { continuation in
             continuation.finish()
         }
     }
