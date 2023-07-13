@@ -247,6 +247,11 @@ public protocol DatastoreInterfaceProtocol {
         datastoreKey: DatastoreKey,
         bufferingPolicy limit: ObservationBufferingPolicy
     ) async throws -> AsyncCompactMapSequence<AsyncStream<ObservedEvent<Data, ObservationEntry>>, ObservedEvent<IdentifierType, ObservationEntry>>
+    
+    func emit<IdentifierType: Indexable>(
+        event: ObservedEvent<IdentifierType, ObservationEntry>,
+        datastoreKey: DatastoreKey
+    ) async throws
 }
 
 /// A strategy that handles exhaustion of a buffer’s capacity.

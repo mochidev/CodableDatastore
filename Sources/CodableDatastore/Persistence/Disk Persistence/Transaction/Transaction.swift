@@ -29,7 +29,8 @@ extension DiskPersistence {
         var deletedIndexes: Set<Datastore.Index> = []
         var deletedPages: Set<Datastore.Page> = []
         
-        // TODO: entryMutations, so we can send events to observers once the whole thing is finished.
+        var entryMutations: [(DatastoreKey, ObservedEvent<Data, ObservationEntry>)] = []
+        var observerCache: [DatastoreKey : Bool] = [:]
         
         var isActive = false
         
@@ -83,6 +84,7 @@ extension DiskPersistence {
         
         func apply(
             rootObjects: [DatastoreKey : Datastore.RootObject],
+            entryMutations: [(DatastoreKey, ObservedEvent<Data, ObservationEntry>)],
             createdRootObjects: Set<Datastore.RootObject>,
             createdIndexes: Set<Datastore.Index>,
             createdPages: Set<Datastore.Page>,
@@ -95,6 +97,8 @@ extension DiskPersistence {
             for (key, value) in rootObjects {
                 self.rootObjects[key] = value
             }
+            
+            self.entryMutations.append(contentsOf: entryMutations)
             
             /// We only want to persist the new objects that we didn't also create in this transaction, so if we deleted any objects that we previously just created, remove any references to them as they will only cause bloat once we persist to disk.
             let transientRootObjects = self.createdRootObjects.intersection(deletedRootObjects)
@@ -120,6 +124,7 @@ extension DiskPersistence {
             if let parent {
                 try await parent.apply(
                     rootObjects: rootObjects,
+                    entryMutations: entryMutations,
                     createdRootObjects: createdRootObjects,
                     createdIndexes: createdIndexes,
                     createdPages: createdPages,
@@ -143,6 +148,18 @@ extension DiskPersistence {
             }
             
             try await persistence.persist(roots: rootObjects)
+            
+            var datastores: [DatastoreKey : Datastore] = [:]
+            for (datastoreKey, event) in entryMutations {
+                let datastore: Datastore
+                if let cachedDatastore = datastores[datastoreKey] {
+                    datastore = cachedDatastore
+                } else {
+                    datastore = try await persistence.persistenceDatastore(for: datastoreKey).0
+                    datastores[datastoreKey] = datastore
+                }
+                await datastore.emit(event)
+            }
         }
         
         static func makeTransaction<T>(
@@ -219,6 +236,23 @@ extension DiskPersistence {
             let rootObject = await persistenceDatastore.rootObject(for: rootID)
             rootObjects[datastoreKey] = rootObject
             return rootObject
+        }
+        
+        func hasObservers(for datastoreKey: DatastoreKey) async throws -> Bool {
+            if let hasObservers = observerCache[datastoreKey] {
+                return hasObservers
+            }
+            
+            if let parent = parent {
+                let hasObservers = try await parent.hasObservers(for: datastoreKey)
+                observerCache[datastoreKey] = hasObservers
+                return hasObservers
+            }
+            
+            let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+            let hasObservers = await datastore.hasObservers
+            observerCache[datastoreKey] = hasObservers
+            return hasObservers
         }
         
         func cursor(for cursor: any CursorProtocol) throws -> Cursor {
@@ -861,6 +895,18 @@ extension DiskPersistence.Transaction {
                 return nil
             }
         }
+    }
+    
+    func emit<IdentifierType: Indexable>(
+        event: ObservedEvent<IdentifierType, ObservationEntry>,
+        datastoreKey: DatastoreKey
+    ) async throws {
+        try checkIsActive()
+        
+        guard try await hasObservers(for: datastoreKey) else { return }
+        
+        let id = try JSONEncoder.shared.encode(event.id)
+        entryMutations.append((datastoreKey, event.with(id: id)))
     }
 }
 

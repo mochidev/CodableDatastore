@@ -219,4 +219,14 @@ extension DiskPersistence.Datastore {
     private func unregisterObserver(for id: ObserverID) {
         observers.removeValue(forKey: id)
     }
+    
+    func emit(
+        _ event: ObservedEvent<Data, ObservationEntry>
+    ) {
+        for (_, observer) in observers {
+            observer.yield(event)
+        }
+    }
+    
+    var hasObservers: Bool { !observers.isEmpty }
 }
