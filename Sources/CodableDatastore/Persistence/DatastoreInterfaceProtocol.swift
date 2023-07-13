@@ -241,4 +241,40 @@ public protocol DatastoreInterfaceProtocol {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws
+    
+    func makeObserver<IdentifierType: Indexable>(
+        identifierType: IdentifierType.Type,
+        datastoreKey: DatastoreKey,
+        bufferingPolicy limit: ObservationBufferingPolicy
+    ) async throws -> AsyncCompactMapSequence<AsyncStream<ObservedEvent<Data, ObservationEntry>>, ObservedEvent<IdentifierType, ObservationEntry>>
+}
+
+/// A strategy that handles exhaustion of a buffer’s capacity.
+public enum ObservationBufferingPolicy {
+
+    /// Continue to add to the buffer, treating its capacity as infinite.
+    case unbounded
+
+    /// When the buffer is full, discard the newly received element.
+    ///
+    /// This strategy enforces keeping the specified amount of oldest values.
+    case bufferingOldest(Int)
+
+    /// When the buffer is full, discard the oldest element in the buffer.
+    ///
+    /// This strategy enforces keeping the specified amount of newest values.
+    case bufferingNewest(Int)
+}
+
+extension AsyncStream.Continuation.BufferingPolicy {
+    init(_ bufferingPolicy: ObservationBufferingPolicy) {
+        switch bufferingPolicy {
+        case .unbounded:
+            self = .unbounded
+        case .bufferingOldest(let int):
+            self = .bufferingOldest(int)
+        case .bufferingNewest(let int):
+            self = .bufferingNewest(int)
+        }
+    }
 }
