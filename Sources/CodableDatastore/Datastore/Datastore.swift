@@ -335,7 +335,7 @@ extension Datastore where AccessMode == ReadWrite {
             /// Create any missing indexes or prime the datastore for writing.
             try await transaction.apply(descriptor: updatedDescriptor, for: self.key)
             
-            let existingEntry: (cursor: any InstanceCursorProtocol, instance: CodedType)? = try await {
+            let existingEntry: (cursor: any InstanceCursorProtocol, instance: CodedType, versionData: Data, instanceData: Data)? = try await {
                 do {
                     let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
                     
@@ -343,7 +343,12 @@ extension Datastore where AccessMode == ReadWrite {
                     let decoder = try await self.decoder(for: existingVersion)
                     let existingInstance = try await decoder(existingEntry.instanceData)
                     
-                    return (cursor: existingEntry.cursor, instance: existingInstance)
+                    return (
+                        cursor: existingEntry.cursor,
+                        instance: existingInstance,
+                        versionData: existingEntry.versionData,
+                        instanceData: existingEntry.instanceData
+                    )
                 } catch DatastoreInterfaceError.instanceNotFound {
                     return nil
                 } catch {
@@ -357,6 +362,34 @@ extension Datastore where AccessMode == ReadWrite {
                 if let existingEntry { return existingEntry.cursor }
                 return try await transaction.primaryIndexCursor(inserting: idenfifier, datastoreKey: self.key)
             }()
+            
+            if let existingEntry {
+                try await transaction.emit(
+                    event: .updated(
+                        id: idenfifier,
+                        oldEntry: ObservationEntry(
+                            versionData: existingEntry.versionData,
+                            instanceData: existingEntry.instanceData
+                        ),
+                        newEntry: ObservationEntry(
+                            versionData: versionData,
+                            instanceData: instanceData
+                        )
+                    ),
+                    datastoreKey: self.key
+                )
+            } else {
+                try await transaction.emit(
+                    event: .created(
+                        id: idenfifier,
+                        newEntry: ObservationEntry(
+                            versionData: versionData,
+                            instanceData: instanceData
+                        )
+                    ),
+                    datastoreKey: self.key
+                )
+            }
             
             /// Persist the entry in the primary index
             try await transaction.persistPrimaryIndexEntry(
@@ -516,10 +549,11 @@ extension Datastore where AccessMode == ReadWrite {
         try await persist(instance, to: instance[keyPath: keypath])
     }
     
-    public func delete(_ idenfifier: IdentifierType) async throws {
+    @discardableResult
+    public func delete(_ idenfifier: IdentifierType) async throws -> CodedType {
         try await warmupIfNeeded()
                 
-        try await persistence._withTransaction(options: [.idempotent]) { transaction in
+        return try await persistence._withTransaction(options: [.idempotent]) { transaction in
             
             /// Get a cursor to the entry within the primary index.
             let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
@@ -532,6 +566,16 @@ extension Datastore where AccessMode == ReadWrite {
             let decoder = try await self.decoder(for: existingVersion)
             let existingInstance = try await decoder(existingEntry.instanceData)
             
+            try await transaction.emit(
+                event: .deleted(
+                    id: idenfifier,
+                    oldEntry: ObservationEntry(
+                        versionData: existingEntry.versionData,
+                        instanceData: existingEntry.instanceData
+                    )
+                ),
+                datastoreKey: self.key
+            )
             
             var queriedIndexes: Set<String> = []
             
@@ -602,6 +646,8 @@ extension Datastore where AccessMode == ReadWrite {
                     datastoreKey: self.key
                 )
             }
+            
+            return existingInstance
         }
     }
     
@@ -629,10 +675,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         try await self.load(instance.id)
     }
     
-    public func observe(_ instance: CodedType) -> AsyncStream<ObservedEvent<CodedType, IdentifierType>> {
-        return AsyncStream<ObservedEvent<CodedType, IdentifierType>> { continuation in
-            continuation.finish()
-        }
+    public func observe(_ instance: CodedType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
+        try await observe(instance.id)
     }
 }
 

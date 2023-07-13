@@ -55,7 +55,6 @@ As this project matures towards its first beta, a number of features still need 
 - Fleshing out historical edit metadata
 - Migrating entries
 - Ranged reads
-- Observations
 
 The above list will be kept up to date during development and will likely see additions during that process.
 

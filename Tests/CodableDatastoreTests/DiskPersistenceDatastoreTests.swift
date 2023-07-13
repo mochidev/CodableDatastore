@@ -82,6 +82,60 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         XCTAssertEqual(count, 3)
     }
     
+    func testObservingEntries() async throws {
+        enum Version: Int, CaseIterable {
+            case zero
+        }
+        
+        struct TestStruct: Codable, Identifiable {
+            var id: String
+            var value: Int
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            key: "test",
+            version: Version.zero,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestStruct.self, from: data)
+                }
+            ]
+        )
+        
+        let events = try await datastore.observe()
+        
+        let observations = Task {
+            var total = 0
+            loop: for try await event in events {
+                switch event {
+                case .created(_, let entry):
+                    total += entry.value
+                case .updated(_, _, let entry):
+                    total += entry.value
+                case .deleted(_, let entry):
+                    total += entry.value
+                    break loop
+                }
+            }
+            return total
+        }
+        
+        try await datastore.persist(TestStruct(id: "3", value: 3))
+        try await datastore.persist(TestStruct(id: "1", value: 1))
+        try await datastore.persist(TestStruct(id: "2", value: 2))
+        try await datastore.persist(TestStruct(id: "1", value: 5))
+        try await datastore.delete("2")
+        try await datastore.persist(TestStruct(id: "1", value: 3))
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 2)
+        let total = try await observations.value
+        XCTAssertEqual(total, 13)
+    }
+    
     func testWritingManyEntries() async throws {
         enum Version: Int, CaseIterable {
             case zero
