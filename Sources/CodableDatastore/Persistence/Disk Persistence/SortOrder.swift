@@ -19,3 +19,28 @@ extension Comparable {
         return .descending
     }
 }
+
+extension RangeBoundExpression {
+    func sortOrder(comparedTo rhs: Bound, order: RangeOrder) -> SortOrder {
+        switch order {
+        case .ascending:
+            switch self {
+            case .extent:
+                return .ascending
+            case .excluding(let bound):
+                return bound < rhs ? .ascending : .descending
+            case .including(let bound):
+                return bound <= rhs ? .ascending : .descending
+            }
+        case .descending:
+            switch self {
+            case .extent:
+                return .descending
+            case .excluding(let bound):
+                return bound <= rhs ? .ascending : .descending
+            case .including(let bound):
+                return bound < rhs ? .ascending : .descending
+            }
+        }
+    }
+}

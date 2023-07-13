@@ -270,10 +270,30 @@ extension Datastore {
         }
     }
     
-    public func load(_ range: any IndexRangeExpression<IdentifierType>) async throws -> AsyncStream<CodedType> {
-        return AsyncStream<CodedType> { continuation in
-            continuation.finish()
+    nonisolated public func load(_ range: some IndexRangeExpression<IdentifierType>, order: RangeOrder = .ascending) -> some TypedAsyncSequence<CodedType> {
+        AsyncThrowingBackpressureStream { provider in
+            try await self.warmupIfNeeded()
+            
+            try await self.persistence._withTransaction(options: [.readOnly]) { transaction in
+                
+                try await transaction.primaryIndexScan(range: range.applying(order), datastoreKey: self.key) { versionData, instanceData in
+                    let entryVersion = try Version(versionData)
+                    let decoder = try await self.decoder(for: entryVersion)
+                    let instance = try await decoder(instanceData)
+                    
+                    try await provider.yield(instance)
+                }
+            }
         }
+    }
+    
+    @_disfavoredOverload
+    nonisolated public func load(_ range: IndexRange<IdentifierType>, order: RangeOrder = .ascending) -> some TypedAsyncSequence<CodedType> {
+        load(range, order: order)
+    }
+    
+    nonisolated public func load(_ range: Swift.UnboundedRange, order: RangeOrder = .ascending) -> some TypedAsyncSequence<CodedType> {
+        load(IndexRange(), order: order)
     }
     
     public func load<IndexedValue>(

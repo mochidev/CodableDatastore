@@ -578,6 +578,75 @@ extension DiskPersistence.Transaction {
     }
 }
 
+// MARK: - Range Lookups
+
+private func primaryIndexBoundComparator<IdentifierType: Indexable>(lhs: (bound: RangeBoundExpression<IdentifierType>, order: RangeOrder), rhs: DatastorePageEntry) throws -> SortOrder {
+    guard rhs.headers.count == 2
+    else { throw DiskPersistenceError.invalidEntryFormat }
+    
+    let identifierBytes = rhs.headers[1]
+    
+    let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(identifierBytes))
+    
+    return lhs.bound.sortOrder(comparedTo: entryIdentifier, order: lhs.order)
+}
+
+extension DiskPersistence.Transaction {
+    func primaryIndexScan<IdentifierType: Indexable>(
+        range: any IndexRangeExpression<IdentifierType>,
+        datastoreKey: DatastoreKey,
+        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+    ) async throws {
+        try checkIsActive()
+        
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        let index = try await rootObject.primaryIndex
+        
+        switch range.order {
+        case .ascending:
+            let startCursor = try await index.insertionCursor(
+                for: (range.lowerBoundExpression, range.order),
+                comparator: primaryIndexBoundComparator
+            )
+            
+            try await index.forwardScanEntries(after: startCursor) { entry in
+                guard case .descending = try primaryIndexBoundComparator(
+                    lhs: (bound: range.upperBoundExpression, order: .descending),
+                    rhs: entry
+                )
+                else { return false }
+                
+                let versionData = Data(entry.headers[0])
+                let instanceData = Data(entry.content)
+                
+                try await instanceConsumer(versionData, instanceData)
+                return true
+            }
+        case .descending:
+            let startCursor = try await index.insertionCursor(
+                for: (range.upperBoundExpression, range.order),
+                comparator: primaryIndexBoundComparator
+            )
+            
+            try await index.backwardScanEntries(before: startCursor) { entry in
+                guard case .ascending = try primaryIndexBoundComparator(
+                    lhs: (bound: range.lowerBoundExpression, order: .ascending),
+                    rhs: entry
+                )
+                else { return false }
+                
+                let versionData = Data(entry.headers[0])
+                let instanceData = Data(entry.content)
+                
+                try await instanceConsumer(versionData, instanceData)
+                return true
+            }
+        }
+    }
+}
+
 // MARK: - Entry Manipulation
 
 extension DiskPersistence.Transaction {

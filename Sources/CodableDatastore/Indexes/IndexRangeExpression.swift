@@ -52,12 +52,24 @@ public protocol IndexRangeExpression<Bound> {
 
 extension IndexRangeExpression {
     /// Reverse a range so it is iterated on in the opposite direction.
-    var reversed: some IndexRangeExpression<Bound> {
+    var reversed: IndexRange<Bound> {
         IndexRange(
             lower: lowerBoundExpression,
             upper: upperBoundExpression,
             order: order.reversed
         )
+    }
+    
+    func applying(_ newOrder: RangeOrder) -> some IndexRangeExpression<Bound> {
+        IndexRange(
+            lower: lowerBoundExpression,
+            upper: upperBoundExpression,
+            order: newOrder == .ascending ? order : order.reversed
+        )
+    }
+    
+    static var unbounded: IndexRange<Bound> {
+        IndexRange()
     }
 }
 
