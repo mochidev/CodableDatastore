@@ -609,7 +609,11 @@ extension DiskPersistence.Datastore.Index {
             insertAfter: previousBlock
         )
     }
-    
+}
+
+// MARK: - Entry Scans
+
+extension DiskPersistence.Datastore.Index {
     func forwardScanEntries(
         after startCursor: DiskPersistence.InsertionCursor,
         entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
@@ -647,13 +651,13 @@ extension DiskPersistence.Datastore.Index {
                 let page = await pageBuilder(pageID)
                 let blocks = try await page.blocks
                 
-                var blockStartIndex = 0
+                var blockCountToDrop = 0
                 /// If we are on the first page, use the real block index
-                if pageOffsetIndex == 0 {
-                    blockStartIndex = startCursor.insertAfter?.blockIndex ?? 0
+                if pageOffsetIndex == 0, let blockIndex = startCursor.insertAfter?.blockIndex {
+                    blockCountToDrop = blockIndex + 1
                 }
                 
-                for try await block in blocks.dropFirst(blockStartIndex) {
+                for try await block in blocks.dropFirst(blockCountToDrop) {
                     switch block {
                     case .complete(let bytes):
                         /// We have a complete entry, lets use it and stop scanning
@@ -685,11 +689,11 @@ extension DiskPersistence.Datastore.Index {
         }
     }
     
-    func reverseScanEntries(
+    func backwardScanEntries(
         before startCursor: DiskPersistence.InsertionCursor,
         entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
     ) async throws {
-        try await reverseScanEntries(
+        try await backwardScanEntries(
             before: startCursor,
             in: try await manifest.orderedPages,
             pageBuilder: { await datastore.page(for: .init(index: self.id, page: $0)) },
@@ -697,7 +701,7 @@ extension DiskPersistence.Datastore.Index {
         )
     }
     
-    func reverseScanEntries(
+    func backwardScanEntries(
         before startCursor: DiskPersistence.InsertionCursor,
         in pages: [DatastoreIndexManifest.PageInfo],
         pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
@@ -721,14 +725,13 @@ extension DiskPersistence.Datastore.Index {
             case .added(let pageID), .existing(let pageID):
                 let page = await pageBuilder(pageID)
                 
-                var blockStartIndex = Int.max
+                var blockCountToInclude = Int.max
                 /// If we are on the first page, use the real block index
                 if pageOffsetIndex == 0, let blockIndex = startCursor.insertAfter?.blockIndex {
-                    blockStartIndex = blockIndex
+                    blockCountToInclude = blockIndex + 1
                 }
                 
-                let blocks = try await page.blocks.prefix(blockStartIndex).reduce(into: []) { $0.append($1) }
-                
+                let blocks = try await page.blocks.prefix(blockCountToInclude).reduce(into: []) { $0.append($1) }
                 
                 for block in blocks.reversed() {
                     switch block {

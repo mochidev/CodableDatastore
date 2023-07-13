@@ -11,7 +11,7 @@ import XCTest
 
 final class IndexRangeExpressionTests: XCTestCase {
     func testLowerBound() throws {
-        func lowerBoundExpression<B>(_ range: any IndexRangeExpression<B>) -> RangeBoundExpression<B> {
+        func lowerBoundExpression<B>(_ range: some IndexRangeExpression<B>) -> RangeBoundExpression<B> {
             range.lowerBoundExpression
         }
         
@@ -30,7 +30,7 @@ final class IndexRangeExpressionTests: XCTestCase {
     }
     
     func testUpperBound() throws {
-        func upperBoundExpression<B>(_ range: any IndexRangeExpression<B>) -> RangeBoundExpression<B> {
+        func upperBoundExpression<B>(_ range: some IndexRangeExpression<B>) -> RangeBoundExpression<B> {
             range.upperBoundExpression
         }
         

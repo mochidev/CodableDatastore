@@ -136,6 +136,91 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         XCTAssertEqual(total, 13)
     }
     
+    func testRangeReads() async throws {
+        enum Version: Int, CaseIterable {
+            case zero
+        }
+        
+        struct TestStruct: Codable, Identifiable {
+            var id: Int
+            var value: String
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            key: "test",
+            version: Version.zero,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestStruct.self, from: data)
+                }
+            ]
+        )
+        
+        for n in 0..<200 {
+            try await datastore.persist(TestStruct(id: n*2, value: "\(n*2)"))
+        }
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 200)
+        
+        /// Simple ranges
+        var values = try await datastore.load(5..<9).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["6", "8"])
+        
+        values = try await datastore.load((5..<9).reversed).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["8", "6"])
+        
+        /// Larger ranges
+        values = try await datastore.load(221..<241).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["222", "224", "226", "228", "230", "232", "234", "236", "238", "240"])
+
+        values = try await datastore.load((221..<241).reversed).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["240", "238", "236", "234", "232", "230", "228", "226", "224", "222"])
+        
+        /// Across page boudries
+        values = try await datastore.load(209...217).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["210", "212", "214", "216"])
+        
+        values = try await datastore.load((209...217).reversed).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["216", "214", "212", "210"])
+        
+        /// Unbounded ranges
+        values = Array(try await datastore.load(.unbounded).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        XCTAssertEqual(values, ["0", "2", "4", "6", "8"])
+        
+        values = Array(try await datastore.load(...).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        XCTAssertEqual(values, ["0", "2", "4", "6", "8"])
+        
+        values = Array(try await datastore.load(.unbounded.reversed).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        XCTAssertEqual(values, ["398", "396", "394", "392", "390"])
+        
+        values = Array(try await datastore.load(..., order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        XCTAssertEqual(values, ["398", "396", "394", "392", "390"])
+        
+        /// Inclusive ranges
+        values = try await datastore.load(6...10).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["6", "8", "10"])
+        
+        values = try await datastore.load(6...10, order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["10", "8", "6"])
+        
+        /// Exclusive ranges
+        values = try await datastore.load(6..<10).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["6", "8"])
+        
+        values = try await datastore.load(6..<10, order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["8", "6"])
+        
+        values = try await datastore.load(6..>10).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["8", "10"])
+        
+        values = try await datastore.load(6..>10, order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["10", "8"])
+    }
+    
     func testWritingManyEntries() async throws {
         enum Version: Int, CaseIterable {
             case zero

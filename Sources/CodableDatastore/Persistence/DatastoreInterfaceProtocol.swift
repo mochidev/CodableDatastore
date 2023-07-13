@@ -12,12 +12,16 @@ import Foundation
 /// 
 /// This protocol is provided so others can implement new persistences modelled after the ones provided by ``CodableDatastore``. You should never call any of these methods directly.
 public protocol DatastoreInterfaceProtocol {
+    // MARK: Registration
+    
     /// Register a ``Datastore`` with a ``Persistence`` so that it can be informed of changes made to the persistence.
     ///
     /// A datastore should only be registered once to a single persistence.
     /// - Parameter datastore: The datastore to register.
     /// - Returns: A descriptor of the datastore as the persistence knows it.
     func register<Version, CodedType, IdentifierType, AccessMode>(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) async throws -> DatastoreDescriptor?
+    
+    // MARK: Descriptors
     
     /// Load the descriptor of a ``Datastore``.
     /// - Parameter datastore: The datastore to query.
@@ -31,6 +35,8 @@ public protocol DatastoreInterfaceProtocol {
     ///   - descriptor: A descriptor of the Datastore as it should exist.
     ///   - datastoreKey: The key of the datastore the descriptor belongs to.
     func apply(descriptor: DatastoreDescriptor, for datastoreKey: DatastoreKey) async throws
+    
+    // MARK: Cursor Lookups
     
     /// Load a cursor for the specified identifier in the primary index of the specified datastore key.
     ///
@@ -127,6 +133,16 @@ public protocol DatastoreInterfaceProtocol {
         indexName: String,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol
+    
+    // MARK: Range Lookups
+    
+    func primaryIndexScan<IdentifierType: Indexable>(
+        range: any IndexRangeExpression<IdentifierType>,
+        datastoreKey: DatastoreKey,
+        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+    ) async throws
+    
+    // MARK: Mutations
     
     /// Create or update an entry in the primary index of a data store.
     ///
@@ -242,6 +258,8 @@ public protocol DatastoreInterfaceProtocol {
         datastoreKey: DatastoreKey
     ) async throws
     
+    // MARK: Observations
+    
     func makeObserver<IdentifierType: Indexable>(
         identifierType: IdentifierType.Type,
         datastoreKey: DatastoreKey,
@@ -253,6 +271,8 @@ public protocol DatastoreInterfaceProtocol {
         datastoreKey: DatastoreKey
     ) async throws
 }
+
+// MARK: - Helper Types
 
 /// A strategy that handles exhaustion of a buffer’s capacity.
 public enum ObservationBufferingPolicy {
