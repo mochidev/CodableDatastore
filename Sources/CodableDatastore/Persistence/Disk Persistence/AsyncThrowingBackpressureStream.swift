@@ -8,8 +8,6 @@
 
 import Foundation
 
-protocol TypedAsyncSequence<Element>: AsyncSequence {}
-
 struct AsyncThrowingBackpressureStream<Element> {
     fileprivate actor StateMachine {
         var pendingEvents: [(CheckedContinuation<Void, Error>, Result<Element?, Error>)] = []
