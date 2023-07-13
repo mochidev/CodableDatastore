@@ -828,6 +828,42 @@ extension DiskPersistence.Transaction {
     }
 }
 
+// MARK: - Observation
+
+extension DiskPersistence {
+    typealias EventObserver = AsyncStream<ObservedEvent<Data, ObservationEntry>>.Continuation
+}
+
+extension DiskPersistence.Transaction {
+    func makeObserver<IdentifierType: Indexable>(
+        identifierType: IdentifierType.Type,
+        datastoreKey: DatastoreKey,
+        bufferingPolicy limit: ObservationBufferingPolicy
+    ) async throws -> AsyncCompactMapSequence<AsyncStream<ObservedEvent<Data, ObservationEntry>>, ObservedEvent<IdentifierType, ObservationEntry>> {
+#if swift(>=5.9)
+        let (stream, observer) = AsyncStream.makeStream(of: ObservedEvent<Data, ObservationEntry>.self, bufferingPolicy: .init(limit))
+#else
+        var observer: DiskPersistence.EventObserver!
+        let stream = AsyncStream(ObservedEvent<Data, ObservationEntry>.self, bufferingPolicy: .init(limit)) { continuation in
+            observer = continuation
+        }
+#endif
+        
+        let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+        
+        await datastore.register(observer: observer)
+        
+        return stream.compactMap { event in
+            do {
+                let decodedID = try JSONDecoder.shared.decode(IdentifierType.self, from: event.id)
+                return event.with(id: decodedID)
+            } catch {
+                return nil
+            }
+        }
+    }
+}
+
 // MARK: - Helper Types
 
 fileprivate protocol AnyDiskTransaction {}

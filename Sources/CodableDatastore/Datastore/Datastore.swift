@@ -289,15 +289,27 @@ extension Datastore {
 // MARK: - Observation
 
 extension Datastore {
-    public func observe(_ idenfifier: IdentifierType) -> AsyncStream<ObservedEvent<CodedType, IdentifierType>> {
-        return AsyncStream<ObservedEvent<CodedType, IdentifierType>> { continuation in
-            continuation.finish()
-        }
+    public func observe(_ idenfifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
+        try await self.observe()
+            .filter { $0.id == idenfifier }
     }
     
-    public func observe() -> AsyncStream<CodedType> {
-        return AsyncStream<CodedType> { continuation in
-            continuation.finish()
+    public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
+        try await warmupIfNeeded()
+        
+        return try await persistence._withTransaction(options: [.idempotent]) { transaction in
+            try await transaction.makeObserver(
+                identifierType: IdentifierType.self,
+                datastoreKey: self.key,
+                bufferingPolicy: .unbounded
+            )
+        }.compactMap { event in
+            try? await event.mapEntries { entry in
+                let version = try Version(entry.versionData)
+                let decoder = try await self.decoder(for: version)
+                let instance = try await decoder(entry.instanceData)
+                return instance
+            }
         }
     }
 }

@@ -10,3 +10,9 @@ public protocol TypedAsyncSequence<Element>: AsyncSequence {}
 
 // MARK: - Standard Library Conformances
 
+extension AsyncMapSequence: TypedAsyncSequence {}
+extension AsyncThrowingMapSequence: TypedAsyncSequence {}
+extension AsyncCompactMapSequence: TypedAsyncSequence {}
+extension AsyncThrowingCompactMapSequence: TypedAsyncSequence {}
+extension AsyncFilterSequence: TypedAsyncSequence {}
+extension AsyncThrowingFilterSequence: TypedAsyncSequence {}

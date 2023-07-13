@@ -30,6 +30,10 @@ extension DiskPersistence {
         var loadedIndexes: Set<Index.ID> = []
         var loadedPages: Set<Page.ID> = []
         
+        typealias ObserverID = Int
+        fileprivate var nextObserverID: ObserverID = 0
+        var observers: [ObserverID : EventObserver] = [:]
+        
         init(
             id: DatastoreIdentifier,
             snapshot: Snapshot<AccessMode>
@@ -193,5 +197,26 @@ extension DiskPersistence.Datastore {
         
         /// Update the cache since we know what it should be.
         cachedRootObject = manifest
+    }
+}
+
+// MARK: - Observations
+
+extension DiskPersistence.Datastore {
+    func register(
+        observer: DiskPersistence.EventObserver
+    ) {
+        let id = nextObserverID
+        nextObserverID += 1
+        observers[id] = observer
+        observer.onTermination = { _ in
+            Task {
+                await self.unregisterObserver(for: id)
+            }
+        }
+    }
+    
+    private func unregisterObserver(for id: ObserverID) {
+        observers.removeValue(forKey: id)
     }
 }
