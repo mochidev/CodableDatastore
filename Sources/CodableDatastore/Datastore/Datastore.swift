@@ -20,8 +20,8 @@ public actor Datastore<
     let version: Version
     let encoder: (_ instance: CodedType) async throws -> Data
     let decoders: [Version: (_ data: Data) async throws -> CodedType]
-    let directIndexes: [IndexPath<CodedType>]
-    let computedIndexes: [IndexPath<CodedType>]
+    let directIndexes: [IndexPath<CodedType, _AnyIndexed>]
+    let computedIndexes: [IndexPath<CodedType, _AnyIndexed>]
     
     var updatedDescriptor: DatastoreDescriptor?
     
@@ -31,8 +31,8 @@ public actor Datastore<
     fileprivate var storeMigrationStatus: TaskStatus = .waiting
     fileprivate var storeMigrationProgressHandlers: [ProgressHandler] = []
     
-    fileprivate var indexMigrationStatus: [IndexPath<CodedType> : TaskStatus] = [:]
-    fileprivate var indexMigrationProgressHandlers: [IndexPath<CodedType> : ProgressHandler] = [:]
+    fileprivate var indexMigrationStatus: [IndexPath<CodedType, _AnyIndexed> : TaskStatus] = [:]
+    fileprivate var indexMigrationProgressHandlers: [IndexPath<CodedType, _AnyIndexed> : ProgressHandler] = [:]
     
     public init(
         persistence: some Persistence<AccessMode>,
@@ -42,8 +42,8 @@ public actor Datastore<
         identifierType: IdentifierType.Type,
         encoder: @escaping (_ instance: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
         self.persistence = persistence
@@ -62,8 +62,8 @@ public actor Datastore<
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
         self.persistence = persistence
@@ -172,7 +172,7 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - index: The index to migrate.
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrate(index: IndexPath<CodedType>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
+    public func migrate(index: IndexPath<CodedType, _AnyIndexed>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
         try await persistence._withTransaction(options: []) { transaction in
             guard
                 /// If we have no descriptor, then no data exists to be migrated.
@@ -214,7 +214,7 @@ extension Datastore where AccessMode == ReadWrite {
         }
     }
     
-    func migrate(index: IndexPath<CodedType>, progressHandler: ProgressHandler? = nil) async throws {
+    func migrate(index: IndexPath<CodedType, _AnyIndexed>, progressHandler: ProgressHandler? = nil) async throws {
         // TODO: Migrate just that index, use indexMigrationStatus and indexMigrationProgressHandlers to record progress.
     }
     
@@ -308,7 +308,7 @@ extension Datastore {
     public nonisolated func load<IndexedValue: Indexable>(
         _ range: some IndexRangeExpression<IndexedValue>,
         order: RangeOrder = .ascending,
-        from indexPath: IndexPath<CodedType>
+        from indexPath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
     ) -> some TypedAsyncSequence<CodedType> {
         let a: AsyncThrowingBackpressureStream<CodedType> = AsyncThrowingBackpressureStream { provider in
             try await self.warmupIfNeeded()
@@ -353,23 +353,23 @@ extension Datastore {
     public nonisolated func load<IndexedValue: Indexable>(
         _ range: IndexRange<IndexedValue>,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<CodedType>
+        from keypath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
     ) -> some TypedAsyncSequence<CodedType> {
         load(range, order: order, from: keypath)
     }
     
-    public nonisolated func load(
+    public nonisolated func load<IndexedValue: Indexable>(
         _ range: Swift.UnboundedRange,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<CodedType>
+        from keypath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
     ) -> some TypedAsyncSequence<CodedType> {
-        load(IndexRange<Int>(), order: order, from: keypath)
+        load(IndexRange<IndexedValue>(), order: order, from: keypath)
     }
     
     public nonisolated func load<IndexedValue: Indexable>(
         _ value: IndexedValue,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<CodedType>
+        from keypath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
     ) -> some TypedAsyncSequence<CodedType> {
         load(value...value, order: order, from: keypath)
     }
@@ -781,8 +781,8 @@ extension Datastore where AccessMode == ReadWrite {
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -811,8 +811,8 @@ extension Datastore where AccessMode == ReadWrite {
         identifierType: IdentifierType.Type,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let encoder = PropertyListEncoder()
@@ -848,8 +848,8 @@ extension Datastore where AccessMode == ReadOnly {
         identifierType: IdentifierType.Type,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -876,8 +876,8 @@ extension Datastore where AccessMode == ReadOnly {
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let decoder = PropertyListDecoder()
@@ -910,8 +910,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         encoder: @escaping (_ object: CodedType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -936,8 +936,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.JSONStore(
@@ -962,8 +962,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.propertyListStore(
@@ -988,8 +988,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -1012,8 +1012,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         codedType: CodedType.Type = CodedType.self,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyJSONStore(
@@ -1036,8 +1036,8 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType>] = [],
-        computedIndexes: [IndexPath<CodedType>] = [],
+        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyPropertyListStore(

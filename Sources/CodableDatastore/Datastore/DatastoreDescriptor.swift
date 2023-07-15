@@ -90,8 +90,8 @@ extension DatastoreDescriptor {
         version: Version,
         sampleInstance: CodedType,
         identifierType: IdentifierType.Type,
-        directIndexes directIndexPaths: [IndexPath<CodedType>],
-        computedIndexes computedIndexPaths: [IndexPath<CodedType>]
+        directIndexes directIndexPaths: [IndexPath<CodedType, _AnyIndexed>],
+        computedIndexes computedIndexPaths: [IndexPath<CodedType, _AnyIndexed>]
     ) throws where Version.RawValue: Indexable {
         let versionData = try Data(version)
         
@@ -163,7 +163,7 @@ extension DatastoreDescriptor.IndexDescriptor {
     init<CodedType: Codable>(
         version: Data,
         sampleInstance: CodedType,
-        indexPath: IndexPath<CodedType>
+        indexPath: IndexPath<CodedType, _AnyIndexed>
     ) {
         let sampleIndexValue = sampleInstance[keyPath: indexPath]
         let indexType = sampleIndexValue.indexedType
