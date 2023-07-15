@@ -249,13 +249,13 @@ extension Datastore {
         }
     }
     
-    public func load(_ idenfifier: IdentifierType) async throws -> CodedType? {
+    public func load(_ identifier: IdentifierType) async throws -> CodedType? {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(options: [.idempotent, .readOnly]) { transaction in
             
             do {
-                let persistedEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+                let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
                 
                 let entryVersion = try Version(persistedEntry.versionData)
                 let decoder = try await self.decoder(for: entryVersion)
@@ -270,7 +270,10 @@ extension Datastore {
         }
     }
     
-    nonisolated public func load(_ range: some IndexRangeExpression<IdentifierType>, order: RangeOrder = .ascending) -> some TypedAsyncSequence<CodedType> {
+    nonisolated public func load(
+        _ range: some IndexRangeExpression<IdentifierType>,
+        order: RangeOrder = .ascending
+    ) -> some TypedAsyncSequence<CodedType> {
         AsyncThrowingBackpressureStream { provider in
             try await self.warmupIfNeeded()
             
@@ -288,21 +291,87 @@ extension Datastore {
     }
     
     @_disfavoredOverload
-    nonisolated public func load(_ range: IndexRange<IdentifierType>, order: RangeOrder = .ascending) -> some TypedAsyncSequence<CodedType> {
+    public nonisolated func load(
+        _ range: IndexRange<IdentifierType>,
+        order: RangeOrder = .ascending
+    ) -> some TypedAsyncSequence<CodedType> {
         load(range, order: order)
     }
     
-    nonisolated public func load(_ range: Swift.UnboundedRange, order: RangeOrder = .ascending) -> some TypedAsyncSequence<CodedType> {
+    public nonisolated func load(
+        _ range: Swift.UnboundedRange,
+        order: RangeOrder = .ascending
+    ) -> some TypedAsyncSequence<CodedType> {
         load(IndexRange(), order: order)
     }
     
-    public func load<IndexedValue>(
-        _ range: any IndexRangeExpression<IndexedValue>,
-        from keypath: KeyPath<CodedType, Indexed<IndexedValue>>
-    ) async throws -> AsyncStream<CodedType> {
-        return AsyncStream<CodedType> { continuation in
-            continuation.finish()
+    public nonisolated func load<IndexedValue: Indexable>(
+        _ range: some IndexRangeExpression<IndexedValue>,
+        order: RangeOrder = .ascending,
+        from indexPath: IndexPath<CodedType>
+    ) -> some TypedAsyncSequence<CodedType> {
+        let a: AsyncThrowingBackpressureStream<CodedType> = AsyncThrowingBackpressureStream { provider in
+            try await self.warmupIfNeeded()
+            
+            try await self.persistence._withTransaction(options: [.readOnly]) { transaction in
+                
+                let isDirectIndex = self.directIndexes.contains { $0.path == indexPath.path }
+                
+                if isDirectIndex {
+                    try await transaction.directIndexScan(
+                        range: range.applying(order),
+                        indexName: indexPath.path,
+                        datastoreKey: self.key
+                    ) { versionData, instanceData in
+                        let entryVersion = try Version(versionData)
+                        let decoder = try await self.decoder(for: entryVersion)
+                        let instance = try await decoder(instanceData)
+                        
+                        try await provider.yield(instance)
+                    }
+                } else {
+                    try await transaction.secondaryIndexScan(
+                        range: range.applying(order),
+                        indexName: indexPath.path,
+                        datastoreKey: self.key
+                    ) { (identifier: IdentifierType) in
+                        let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
+                        
+                        let entryVersion = try Version(persistedEntry.versionData)
+                        let decoder = try await self.decoder(for: entryVersion)
+                        let instance = try await decoder(persistedEntry.instanceData)
+                        
+                        try await provider.yield(instance)
+                    }
+                }
+            }
         }
+        return a
+    }
+    
+    @_disfavoredOverload
+    public nonisolated func load<IndexedValue: Indexable>(
+        _ range: IndexRange<IndexedValue>,
+        order: RangeOrder = .ascending,
+        from keypath: IndexPath<CodedType>
+    ) -> some TypedAsyncSequence<CodedType> {
+        load(range, order: order, from: keypath)
+    }
+    
+    public nonisolated func load(
+        _ range: Swift.UnboundedRange,
+        order: RangeOrder = .ascending,
+        from keypath: IndexPath<CodedType>
+    ) -> some TypedAsyncSequence<CodedType> {
+        load(IndexRange<Int>(), order: order, from: keypath)
+    }
+    
+    public nonisolated func load<IndexedValue: Indexable>(
+        _ value: IndexedValue,
+        order: RangeOrder = .ascending,
+        from keypath: IndexPath<CodedType>
+    ) -> some TypedAsyncSequence<CodedType> {
+        load(value...value, order: order, from: keypath)
     }
 }
 

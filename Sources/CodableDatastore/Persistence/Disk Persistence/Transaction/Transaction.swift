@@ -591,6 +591,28 @@ private func primaryIndexBoundComparator<IdentifierType: Indexable>(lhs: (bound:
     return lhs.bound.sortOrder(comparedTo: entryIdentifier, order: lhs.order)
 }
 
+private func directIndexBoundComparator<IndexType: Indexable>(lhs: (bound: RangeBoundExpression<IndexType>, order: RangeOrder), rhs: DatastorePageEntry) throws -> SortOrder {
+    guard rhs.headers.count == 3
+    else { throw DiskPersistenceError.invalidEntryFormat }
+    
+    let indexBytes = rhs.headers[1]
+    
+    let indexedValue = try JSONDecoder.shared.decode(IndexType.self, from: Data(indexBytes))
+    
+    return lhs.bound.sortOrder(comparedTo: indexedValue, order: lhs.order)
+}
+
+private func secondaryIndexBoundComparator<IndexType: Indexable>(lhs: (bound: RangeBoundExpression<IndexType>, order: RangeOrder), rhs: DatastorePageEntry) throws -> SortOrder {
+    guard rhs.headers.count == 1
+    else { throw DiskPersistenceError.invalidEntryFormat }
+    
+    let indexBytes = rhs.headers[0]
+    
+    let indexedValue = try JSONDecoder.shared.decode(IndexType.self, from: Data(indexBytes))
+    
+    return lhs.bound.sortOrder(comparedTo: indexedValue, order: lhs.order)
+}
+
 extension DiskPersistence.Transaction {
     func primaryIndexScan<IdentifierType: Indexable>(
         range: any IndexRangeExpression<IdentifierType>,
@@ -641,6 +663,114 @@ extension DiskPersistence.Transaction {
                 let instanceData = Data(entry.content)
                 
                 try await instanceConsumer(versionData, instanceData)
+                return true
+            }
+        }
+    }
+    
+    func directIndexScan<IndexType: Indexable>(
+        range: any IndexRangeExpression<IndexType>,
+        indexName: String,
+        datastoreKey: DatastoreKey,
+        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+    ) async throws {
+        try checkIsActive()
+        
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let index = try await rootObject.directIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        switch range.order {
+        case .ascending:
+            let startCursor = try await index.insertionCursor(
+                for: (range.lowerBoundExpression, range.order),
+                comparator: directIndexBoundComparator
+            )
+            
+            try await index.forwardScanEntries(after: startCursor) { entry in
+                guard case .descending = try directIndexBoundComparator(
+                    lhs: (bound: range.upperBoundExpression, order: .descending),
+                    rhs: entry
+                )
+                else { return false }
+                
+                let versionData = Data(entry.headers[0])
+                let instanceData = Data(entry.content)
+                
+                try await instanceConsumer(versionData, instanceData)
+                return true
+            }
+        case .descending:
+            let startCursor = try await index.insertionCursor(
+                for: (range.upperBoundExpression, range.order),
+                comparator: directIndexBoundComparator
+            )
+            
+            try await index.backwardScanEntries(before: startCursor) { entry in
+                guard case .ascending = try directIndexBoundComparator(
+                    lhs: (bound: range.lowerBoundExpression, order: .ascending),
+                    rhs: entry
+                )
+                else { return false }
+                
+                let versionData = Data(entry.headers[0])
+                let instanceData = Data(entry.content)
+                
+                try await instanceConsumer(versionData, instanceData)
+                return true
+            }
+        }
+    }
+    
+    func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
+        range: any IndexRangeExpression<IndexType>,
+        indexName: String,
+        datastoreKey: DatastoreKey,
+        identifierConsumer: (_ identifier: IdentifierType) async throws -> ()
+    ) async throws {
+        try checkIsActive()
+        
+        guard let rootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let index = try await rootObject.secondaryIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        switch range.order {
+        case .ascending:
+            let startCursor = try await index.insertionCursor(
+                for: (range.lowerBoundExpression, range.order),
+                comparator: secondaryIndexBoundComparator
+            )
+            
+            try await index.forwardScanEntries(after: startCursor) { entry in
+                guard case .descending = try secondaryIndexBoundComparator(
+                    lhs: (bound: range.upperBoundExpression, order: .descending),
+                    rhs: entry
+                )
+                else { return false }
+                
+                let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(entry.content))
+                try await identifierConsumer(entryIdentifier)
+                return true
+            }
+        case .descending:
+            let startCursor = try await index.insertionCursor(
+                for: (range.upperBoundExpression, range.order),
+                comparator: secondaryIndexBoundComparator
+            )
+            
+            try await index.backwardScanEntries(before: startCursor) { entry in
+                guard case .ascending = try secondaryIndexBoundComparator(
+                    lhs: (bound: range.lowerBoundExpression, order: .ascending),
+                    rhs: entry
+                )
+                else { return false }
+                
+                let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(entry.content))
+                try await identifierConsumer(entryIdentifier)
                 return true
             }
         }
