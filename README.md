@@ -54,13 +54,13 @@ As this project matures towards its first beta, a number of features still need 
 - Update snapshots to have multiple manifests
 - Fleshing out historical edit metadata
 - Migrating entries
-- Ranged reads
 
 The above list will be kept up to date during development and will likely see additions during that process.
 
 ### Road to 1.0
 
 Once an initial beta is released, the project will start focussing on the functionality and work listed below:
+- Composite indexes (via macros?)
 - Cleaning up old resources in memory
 - Cleaning up old resources on disk
 - Reversed ranged reads

@@ -142,6 +142,20 @@ public protocol DatastoreInterfaceProtocol {
         instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws
     
+    func directIndexScan<IndexType: Indexable>(
+        range: any IndexRangeExpression<IndexType>,
+        indexName: String,
+        datastoreKey: DatastoreKey,
+        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+    ) async throws
+    
+    func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
+        range: any IndexRangeExpression<IndexType>,
+        indexName: String,
+        datastoreKey: DatastoreKey,
+        identifierConsumer: (_ identifier: IdentifierType) async throws -> ()
+    ) async throws
+    
     // MARK: Mutations
     
     /// Create or update an entry in the primary index of a data store.
