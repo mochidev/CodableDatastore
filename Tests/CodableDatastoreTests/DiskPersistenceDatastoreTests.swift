@@ -80,6 +80,9 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
+        
+        let values = try await datastore.load("A"..."Z", order: .descending, from: IndexPath(uncheckedKeyPath: \.$value, path: "$value")).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["2", "3", "1"])
     }
     
     func testObservingEntries() async throws {
