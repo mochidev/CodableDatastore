@@ -45,12 +45,13 @@ struct DatedIdentifierComponents {
     var hour: String
     var minute: String
     var second: String
+    var millisecond: String
     
     var token: String
     
     init(_ identifier: some DatedIdentifierProtocol) throws {
         let rawString = identifier.rawValue
-        guard rawString.count == 36 else {
+        guard rawString.count == Self.size else {
             throw DatedIdentifierError.invalidLength
         }
         
@@ -60,7 +61,8 @@ struct DatedIdentifierComponents {
         hour = rawString[11..<13]
         minute = rawString[14..<16]
         second = rawString[17..<19]
-        token = rawString[20..<36]
+        millisecond = rawString[20..<23]
+        token = rawString[24..<40]
     }
     
     var monthDay: String {
@@ -69,6 +71,8 @@ struct DatedIdentifierComponents {
     var hourMinute: String {
         "\(hour)-\(minute)"
     }
+    
+    static let size = 40
 }
 
 
@@ -77,7 +81,7 @@ enum DatedIdentifierError: LocalizedError, Equatable {
     
     var errorDescription: String? {
         switch self {
-        case .invalidLength: return "The identifier must be 36 characters long."
+        case .invalidLength: return "The identifier must be \(DatedIdentifierComponents.size) characters long."
         }
     }
 }
@@ -96,7 +100,7 @@ private extension DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        formatter.dateFormat = "yyyy-MM-dd HH-mm-ss-SSS"
         return formatter
     }()
 }

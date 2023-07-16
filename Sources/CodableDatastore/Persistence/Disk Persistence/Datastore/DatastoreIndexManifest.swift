@@ -152,7 +152,7 @@ extension DatastoreIndexManifest {
     var bytes: Bytes {
         var bytes = Bytes()
         /// 6 for the header, 1 for the page status, 36 for the ID, and 1 for the new line.
-        bytes.reserveCapacity(6 + orderedPages.count*(1 + 36 + 1))
+        bytes.reserveCapacity(6 + orderedPages.count*(1 + DatedIdentifierComponents.size + 1))
         
         bytes.append(contentsOf: "INDEX\n".utf8Bytes)
         
