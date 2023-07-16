@@ -21,11 +21,11 @@ final class SnapshotTests: XCTestCase {
     }
     
     func testSnapshotIdentifiers() throws {
-        XCTAssertEqual(SnapshotIdentifier(date: Date(timeIntervalSince1970: 0), token: 0), SnapshotIdentifier(rawValue: "1970-01-01 00-00-00 0000000000000000"))
-        XCTAssertEqual(SnapshotIdentifier(rawValue: "1970-01-01 00-00-00 0000000000000000").rawValue, "1970-01-01 00-00-00 0000000000000000")
+        XCTAssertEqual(SnapshotIdentifier(date: Date(timeIntervalSince1970: 0), token: 0), SnapshotIdentifier(rawValue: "1970-01-01 00-00-00-000 0000000000000000"))
+        XCTAssertEqual(SnapshotIdentifier(rawValue: "1970-01-01 00-00-00-000 0000000000000000").rawValue, "1970-01-01 00-00-00-000 0000000000000000")
         
-        XCTAssertEqual(SnapshotIdentifier(date: Date(timeIntervalSince1970: 0), token: 0x0123456789abcdef), SnapshotIdentifier(rawValue: "1970-01-01 00-00-00 0123456789ABCDEF"))
-        XCTAssertEqual(SnapshotIdentifier(rawValue: "1970-01-01 00-00-00 0123456789ABCDEF").rawValue, "1970-01-01 00-00-00 0123456789ABCDEF")
+        XCTAssertEqual(SnapshotIdentifier(date: Date(timeIntervalSince1970: 0), token: 0x0123456789abcdef), SnapshotIdentifier(rawValue: "1970-01-01 00-00-00-000 0123456789ABCDEF"))
+        XCTAssertEqual(SnapshotIdentifier(rawValue: "1970-01-01 00-00-00-000 0123456789ABCDEF").rawValue, "1970-01-01 00-00-00-000 0123456789ABCDEF")
         
         let components = try SnapshotIdentifier.mockIdentifier.components
         XCTAssertEqual(components.year, "1970")
@@ -34,6 +34,7 @@ final class SnapshotTests: XCTestCase {
         XCTAssertEqual(components.hour, "03")
         XCTAssertEqual(components.minute, "04")
         XCTAssertEqual(components.second, "05")
+        XCTAssertEqual(components.millisecond, "678")
         XCTAssertEqual(components.token, "0123456789ABCDEF")
         XCTAssertEqual(components.monthDay, "01-02")
         XCTAssertEqual(components.hourMinute, "03-04")
@@ -53,7 +54,7 @@ final class SnapshotTests: XCTestCase {
         
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
         let snapshotURL = snapshot.snapshotURL
-        XCTAssertEqual(snapshotURL.absoluteString, temporaryStoreURL.absoluteString.appending("Snapshots/1970/01-02/03-04/1970-01-02%2003-04-05%200123456789ABCDEF.snapshot/"))
+        XCTAssertEqual(snapshotURL.absoluteString, temporaryStoreURL.absoluteString.appending("Snapshots/1970/01-02/03-04/1970-01-02%2003-04-05-678%200123456789ABCDEF.snapshot/"))
         XCTAssertThrowsError(try snapshotURL.checkResourceIsReachable())
     }
     
@@ -65,7 +66,7 @@ final class SnapshotTests: XCTestCase {
         try await snapshot.withManifest { _ in }
         
         let snapshotURL = snapshot.snapshotURL
-        XCTAssertEqual(snapshotURL.absoluteString, temporaryStoreURL.absoluteString.appending("Snapshots/1970/01-02/03-04/1970-01-02%2003-04-05%200123456789ABCDEF.snapshot/"))
+        XCTAssertEqual(snapshotURL.absoluteString, temporaryStoreURL.absoluteString.appending("Snapshots/1970/01-02/03-04/1970-01-02%2003-04-05-678%200123456789ABCDEF.snapshot/"))
         
         XCTAssertTrue(try snapshotURL.checkResourceIsReachable())
         XCTAssertTrue(try snapshotURL.appendingPathComponent("Inbox", isDirectory: true).checkResourceIsReachable())
@@ -102,7 +103,7 @@ final class SnapshotTests: XCTestCase {
         let testStruct = try JSONDecoder().decode(TestStruct.self, from: data)
         XCTAssertEqual(testStruct.version, "alpha")
         XCTAssertTrue(testStruct.dataStores.isEmpty)
-        XCTAssertEqual(testStruct.id, "1970-01-02 03-04-05 0123456789ABCDEF")
+        XCTAssertEqual(testStruct.id, "1970-01-02 03-04-05-678 0123456789ABCDEF")
         
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
