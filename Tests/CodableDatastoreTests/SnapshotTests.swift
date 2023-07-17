@@ -63,7 +63,7 @@ final class SnapshotTests: XCTestCase {
         
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
         
-        try await snapshot.withManifest { _ in }
+        try await snapshot.updatingManifest { _, _ in }
         
         let snapshotURL = snapshot.snapshotURL
         XCTAssertEqual(snapshotURL.absoluteString, temporaryStoreURL.absoluteString.appending("Snapshots/1970/01-02/03-04/1970-01-02%2003-04-05-678%200123456789ABCDEF.snapshot/"))
@@ -77,7 +77,7 @@ final class SnapshotTests: XCTestCase {
     func testStoreNotCreatedWithManifest() async throws {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
-        try await snapshot.withManifest { _ in }
+        try await snapshot.updatingManifest { _, _ in }
         
         XCTAssertTrue(try temporaryStoreURL.checkResourceIsReachable())
         XCTAssertTrue(try temporaryStoreURL.appendingPathComponent("Snapshots", isDirectory: true).checkResourceIsReachable())
@@ -88,7 +88,7 @@ final class SnapshotTests: XCTestCase {
     func testManifestOnEmptySnapshot() async throws {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
-        try await snapshot.withManifest { _ in }
+        try await snapshot.updatingManifest { _, _ in }
         let snapshotURL = snapshot.snapshotURL
         
         let data = try Data(contentsOf: snapshotURL.appendingPathComponent("Manifest.json", isDirectory: false))
@@ -97,12 +97,12 @@ final class SnapshotTests: XCTestCase {
             var version: String
             var id: String
             var modificationDate: String
-            var dataStores: [String : String]
+            var currentIteration: String?
         }
         
         let testStruct = try JSONDecoder().decode(TestStruct.self, from: data)
         XCTAssertEqual(testStruct.version, "alpha")
-        XCTAssertTrue(testStruct.dataStores.isEmpty)
+        XCTAssertNotNil(testStruct.currentIteration)
         XCTAssertEqual(testStruct.id, "1970-01-02 03-04-05-678 0123456789ABCDEF")
         
         let formatter = ISO8601DateFormatter()
@@ -120,12 +120,12 @@ final class SnapshotTests: XCTestCase {
     func testSnapshotCreatesOnlyIfNecessary() async throws {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
-        try await snapshot.withManifest { _ in }
+        try await snapshot.updatingManifest { _, _ in }
         let snapshotURL = snapshot.snapshotURL
         
         let dataBefore = try Data(contentsOf: snapshotURL.appendingPathComponent("Manifest.json", isDirectory: false))
         // This second time should be a no-op and shouldn't throw
-        try await snapshot.withManifest { _ in }
+        try await snapshot.updatingManifest { _, _ in }
         
         let dataAfter = try Data(contentsOf: snapshotURL.appendingPathComponent("Manifest.json", isDirectory: false))
         XCTAssertEqual(dataBefore, dataAfter)
@@ -134,18 +134,18 @@ final class SnapshotTests: XCTestCase {
     func testManifestAccessOrder() async throws {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
-        try await snapshot.withManifest { _ in }
+        try await snapshot.updatingManifest { _, _  in }
         
         let date1 = Date(timeIntervalSince1970: 0)
         let date2 = Date(timeIntervalSince1970: 10)
         
-        let task1 = await snapshot.updateManifest { manifest in
+        let task1 = await snapshot.updateManifest { manifest, _ in
             sleep(1)
             XCTAssertNotEqual(manifest.modificationDate, date2)
             manifest.modificationDate = date1
         }
         
-        let task2 = await snapshot.updateManifest { manifest in
+        let task2 = await snapshot.updateManifest { manifest, _ in
             XCTAssertEqual(manifest.modificationDate, date1)
             manifest.modificationDate = date2
         }
@@ -160,28 +160,28 @@ final class SnapshotTests: XCTestCase {
     func testCallingManifestResursively() async throws {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         let snapshot = Snapshot(id: SnapshotIdentifier.mockIdentifier, persistence: persistence, isBackup: false)
-        try await snapshot.withManifest { _ in }
+        try await snapshot.updatingManifest { _, _ in }
         
-        try await snapshot.withManifest { manifestA in
+        try await snapshot.updatingManifest { manifestA, _ in
             let originalManifestA = manifestA
             manifestA.modificationDate = Date(timeIntervalSince1970: 1)
             let modifiedManifestA = manifestA
-            try await snapshot.withManifest { manifestB in
+            try await snapshot.updatingManifest { manifestB, _ in
                 XCTAssertEqual(originalManifestA, manifestB)
                 XCTAssertNotEqual(modifiedManifestA, manifestB)
             }
         }
         
-        try await snapshot.withManifest { manifestA in
-            try await snapshot.withManifest { manifestB in
+        try await snapshot.updatingManifest { manifestA, _ in
+            try await snapshot.updatingManifest { manifestB, _ in
                 // No change:
                 manifestB.modificationDate = Date(timeIntervalSince1970: 1)
             }
         }
         
         do {
-            try await snapshot.withManifest { manifestA in
-                try await snapshot.withManifest { manifestB in
+            try await snapshot.updatingManifest { manifestA, _ in
+                try await snapshot.updatingManifest { manifestB, _ in
                     manifestB.modificationDate = Date(timeIntervalSince1970: 2)
                 }
             }

@@ -419,17 +419,17 @@ extension DiskPersistence {
         }
         if let self = self as? DiskPersistence<ReadWrite> {
             let (datastore, rootID) = try await self.withCurrentSnapshot { snapshot in
-                try await snapshot.withManifest { snapshotManifest in
-                    let (datastore, root) = await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
-                    snapshotManifest.dataStores[datastoreKey.rawValue] = .init(key: datastoreKey.rawValue, id: datastore.id, root: root)
+                try await snapshot.updatingManifest { snapshotManifest, currentIteration in
+                    let (datastore, root) = await snapshot.loadDatastore(for: datastoreKey, from: currentIteration)
+                    currentIteration.dataStores[datastoreKey.rawValue] = .init(key: datastoreKey, id: datastore.id, root: root)
                     return (datastore, root)
                 }
             }
             return (datastore as! DiskPersistence<AccessMode>.Datastore, rootID)
         } else {
             return try await withCurrentSnapshot { snapshot in
-                try await snapshot.withManifest { snapshotManifest in
-                    await snapshot.loadDatastore(for: datastoreKey, from: snapshotManifest)
+                try await snapshot.readingManifest { snapshotManifest, currentIteration in
+                    await snapshot.loadDatastore(for: datastoreKey, from: currentIteration)
                 }
             }
         }
@@ -454,9 +454,9 @@ extension DiskPersistence {
     
     func persist(roots: [DatastoreKey : Datastore.RootObject]) async throws {
         let containsEdits = try await withCurrentSnapshot { snapshot in
-            try await snapshot.withManifest { manifest in
+            try await snapshot.readingManifest { manifest, iteration in
                 for (key, root) in roots {
-                    guard manifest.dataStores[key.rawValue]?.root == root.id
+                    guard iteration.dataStores[key.rawValue]?.root == root.id
                     else { return true }
                 }
                 return false
@@ -472,10 +472,10 @@ extension DiskPersistence {
         
         /// If we are read-write, apply the updated root objects to the snapshot.
         try await self.withCurrentSnapshot { snapshot in
-            try await snapshot.withManifest { manifest in
+            try await snapshot.updatingManifest { manifest, iteration in
                 for (key, root) in roots {
-                    manifest.dataStores[key.rawValue] = SnapshotManifest.DatastoreInfo(
-                        key: key.rawValue,
+                    iteration.dataStores[key.rawValue] = SnapshotIteration.DatastoreInfo(
+                        key: key,
                         id: root.datastore.id,
                         root: root.id
                     )
