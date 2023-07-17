@@ -30,6 +30,9 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// A cached instance of the manifest as last loaded from disk.
     var cachedManifest: SnapshotManifest?
     
+    /// A cached instance of the current iteration as last loaded from disk.
+    var cachedIteration: SnapshotIteration?
+    
     /// A pointer to the last manifest updater, so updates can be serialized after the last request.
     var lastUpdateManifestTask: Task<Any, Error>?
     
@@ -72,6 +75,21 @@ extension Snapshot {
         snapshotURL.appendingPathComponent("Dirty", isDirectory: false)
     }
     
+    /// The URL that points to the `Iterations` directory.
+    nonisolated var iterationsURL: URL {
+        snapshotURL.appendingPathComponent("Iterations", isDirectory: true)
+    }
+    
+    nonisolated func iterationURL(for id: SnapshotIterationIdentifier) -> URL {
+        guard let components = try? id.components else { preconditionFailure("Components could not be determined for Snapshot.") }
+        
+        return iterationsURL
+            .appendingPathComponent(components.year, isDirectory: true)
+            .appendingPathComponent(components.monthDay, isDirectory: true)
+            .appendingPathComponent(components.hourMinute, isDirectory: true)
+            .appendingPathComponent("\(id).json", isDirectory: false)
+    }
+    
     /// The URL that points to the Datastores directory.
     nonisolated var datastoresURL: URL {
         snapshotURL.appendingPathComponent("Datastores", isDirectory: true)
@@ -102,7 +120,21 @@ extension Snapshot {
             throw error
         }
     }
+    
+    /// Load an iteration from disk, or create a suitable starting value if such a file does not exist.
+    private func loadIteration(for iterationID: SnapshotIterationIdentifier) throws -> SnapshotIteration {
+        do {
+            let data = try Data(contentsOf: iterationURL(for: iterationID))
 
+            let iteration = try JSONDecoder.shared.decode(SnapshotIteration.self, from: data)
+
+            cachedIteration = iteration
+            return iteration
+        } catch {
+            throw error
+        }
+    }
+    
     /// Write the specified manifest to the store, and cache the results in ``Snapshot/cachedManifest``.
     private func write(manifest: SnapshotManifest) throws where AccessMode == ReadWrite {
         /// Make sure the directories exists first.
@@ -119,6 +151,20 @@ extension Snapshot {
         /// Update the cache since we know what it should be.
         cachedManifest = manifest
     }
+    
+    /// Write the specified iteration to the store, and cache the results in ``Snapshot/cachedIteration``.
+    private func write(iteration: SnapshotIteration) throws where AccessMode == ReadWrite {
+        let iterationURL = iterationURL(for: iteration.id)
+        /// Make sure the directories exists first.
+        try FileManager.default.createDirectory(at: iterationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+        /// Encode the provided iteration, and write it to disk.
+        let data = try JSONEncoder.shared.encode(iteration)
+        try data.write(to: iterationURL, options: .atomic)
+
+        /// Update the cache since we know what it should be.
+        cachedIteration = iteration
+    }
 
     /// Load and update the manifest in an updater, returning the task for the updater.
     ///
@@ -127,16 +173,17 @@ extension Snapshot {
     /// - Note: Calling this method when no manifest exists on disk will create it, even if no changes occur in the block.
     /// - Parameter updater: An updater that takes a mutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateManifest<T>(updater: @escaping (_ manifest: inout SnapshotManifest) async throws -> T) -> Task<T, Error> where AccessMode == ReadWrite {
-        
-        if let manifest = SnapshotTaskLocals.manifest {
+    func updateManifest<T>(
+        updater: @escaping (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
+    ) -> Task<T, Error> where AccessMode == ReadWrite {
+        if let (manifest, iteration) = SnapshotTaskLocals.manifest {
             return Task {
                 var updatedManifest = manifest
-                let returnValue = try await updater(&updatedManifest)
+                var updatedIteration = iteration
+                let returnValue = try await updater(&updatedManifest, &updatedIteration)
                 
-                guard updatedManifest == manifest else {
-                    throw DiskPersistenceInternalError.nestedSnapshotWrite
-                }
+                guard updatedManifest == manifest, updatedIteration == iteration
+                else { throw DiskPersistenceInternalError.nestedSnapshotWrite }
                 
                 return returnValue
             }
@@ -150,12 +197,32 @@ extension Snapshot {
 
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             var manifest = try cachedManifest ?? self.loadManifest()
-
-            /// Let the updater do something with the manifest, storing the variable on the Task Local stack.
-            let returnValue = try await SnapshotTaskLocals.$manifest.withValue(manifest) {
-                try await updater(&manifest)
+            var iteration: SnapshotIteration
+            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
+                iteration = cachedIteration
+            } else if let iterationID = manifest.currentIteration {
+                iteration = try self.loadIteration(for: iterationID)
+            } else {
+                let date = Date()
+                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
             }
 
+            /// Let the updater do something with the manifest, storing the variable on the Task Local stack.
+            let returnValue = try await SnapshotTaskLocals.$manifest.withValue((manifest, iteration)) {
+                try await updater(&manifest, &iteration)
+            }
+            
+            /// Only write to the store if we changed the manifest for any reason
+            if iteration != cachedIteration {
+                iteration.creationDate = Date()
+                iteration.id = SnapshotIterationIdentifier(date: iteration.creationDate)
+                iteration.precedingIteration = cachedIteration?.id
+                
+                try write(iteration: iteration)
+            }
+            
+            manifest.currentIteration = iteration.id
+            
             /// Only write to the store if we changed the manifest for any reason
             if manifest != cachedManifest {
                 try write(manifest: manifest)
@@ -174,30 +241,41 @@ extension Snapshot {
     ///
     /// - Parameter accessor: An accessor that takes an immutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateManifest<T>(accessor: @escaping (_ manifest: SnapshotManifest) async throws -> T) -> Task<T, Error> {
+    func readManifest<T>(
+        accessor: @escaping (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
+    ) -> Task<T, Error> {
         
-        if let manifest = SnapshotTaskLocals.manifest {
-            return Task { try await accessor(manifest) }
+        if let (manifest, iteration) = SnapshotTaskLocals.manifest {
+            return Task { try await accessor(manifest, iteration) }
         }
         
         /// Grab the last task so we can chain off of it in a serial manner.
         let lastUpdaterTask = lastUpdateManifestTask
-        let updaterTask = Task {
+        let readerTask = Task {
             /// We don't care if the last request throws an error or not, but we do want it to complete first.
             _ = try? await lastUpdaterTask?.value
 
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             let manifest = try cachedManifest ?? self.loadManifest()
+            var iteration: SnapshotIteration
+            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
+                iteration = cachedIteration
+            } else if let iterationID = manifest.currentIteration {
+                iteration = try self.loadIteration(for: iterationID)
+            } else {
+                let date = Date()
+                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
+            }
 
             /// Let the accessor do something with the manifest, storing the variable on the Task Local stack.
-            return try await SnapshotTaskLocals.$manifest.withValue(manifest) {
-                try await accessor(manifest)
+            return try await SnapshotTaskLocals.$manifest.withValue((manifest, iteration)) {
+                try await accessor(manifest, iteration)
             }
         }
         /// Assign the task to our pointer so we can depend on it the next time. Also, re-wrap it so we can keep proper type information when returning from this method.
-        lastUpdateManifestTask = Task { try await updaterTask.value }
+        lastUpdateManifestTask = Task { try await readerTask.value }
 
-        return updaterTask
+        return readerTask
     }
 
     /// Load and update the manifest in an updater.
@@ -207,7 +285,9 @@ extension Snapshot {
     /// - Note: Calling this method when no manifest exists on disk will create it, even if no changes occur in the block.
     /// - Parameter updater: An updater that takes a mutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `updater`.
-    func withManifest<T>(updater: @escaping (_ manifest: inout SnapshotManifest) async throws -> T) async throws -> T where AccessMode == ReadWrite {
+    func updatingManifest<T>(
+        updater: @escaping (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
+    ) async throws -> T where AccessMode == ReadWrite {
         try await updateManifest(updater: updater).value
     }
 
@@ -218,22 +298,24 @@ extension Snapshot {
     /// - Parameter accessor: An accessor that takes an immutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
-    func withManifest<T>(accessor: @escaping (_ manifest: SnapshotManifest) async throws -> T) async throws -> T {
-        try await updateManifest(accessor: accessor).value
+    func readingManifest<T>(
+        accessor: @escaping (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
+    ) async throws -> T {
+        try await readManifest(accessor: accessor).value
     }
 }
 
 private enum SnapshotTaskLocals {
     @TaskLocal
-    static var manifest: SnapshotManifest?
+    static var manifest: (SnapshotManifest, SnapshotIteration)?
 }
 
 // MARK: - Datastore Management
 extension Snapshot {
     /// Load the datastore for the given key.
-    func loadDatastore(for key: DatastoreKey, from manifest: SnapshotManifest) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
+    func loadDatastore(for key: DatastoreKey, from iteration: SnapshotIteration) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
         let datastoreInfo: (id: DatastoreIdentifier, root: DatastoreRootIdentifier?) = {
-            if let info = manifest.dataStores[key.rawValue] {
+            if let info = iteration.dataStores[key.rawValue] {
                 return (info.id, info.root)
             } else {
                 return (DatastoreIdentifier(name: key.rawValue), nil)

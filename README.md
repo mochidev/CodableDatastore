@@ -51,7 +51,6 @@ targets: [
 ### Road to 0.1 Betas
 
 As this project matures towards its first beta, a number of features still need to be fleshed out:
-- Update snapshots to have multiple manifests
 - Fleshing out historical edit metadata
 - Migrating entries
 
