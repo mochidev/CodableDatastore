@@ -462,7 +462,9 @@ extension DiskPersistence {
     
     func persist(
         actionName: String?,
-        roots: [DatastoreKey : Datastore.RootObject]
+        roots: [DatastoreKey : Datastore.RootObject],
+        addedDatastoreRoots: Set<DatastoreRootIdentifier>,
+        removedDatastoreRoots: Set<DatastoreRootIdentifier>
     ) async throws {
         let containsEdits = try await withCurrentSnapshot { snapshot in
             try await snapshot.readingManifest { manifest, iteration in
@@ -485,6 +487,8 @@ extension DiskPersistence {
         try await self.withCurrentSnapshot { snapshot in
             try await snapshot.updatingManifest { manifest, iteration in
                 iteration.actionName = actionName
+                iteration.addedDatastoreRoots = addedDatastoreRoots
+                iteration.removedDatastoreRoots = removedDatastoreRoots
                 for (key, root) in roots {
                     iteration.dataStores[key.rawValue] = SnapshotIteration.DatastoreInfo(
                         key: key,

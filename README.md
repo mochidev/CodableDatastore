@@ -45,13 +45,12 @@ targets: [
 `CodableDatastore` is a collection of types that make it easy to interface with large data stores of independent types without loading the entire data store in memory.
 
 > **Warning**
-> DO NOT USE THIS IN PRODOCUTION PROJECTS. As this project is currently still in its alpha phase, I cannot stress how important it is to not ship anything that relies on this code, or you will experience data loss. There is a chance the underlying model may continue to change day to day, or I will not be able to ever finish it.
+> DO NOT USE THIS IN PRODUCTION PROJECTS. As this project is currently still in its alpha phase, I cannot stress how important it is to not ship anything that relies on this code, or you will experience data loss. There is a chance the underlying model may continue to change day to day, or I will not be able to ever finish it.
 > Until then, please enjoy the code as a spectator or play around with it in toy projects to submit feedback!
 
 ### Road to 0.1 Betas
 
 As this project matures towards its first beta, a number of features still need to be fleshed out:
-- Fleshing out historical edit metadata
 - Migrating entries
 
 The above list will be kept up to date during development and will likely see additions during that process.

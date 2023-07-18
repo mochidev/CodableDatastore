@@ -36,6 +36,18 @@ struct DatastoreRootManifest: Codable, Equatable, Identifiable {
     
     /// A pointer to the secondary indexes' root objects.
     var secondaryIndexManifests: [IndexInfo] = []
+    
+    /// The indexes that have been added in this iteration of the snapshot.
+    var addedIndexes: Set<IndexID> = []
+    
+    /// The indexes that have been completely removed in this iteration of the snapshot.
+    var removedIndexes: Set<IndexID> = []
+    
+    /// The datastore roots that have been added in this iteration of the snapshot.
+    var addedIndexManifests: Set<IndexManifestID> = []
+    
+    /// The datastore roots that have been replaced in this iteration of the snapshot.
+    var removedIndexManifests: Set<IndexManifestID> = []
 }
 
 extension DatastoreRootManifest {
@@ -48,5 +60,28 @@ extension DatastoreRootManifest {
         
         /// The root object of the index.
         var root: DatastoreIndexManifestIdentifier
+    }
+    
+    enum IndexID: Codable, Hashable {
+        case primary
+        case direct(index: DatastoreIndexIdentifier)
+        case secondary(index: DatastoreIndexIdentifier)
+    }
+    
+    enum IndexManifestID: Codable, Hashable {
+        case primary(manifest: DatastoreIndexManifestIdentifier)
+        case direct(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)
+        case secondary(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)
+        
+        init<AccessMode>(_ id: DiskPersistence<AccessMode>.Datastore.Index.ID) {
+            switch id {
+            case .primary(let manifest):
+                self = .primary(manifest: manifest)
+            case .direct(let index, let manifest):
+                self = .direct(index: index, manifest: manifest)
+            case .secondary(let index, let manifest):
+                self = .secondary(index: index, manifest: manifest)
+            }
+        }
     }
 }

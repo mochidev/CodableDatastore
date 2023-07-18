@@ -155,6 +155,13 @@ extension DiskPersistence.Datastore.RootObject {
         
         var createdIndexes: Set<DiskPersistence.Datastore.Index> = []
         
+        if isPersisted {
+            manifest.removedIndexes = []
+            manifest.removedIndexManifests = []
+            manifest.addedIndexes = []
+            manifest.addedIndexManifests = []
+        }
+        
         for (_, indexDescriptor) in descriptor.directIndexes {
             let key = indexDescriptor.key
             let indexType = indexDescriptor.indexType
@@ -177,6 +184,9 @@ extension DiskPersistence.Datastore.RootObject {
                     )
                 )
                 createdIndexes.insert(index)
+                manifest.addedIndexes.insert(.direct(index: indexInfo.id))
+                manifest.addedIndexManifests.insert(.direct(index: indexInfo.id, manifest: indexInfo.root))
+                manifest.directIndexManifests.append(indexInfo)
             }
             
             manifest.descriptor.directIndexes[key] = DatastoreDescriptor.IndexDescriptor(
@@ -208,6 +218,9 @@ extension DiskPersistence.Datastore.RootObject {
                     )
                 )
                 createdIndexes.insert(index)
+                manifest.addedIndexes.insert(.secondary(index: indexInfo.id))
+                manifest.addedIndexManifests.insert(.secondary(index: indexInfo.id, manifest: indexInfo.root))
+                manifest.secondaryIndexManifests.append(indexInfo)
             }
             
             manifest.descriptor.secondaryIndexes[key] = DatastoreDescriptor.IndexDescriptor(
@@ -218,10 +231,12 @@ extension DiskPersistence.Datastore.RootObject {
         }
         
         if originalManifest.descriptor != manifest.descriptor {
-            manifest.id = DatastoreRootIdentifier()
-            manifest.modificationDate = Date()
+            let modificationDate = Date()
+            manifest.id = DatastoreRootIdentifier(date: modificationDate)
+            manifest.modificationDate = modificationDate
+            return (manifest: manifest, createdIndexes: createdIndexes)
         }
-        return (manifest: manifest, createdIndexes: createdIndexes)
+        return (manifest: originalManifest, createdIndexes: createdIndexes)
     }
     
     func manifest(
@@ -230,30 +245,62 @@ extension DiskPersistence.Datastore.RootObject {
         let manifest = try await manifest
         var updatedManifest = manifest
         
+        var removedIndex: DatastoreRootManifest.IndexManifestID?
+        var addedIndex: DatastoreRootManifest.IndexManifestID
+        
         switch index {
         case .primary(let manifestID):
+            removedIndex = .primary(manifest: updatedManifest.primaryIndexManifest)
+            addedIndex = .primary(manifest: manifestID)
             updatedManifest.primaryIndexManifest = manifestID
         case .direct(let indexID, let manifestID):
+            var oldRoot: DatastoreIndexManifestIdentifier?
             updatedManifest.directIndexManifests = manifest.directIndexManifests.map { indexInfo in
                 var indexInfo = indexInfo
                 if indexInfo.id == indexID {
+                    oldRoot = indexInfo.root
                     indexInfo.root = manifestID
                 }
                 return indexInfo
             }
+            
+            removedIndex = oldRoot.map { .direct(index: indexID, manifest: $0) }
+            addedIndex = .direct(index: indexID, manifest: manifestID)
         case .secondary(let indexID, let manifestID):
+            var oldRoot: DatastoreIndexManifestIdentifier?
             updatedManifest.secondaryIndexManifests = updatedManifest.secondaryIndexManifests.map { indexInfo in
                 var indexInfo = indexInfo
                 if indexInfo.id == indexID {
+                    oldRoot = indexInfo.root
                     indexInfo.root = manifestID
                 }
                 return indexInfo
             }
+            
+            removedIndex = oldRoot.map { .secondary(index: indexID, manifest: $0) }
+            addedIndex = .secondary(index: indexID, manifest: manifestID)
         }
         
         if manifest != updatedManifest {
-            updatedManifest.id = DatastoreRootIdentifier()
-            updatedManifest.modificationDate = Date()
+            let modificationDate = Date()
+            updatedManifest.id = DatastoreRootIdentifier(date: modificationDate)
+            updatedManifest.modificationDate = modificationDate
+            
+            if isPersisted {
+                updatedManifest.removedIndexes = []
+                updatedManifest.removedIndexManifests = []
+                updatedManifest.addedIndexes = []
+                updatedManifest.addedIndexManifests = []
+            }
+            
+            if let removedIndex {
+                if updatedManifest.addedIndexManifests.contains(removedIndex) {
+                    updatedManifest.addedIndexManifests.remove(removedIndex)
+                } else {
+                    updatedManifest.removedIndexManifests.insert(removedIndex)
+                }
+            }
+            updatedManifest.addedIndexManifests.insert(addedIndex)
         }
         return updatedManifest
     }
