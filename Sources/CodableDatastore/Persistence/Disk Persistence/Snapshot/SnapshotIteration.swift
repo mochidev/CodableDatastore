@@ -35,6 +35,9 @@ struct SnapshotIteration: Codable, Equatable, Identifiable {
     /// If changes branched at this point in time, there may be more than one iteration to choose from. In this case, the first entry will be the oldest successor, while the last entry will be the most recent.
     var successiveIterations: [SnapshotIterationIdentifier] = []
     
+    /// The name of the action used that can be presented in a user interface.
+    var actionName: String?
+    
     /// The known datastores for this snapshot, and their roots.
     var dataStores: [String : DatastoreInfo] = [:]
     
@@ -61,5 +64,14 @@ extension SnapshotIteration {
         
         /// The root object for the datastore.
         var root: DatastoreRootIdentifier?
+    }
+}
+
+extension SnapshotIteration {
+    func isMeaningfullyChanged(from existingInstance: Self?) -> Bool {
+        guard
+            dataStores == existingInstance?.dataStores
+        else { return true }
+        return false
     }
 }
