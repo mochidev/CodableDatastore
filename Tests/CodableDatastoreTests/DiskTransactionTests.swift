@@ -50,16 +50,16 @@ final class DiskTransactionTests: XCTestCase {
             size: 0
         )
         
-        try await persistence._withTransaction(options: []) { transaction in
+        try await persistence._withTransaction(actionName: nil, options: []) { transaction, _ in
             let existingDescriptor = try await transaction.register(datastore: datastore)
             XCTAssertNil(existingDescriptor)
         }
         
-        try await persistence._withTransaction(options: []) { transaction in
+        try await persistence._withTransaction(actionName: nil, options: []) { transaction, _ in
             try await transaction.apply(descriptor: descriptor, for: "test")
         }
         
-        try await persistence._withTransaction(options: []) { transaction in
+        try await persistence._withTransaction(actionName: nil, options: []) { transaction, _ in
             let existingDescriptor = try await transaction.datastoreDescriptor(for: "test")
             XCTAssertEqual(existingDescriptor, descriptor)
         }

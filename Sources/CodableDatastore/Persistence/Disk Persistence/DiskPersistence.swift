@@ -439,9 +439,17 @@ extension DiskPersistence {
 // MARK: - Transactions
 
 extension DiskPersistence {
-    public func _withTransaction<T>(options: TransactionOptions, transaction: @escaping (_ transaction: DatastoreInterfaceProtocol) async throws -> T) async throws -> T {
-        let (transaction, task) = await Transaction.makeTransaction(persistence: self, lastTransaction: lastTransaction, options: options) { interface in
-            try await transaction(interface)
+    public func _withTransaction<T>(
+        actionName: String?,
+        options: UnsafeTransactionOptions,
+        transaction: @escaping (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+    ) async throws -> T {
+        let (transaction, task) = await Transaction.makeTransaction(
+            persistence: self,
+            lastTransaction: lastTransaction,
+            actionName: actionName, options: options
+        ) { interface, isDurable in
+            try await transaction(interface, isDurable)
         }
         
         /// Save the last non-concurrent top-level transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
@@ -452,7 +460,10 @@ extension DiskPersistence {
         return try await task.value
     }
     
-    func persist(roots: [DatastoreKey : Datastore.RootObject]) async throws {
+    func persist(
+        actionName: String?,
+        roots: [DatastoreKey : Datastore.RootObject]
+    ) async throws {
         let containsEdits = try await withCurrentSnapshot { snapshot in
             try await snapshot.readingManifest { manifest, iteration in
                 for (key, root) in roots {
@@ -473,6 +484,7 @@ extension DiskPersistence {
         /// If we are read-write, apply the updated root objects to the snapshot.
         try await self.withCurrentSnapshot { snapshot in
             try await snapshot.updatingManifest { manifest, iteration in
+                iteration.actionName = actionName
                 for (key, root) in roots {
                     iteration.dataStores[key.rawValue] = SnapshotIteration.DatastoreInfo(
                         key: key,

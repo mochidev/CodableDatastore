@@ -213,7 +213,7 @@ extension Snapshot {
             }
             
             /// Only write to the store if we changed the manifest for any reason
-            if iteration != cachedIteration {
+            if iteration.isMeaningfullyChanged(from: cachedIteration) {
                 iteration.creationDate = Date()
                 iteration.id = SnapshotIterationIdentifier(date: iteration.creationDate)
                 iteration.precedingIteration = cachedIteration?.id

@@ -128,7 +128,10 @@ extension Datastore {
                 warmupProgressHandlers.append(progressHandler)
             }
             let warmupTask = Task {
-                try await persistence._withTransaction(options: []) { transaction in
+                try await persistence._withTransaction(
+                    actionName: "Migrate Entries",
+                    options: []
+                ) { transaction, _ in
                     try await self.registerAndMigrate(with: transaction)
                 }
             }
@@ -173,7 +176,10 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
     public func migrate(index: IndexPath<CodedType, _AnyIndexed>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
-        try await persistence._withTransaction(options: []) { transaction in
+        try await persistence._withTransaction(
+            actionName: "Migrate Entries",
+            options: []
+        ) { transaction, _ in
             guard
                 /// If we have no descriptor, then no data exists to be migrated.
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
@@ -242,7 +248,12 @@ extension Datastore {
     /// - Note: This count may not reflect an up to dat value while data is being written concurrently, but will be acurate after such a transaction finishes.
     public var count: Int {
         get async throws {
-            return try await persistence._withTransaction(options: [.idempotent, .readOnly]) { transaction in
+            try await warmupIfNeeded()
+            
+            return try await persistence._withTransaction(
+                actionName: nil,
+                options: [.idempotent, .readOnly]
+            ) { transaction, _ in
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key)
                 return descriptor?.size ?? 0
             }
@@ -252,8 +263,10 @@ extension Datastore {
     public func load(_ identifier: IdentifierType) async throws -> CodedType? {
         try await warmupIfNeeded()
         
-        return try await persistence._withTransaction(options: [.idempotent, .readOnly]) { transaction in
-            
+        return try await persistence._withTransaction(
+            actionName: nil,
+            options: [.idempotent, .readOnly]
+        ) { transaction, _ in
             do {
                 let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
                 
@@ -277,8 +290,10 @@ extension Datastore {
         AsyncThrowingBackpressureStream { provider in
             try await self.warmupIfNeeded()
             
-            try await self.persistence._withTransaction(options: [.readOnly]) { transaction in
-                
+            try await self.persistence._withTransaction(
+                actionName: nil,
+                options: [.readOnly]
+            ) { transaction, _ in
                 try await transaction.primaryIndexScan(range: range.applying(order), datastoreKey: self.key) { versionData, instanceData in
                     let entryVersion = try Version(versionData)
                     let decoder = try await self.decoder(for: entryVersion)
@@ -313,8 +328,10 @@ extension Datastore {
         let a: AsyncThrowingBackpressureStream<CodedType> = AsyncThrowingBackpressureStream { provider in
             try await self.warmupIfNeeded()
             
-            try await self.persistence._withTransaction(options: [.readOnly]) { transaction in
-                
+            try await self.persistence._withTransaction(
+                actionName: nil,
+                options: [.readOnly]
+            ) { transaction, _ in
                 let isDirectIndex = self.directIndexes.contains { $0.path == indexPath.path }
                 
                 if isDirectIndex {
@@ -386,7 +403,10 @@ extension Datastore {
     public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
         try await warmupIfNeeded()
         
-        return try await persistence._withTransaction(options: [.idempotent]) { transaction in
+        return try await persistence._withTransaction(
+            actionName: nil,
+            options: [.idempotent, .readOnly]
+        ) { transaction, _ in
             try await transaction.makeObserver(
                 identifierType: IdentifierType.self,
                 datastoreKey: self.key,
@@ -420,7 +440,10 @@ extension Datastore where AccessMode == ReadWrite {
         let versionData = try Data(self.version)
         let instanceData = try await self.encoder(instance)
         
-        try await persistence._withTransaction(options: [.idempotent]) { transaction in
+        try await persistence._withTransaction(
+            actionName: "Persist Entry",
+            options: [.idempotent]
+        ) { transaction, _ in
             /// Create any missing indexes or prime the datastore for writing.
             try await transaction.apply(descriptor: updatedDescriptor, for: self.key)
             
@@ -642,8 +665,10 @@ extension Datastore where AccessMode == ReadWrite {
     public func delete(_ idenfifier: IdentifierType) async throws -> CodedType {
         try await warmupIfNeeded()
                 
-        return try await persistence._withTransaction(options: [.idempotent]) { transaction in
-            
+        return try await persistence._withTransaction(
+            actionName: "Delete Entry",
+            options: [.idempotent]
+        ) { transaction, _ in
             /// Get a cursor to the entry within the primary index.
             let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
             

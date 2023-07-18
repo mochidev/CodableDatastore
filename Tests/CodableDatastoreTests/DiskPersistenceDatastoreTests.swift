@@ -302,7 +302,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         let start = ProcessInfo.processInfo.systemUptime
         for n in 1...5 {
             let time = ProcessInfo.processInfo.systemUptime
-            try await persistence.perform { persistence in
+            try await persistence.perform {
                 for _ in 0..<5000 {
                     try await datastore.persist(TestStruct(value: valueBank.randomElement()!))
                 }
@@ -347,7 +347,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         let start = ProcessInfo.processInfo.systemUptime
         for n in 1...5 {
             let time = ProcessInfo.processInfo.systemUptime
-            try await persistence.perform { persistence in
+            try await persistence.perform {
                 for m in 0..<5000 {
                     let id = (n-1)*5000 + m
                     try await datastore.persist(TestStruct(id: id, value: valueBank.randomElement()!))
@@ -390,7 +390,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             "Twenty Three is Number One"
         ]
         
-        try await persistence.perform { persistence in
+        try await persistence.perform {
             for id in 0..<5000 {
                 try await datastore.persist(TestStruct(id: id, value: valueBank.randomElement()!))
             }
@@ -399,7 +399,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         let start = ProcessInfo.processInfo.systemUptime
         for n in 1...100 {
             let time = ProcessInfo.processInfo.systemUptime
-            try await persistence.perform { persistence in
+            try await persistence.perform {
                 for _ in 0..<100 {
                     try await datastore.persist(TestStruct(id: Int.random(in: 0..<5000), value: valueBank.randomElement()!))
                 }
