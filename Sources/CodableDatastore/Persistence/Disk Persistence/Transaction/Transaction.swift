@@ -150,7 +150,15 @@ extension DiskPersistence {
                 try await root.persistIfNeeded()
             }
             
-            try await persistence.persist(actionName: actionName, roots: rootObjects)
+            let addedDatastoreRoots = Set(createdRootObjects.map(\.id))
+            let removedDatastoreRoots = Set(deletedRootObjects.map(\.id))
+            
+            try await persistence.persist(
+                actionName: actionName,
+                roots: rootObjects,
+                addedDatastoreRoots: addedDatastoreRoots,
+                removedDatastoreRoots: removedDatastoreRoots
+            )
             
             var datastores: [DatastoreKey : Datastore] = [:]
             for (datastoreKey, event) in entryMutations {
@@ -324,7 +332,11 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
                 rootObject: rootManifest
             )
             createdRootObjects.insert(newRootObject)
-            deletedRootObjects.insert(existingRootObject)
+            if createdRootObjects.contains(existingRootObject) {
+                createdRootObjects.remove(existingRootObject)
+            } else {
+                deletedRootObjects.insert(existingRootObject)
+            }
             await datastore.adopt(rootObject: newRootObject)
             rootObjects[datastoreKey] = newRootObject
         } else {
@@ -360,6 +372,11 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
             createdIndexes.insert(primaryIndex)
             await datastore.adopt(index: primaryIndex)
             
+            var addedIndexes: Set<DatastoreRootManifest.IndexID> = []
+            var addedIndexManifests: Set<DatastoreRootManifest.IndexManifestID> = []
+            addedIndexes.insert(.primary)
+            addedIndexManifests.insert(.primary(manifest: primaryManifestIdentifier))
+            
             for indexInfo in directIndexManifests {
                 let index = DiskPersistence.Datastore.Index(
                     datastore: datastore,
@@ -370,6 +387,8 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
                     )
                 )
                 createdIndexes.insert(index)
+                addedIndexes.insert(.direct(index: indexInfo.id))
+                addedIndexManifests.insert(.direct(index: indexInfo.id, manifest: indexInfo.root))
                 await datastore.adopt(index: index)
             }
             
@@ -383,20 +402,25 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
                     )
                 )
                 createdIndexes.insert(index)
+                addedIndexes.insert(.secondary(index: indexInfo.id))
+                addedIndexManifests.insert(.secondary(index: indexInfo.id, manifest: indexInfo.root))
                 await datastore.adopt(index: index)
             }
             
             var descriptor = descriptor
             descriptor.size = 0
             
+            let modificationDate = Date()
             /// Create the root object from the indexes that were created
             let manifest = DatastoreRootManifest(
-                id: DatastoreRootIdentifier(),
-                modificationDate: Date(),
+                id: DatastoreRootIdentifier(date: modificationDate),
+                modificationDate: modificationDate,
                 descriptor: descriptor,
                 primaryIndexManifest: primaryManifestIdentifier,
                 directIndexManifests: directIndexManifests,
-                secondaryIndexManifests: secondaryIndexManifests
+                secondaryIndexManifests: secondaryIndexManifests,
+                addedIndexes: addedIndexes,
+                addedIndexManifests: addedIndexManifests
             )
             
             let newRoot = DiskPersistence.Datastore.RootObject(
@@ -823,7 +847,11 @@ extension DiskPersistence.Transaction {
             manifest: indexManifest
         )
         createdIndexes.insert(newIndex)
-        deletedIndexes.insert(existingIndex)
+        if createdIndexes.contains(existingIndex) {
+            createdIndexes.insert(existingIndex)
+        } else {
+            deletedIndexes.insert(existingIndex)
+        }
         await datastore.adopt(index: newIndex)
         
         var rootManifest = try await existingRootObject.manifest(replacing: newIndex.id)
@@ -842,7 +870,11 @@ extension DiskPersistence.Transaction {
             rootObject: rootManifest
         )
         createdRootObjects.insert(newRootObject)
-        deletedRootObjects.insert(existingRootObject)
+        if createdRootObjects.contains(existingRootObject) {
+            createdRootObjects.remove(existingRootObject)
+        } else {
+            deletedRootObjects.insert(existingRootObject)
+        }
         await datastore.adopt(rootObject: newRootObject)
         rootObjects[datastoreKey] = newRootObject
     }
@@ -907,7 +939,11 @@ extension DiskPersistence.Transaction {
             manifest: indexManifest
         )
         createdIndexes.insert(newIndex)
-        deletedIndexes.insert(existingIndex)
+        if createdIndexes.contains(existingIndex) {
+            createdIndexes.insert(existingIndex)
+        } else {
+            deletedIndexes.insert(existingIndex)
+        }
         await datastore.adopt(index: newIndex)
         
         var rootManifest = try await existingRootObject.manifest(replacing: newIndex.id)
@@ -926,7 +962,11 @@ extension DiskPersistence.Transaction {
             rootObject: rootManifest
         )
         createdRootObjects.insert(newRootObject)
-        deletedRootObjects.insert(existingRootObject)
+        if createdRootObjects.contains(existingRootObject) {
+            createdRootObjects.remove(existingRootObject)
+        } else {
+            deletedRootObjects.insert(existingRootObject)
+        }
         await datastore.adopt(rootObject: newRootObject)
         rootObjects[datastoreKey] = newRootObject
     }
