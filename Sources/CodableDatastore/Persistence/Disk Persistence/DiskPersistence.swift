@@ -327,7 +327,7 @@ extension DiskPersistence {
     /// - Parameter dateUpdate: The method to which to update the date of the main store with.
     /// - Parameter updater: An updater that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`. 
-    func withCurrentSnapshot<T>(
+    func updatingCurrentSnapshot<T>(
         dateUpdate: ModificationUpdate = .updateOnWrite,
         updater: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) async throws -> T where AccessMode == ReadWrite {
@@ -343,7 +343,7 @@ extension DiskPersistence {
     /// - Parameter accessor: An accessor that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
-    func withCurrentSnapshot<T>(
+    func readingCurrentSnapshot<T>(
         accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) async throws -> T {
         try await updateCurrentSnapshot(accessor: accessor).value
@@ -418,7 +418,7 @@ extension DiskPersistence {
             throw DatastoreInterfaceError.datastoreNotFound
         }
         if let self = self as? DiskPersistence<ReadWrite> {
-            let (datastore, rootID) = try await self.withCurrentSnapshot { snapshot in
+            let (datastore, rootID) = try await self.updatingCurrentSnapshot { snapshot in
                 try await snapshot.updatingManifest { snapshotManifest, currentIteration in
                     let (datastore, root) = await snapshot.loadDatastore(for: datastoreKey, from: currentIteration)
                     currentIteration.dataStores[datastoreKey.rawValue] = .init(key: datastoreKey, id: datastore.id, root: root)
@@ -427,7 +427,7 @@ extension DiskPersistence {
             }
             return (datastore as! DiskPersistence<AccessMode>.Datastore, rootID)
         } else {
-            return try await withCurrentSnapshot { snapshot in
+            return try await readingCurrentSnapshot { snapshot in
                 try await snapshot.readingManifest { snapshotManifest, currentIteration in
                     await snapshot.loadDatastore(for: datastoreKey, from: currentIteration)
                 }
@@ -466,7 +466,7 @@ extension DiskPersistence {
         addedDatastoreRoots: Set<DatastoreRootIdentifier>,
         removedDatastoreRoots: Set<DatastoreRootIdentifier>
     ) async throws {
-        let containsEdits = try await withCurrentSnapshot { snapshot in
+        let containsEdits = try await readingCurrentSnapshot { snapshot in
             try await snapshot.readingManifest { manifest, iteration in
                 for (key, root) in roots {
                     guard iteration.dataStores[key.rawValue]?.root == root.id
@@ -484,7 +484,7 @@ extension DiskPersistence {
         else { throw DiskPersistenceError.cannotWrite }
         
         /// If we are read-write, apply the updated root objects to the snapshot.
-        try await self.withCurrentSnapshot { snapshot in
+        try await self.updatingCurrentSnapshot { snapshot in
             try await snapshot.updatingManifest { manifest, iteration in
                 iteration.actionName = actionName
                 iteration.addedDatastoreRoots = addedDatastoreRoots
