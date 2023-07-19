@@ -658,10 +658,15 @@ extension DiskPersistence.Transaction {
         
         switch range.order {
         case .ascending:
-            let startCursor = try await index.insertionCursor(
-                for: (range.lowerBoundExpression, range.order),
-                comparator: primaryIndexBoundComparator
-            )
+            let startCursor: DiskPersistence.InsertionCursor
+            if range.lowerBoundExpression == .extent {
+                startCursor = await index.firstInsertionCursor
+            } else {
+                startCursor = try await index.insertionCursor(
+                    for: (range.lowerBoundExpression, range.order),
+                    comparator: primaryIndexBoundComparator
+                )
+            }
             
             try await index.forwardScanEntries(after: startCursor) { entry in
                 guard case .descending = try primaryIndexBoundComparator(
@@ -677,10 +682,15 @@ extension DiskPersistence.Transaction {
                 return true
             }
         case .descending:
-            let startCursor = try await index.insertionCursor(
-                for: (range.upperBoundExpression, range.order),
-                comparator: primaryIndexBoundComparator
-            )
+            let startCursor: DiskPersistence.InsertionCursor
+            if range.upperBoundExpression == .extent {
+                startCursor = try await index.lastInsertionCursor
+            } else {
+                startCursor = try await index.insertionCursor(
+                    for: (range.upperBoundExpression, range.order),
+                    comparator: primaryIndexBoundComparator
+                )
+            }
             
             try await index.backwardScanEntries(before: startCursor) { entry in
                 guard case .ascending = try primaryIndexBoundComparator(

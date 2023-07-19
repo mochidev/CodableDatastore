@@ -491,6 +491,52 @@ extension DiskPersistence.Datastore.Index {
         throw DatastoreInterfaceError.instanceNotFound
     }
     
+    var firstInsertionCursor: DiskPersistence.InsertionCursor {
+        get {
+            DiskPersistence.InsertionCursor(
+                persistence: datastore.snapshot.persistence,
+                datastore: datastore,
+                index: self,
+                insertAfter: nil
+            )
+        }
+    }
+    
+    var lastInsertionCursor: DiskPersistence.InsertionCursor {
+        get async throws {
+            let pages = try await manifest.orderedPages
+            var pageIndex = pages.count - 1
+            
+            for pageInfo in pages.reversed() {
+                defer { pageIndex -= 1 }
+                
+                let page: DiskPersistence.Datastore.Page
+                switch pageInfo {
+                case .removed: continue
+                case .existing(let pageID), .added(let pageID):
+                    page = await datastore.page(for: .init(index: self.id, page: pageID))
+                }
+                
+                let blocks = try await page.blocks.reduce(into: []) { $0.append($1) }
+                guard !blocks.isEmpty else { throw DiskPersistenceError.invalidPageFormat }
+                
+                return DiskPersistence.InsertionCursor(
+                    persistence: datastore.snapshot.persistence,
+                    datastore: datastore,
+                    index: self,
+                    insertAfter: DiskPersistence.CursorBlock(
+                        pageIndex: pageIndex,
+                        page: page,
+                        blockIndex: blocks.count - 1
+                    )
+                )
+            }
+            
+            /// Couldn't find a last page, so the cursor is the same as the first insertion cursor.
+            return firstInsertionCursor
+        }
+    }
+    
     func insertionCursor<T>(
         for proposedEntry: T,
         comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
