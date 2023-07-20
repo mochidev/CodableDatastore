@@ -51,13 +51,15 @@ targets: [
 ### Road to 0.1 Betas
 
 As this project matures towards its first beta, a number of features still need to be fleshed out:
-- Migrating entries
+- Typed IndexName, remove use of "key" in datastore
+- Index deletion
 
 The above list will be kept up to date during development and will likely see additions during that process.
 
 ### Road to 1.0
 
 Once an initial beta is released, the project will start focussing on the functionality and work listed below:
+- Force migration methods
 - Composite indexes (via macros?)
 - Cleaning up old resources in memory
 - Cleaning up old resources on disk

@@ -146,22 +146,215 @@ extension Datastore {
     }
     
     func registerAndMigrate(with transaction: DatastoreInterfaceProtocol) async throws {
-        let descriptor = try await transaction.register(datastore: self)
-        print("\(String(describing: descriptor))")
+        let persistedDescriptor = try await transaction.register(datastore: self)
         
         /// Only operate on read-write datastores beyond this point.
-        guard let self = self as? Datastore<Version, CodedType, IdentifierType, ReadWrite> else { return }
-        print("\(self)")
+        guard let self = self as? Datastore<Version, CodedType, IdentifierType, ReadWrite>
+        else { return }
         
+        /// Make sure we have a descriptor, and that there is at least one entry, otherwise stop here.
+        guard let persistedDescriptor, persistedDescriptor.size > 0
+        else { return }
+        
+        /// Check the version to see if the current one is greater or equal to the one in the existing descriptor. If we can't decode it, stop here and throw an error — the data store is unsupported.
+        let persistedVersion = try Version(persistedDescriptor.version)
+        guard persistedVersion.rawValue <= version.rawValue
+        else { throw DatastoreError.incompatibleVersion(version: String(describing: persistedVersion)) }
+        
+        /// Notify progress handlers we are evaluating for possible migrations.
         for handler in warmupProgressHandlers {
             handler(.evaluating)
         }
         
-        // TODO: Migrate any incompatible indexes by calling the internal methods below as needed.
-        await Task.yield() // The "work"
+        var newDescriptor: DatastoreDescriptor?
+        
+        let primaryIndex = load(IndexRange(), order: .ascending, awaitWarmup: false)
+        
+        var rebuildPrimaryIndex = false
+        var directIndexesToBuild: Set<String> = []
+        var secondaryIndexesToBuild: Set<String> = []
+        var index = 0
+        
+        let versionData = try Data(self.version)
+        
+        for try await (idenfifier, instance) in primaryIndex {
+            defer { index += 1 }
+            /// Use the first index to grab an up-to-date descriptor
+            if newDescriptor == nil {
+                let updatedDescriptor = try updatedDescriptor(for: instance)
+                newDescriptor = updatedDescriptor
+                
+                /// Check the primary index for compatibility.
+                if persistedDescriptor.identifierType != updatedDescriptor.identifierType {
+                    try await transaction.resetPrimaryIndex(datastoreKey: key)
+                    rebuildPrimaryIndex = true
+                }
+                
+                /// Check existing direct indexes for compatibility
+                for (indexKey, persistedIndex) in persistedDescriptor.directIndexes {
+                    if let updatedIndex = updatedDescriptor.directIndexes[indexKey] {
+                        /// If the index still exists, make sure it is compatible by checking their types, or checking if the primary index must be re-built.
+                        if persistedIndex.indexType != updatedIndex.indexType || rebuildPrimaryIndex {
+                            /// They were not compatible, so delete the bad index, and queue it to be re-built.
+                            try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
+                            directIndexesToBuild.insert(indexKey)
+                        }
+                    } else {
+                        /// The index is no longer needed, delete it.
+                        try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
+                    }
+                }
+                
+                /// Check for new direct indexes to build
+                for (indexKey, _) in updatedDescriptor.directIndexes {
+                    guard persistedDescriptor.directIndexes[indexKey] == nil else { continue }
+                    /// The index does not yet exist, so queue it to be built.
+                    directIndexesToBuild.insert(indexKey)
+                }
+                
+                /// Check existing secondary indexes for compatibility
+                for (indexKey, persistedIndex) in persistedDescriptor.secondaryIndexes {
+                    if let updatedIndex = updatedDescriptor.secondaryIndexes[indexKey] {
+                        /// If the index still exists, make sure it is compatible
+                        if persistedIndex.indexType != updatedIndex.indexType {
+                            /// They were not compatible, so delete the bad index, and queue it to be re-built.
+                            try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
+                            secondaryIndexesToBuild.insert(indexKey)
+                        }
+                    } else {
+                        /// The index is no longer needed, delete it.
+                        try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
+                    }
+                }
+                
+                /// Check for new secondary indexes to build
+                for (indexKey, _) in updatedDescriptor.secondaryIndexes {
+                    guard persistedDescriptor.secondaryIndexes[indexKey] == nil else { continue }
+                    /// The index does not yet exist, so queue it to be built.
+                    secondaryIndexesToBuild.insert(indexKey)
+                }
+                
+                /// Remove any direct indexes from the secondary ones we may have requested.
+                secondaryIndexesToBuild.subtract(directIndexesToBuild)
+                
+                /// If we don't need to migrate anything, stop here.
+                if rebuildPrimaryIndex == false, directIndexesToBuild.isEmpty, secondaryIndexesToBuild.isEmpty {
+                    break
+                }
+                
+                /// Create any missing indexes and prime the datastore for writing.
+                try await transaction.apply(descriptor: updatedDescriptor, for: key)
+            }
+            
+            /// Notify progress handlers we are starting an entry.
+            for handler in warmupProgressHandlers {
+                handler(.working(current: index, total: persistedDescriptor.size))
+            }
+            
+            let instanceData = try await encoder(instance)
+            
+            if rebuildPrimaryIndex {
+                let insertionCursor = try await transaction.primaryIndexCursor(inserting: idenfifier, datastoreKey: key)
+                
+                try await transaction.persistPrimaryIndexEntry(
+                    versionData: versionData,
+                    identifierValue: idenfifier,
+                    instanceData: instanceData,
+                    cursor: insertionCursor,
+                    datastoreKey: key
+                )
+            }
+            
+            var queriedIndexes: Set<String> = []
+            
+            /// Persist the direct indexes with full copies
+            for indexPath in directIndexes {
+                let indexName = indexPath.path
+                guard
+                    directIndexesToBuild.contains(indexName),
+                    !queriedIndexes.contains(indexName)
+                else { continue }
+                queriedIndexes.insert(indexName)
+                
+                let updatedValue = instance[keyPath: indexPath]
+                
+                /// Grab a cursor to insert the new value in the index.
+                let updatedValueCursor = try await transaction.directIndexCursor(
+                    inserting: updatedValue.indexed,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: key
+                )
+                
+                /// Insert it.
+                try await transaction.persistDirectIndexEntry(
+                    versionData: versionData,
+                    indexValue: updatedValue.indexed,
+                    identifierValue: idenfifier,
+                    instanceData: instanceData,
+                    cursor: updatedValueCursor,
+                    indexName: indexName,
+                    datastoreKey: key
+                )
+            }
+            
+            /// Next, go through any remaining computed indexes as secondary indexes.
+            for indexPath in computedIndexes {
+                let indexName = indexPath.path
+                guard
+                    secondaryIndexesToBuild.contains(indexName),
+                    !queriedIndexes.contains(indexName)
+                else { continue }
+                queriedIndexes.insert(indexName)
+                
+                let updatedValue = instance[keyPath: indexPath]
+                
+                /// Grab a cursor to insert the new value in the index.
+                let updatedValueCursor = try await transaction.secondaryIndexCursor(
+                    inserting: updatedValue.indexed,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+                
+                /// Insert it.
+                try await transaction.persistSecondaryIndexEntry(
+                    indexValue: updatedValue.indexed,
+                    identifierValue: idenfifier,
+                    cursor: updatedValueCursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
+            
+            /// Re-insert any remaining indexed values into the new index.
+            try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
+                guard
+                    secondaryIndexesToBuild.contains(indexName),
+                    !queriedIndexes.contains(indexName)
+                else { return }
+                
+                /// Grab a cursor to insert the new value in the index.
+                let updatedValueCursor = try await transaction.secondaryIndexCursor(
+                    inserting: value,
+                    identifier: idenfifier,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+                
+                /// Insert it.
+                try await transaction.persistSecondaryIndexEntry(
+                    indexValue: value,
+                    identifierValue: idenfifier,
+                    cursor: updatedValueCursor,
+                    indexName: indexName,
+                    datastoreKey: self.key
+                )
+            }
+        }
         
         for handler in warmupProgressHandlers {
-            handler(.complete(total: 0))
+            handler(.complete(total: persistedDescriptor.size))
         }
         
         warmupProgressHandlers.removeAll()
@@ -288,12 +481,15 @@ extension Datastore {
         }
     }
     
-    nonisolated public func load(
+    nonisolated func load(
         _ range: some IndexRangeExpression<IdentifierType>,
-        order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<CodedType> {
+        order: RangeOrder,
+        awaitWarmup: Bool
+    ) -> some TypedAsyncSequence<(id: IdentifierType, instance: CodedType)> {
         AsyncThrowingBackpressureStream { provider in
-            try await self.warmupIfNeeded()
+            if awaitWarmup {
+                try await self.warmupIfNeeded()
+            }
             
             try await self.persistence._withTransaction(
                 actionName: nil,
@@ -302,12 +498,20 @@ extension Datastore {
                 try await transaction.primaryIndexScan(range: range.applying(order), datastoreKey: self.key) { versionData, instanceData in
                     let entryVersion = try Version(versionData)
                     let decoder = try await self.decoder(for: entryVersion)
-                    let instance = try await decoder(instanceData).instance
+                    let decodedValue = try await decoder(instanceData)
                     
-                    try await provider.yield(instance)
+                    try await provider.yield(decodedValue)
                 }
             }
         }
+    }
+    
+    nonisolated public func load(
+        _ range: some IndexRangeExpression<IdentifierType>,
+        order: RangeOrder = .ascending
+    ) -> some TypedAsyncSequence<CodedType> {
+        load(range, order: order, awaitWarmup: true)
+            .map { $0.instance }
     }
     
     @_disfavoredOverload
@@ -631,7 +835,7 @@ extension Datastore where AccessMode == ReadWrite {
                 )
             }
             
-            /// Re-insert those indexes from the new index.
+            /// Re-insert those indexes into the new index.
             try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
                 guard !queriedIndexes.contains(indexName) else { return }
                 
