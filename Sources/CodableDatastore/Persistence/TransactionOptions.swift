@@ -51,4 +51,7 @@ public struct UnsafeTransactionOptions: OptionSet {
     
     /// The transaction should skip emitting observations. This is useful when the transaction must enumerate and modify the entire data set, which would cause each modified entry to be kept in memory for the duration of the transaction.
     public static let skipObservations = Self(rawValue: 1 << 16)
+    
+    /// The transaction should persist to storage even if it is a child transaction. Note that this must be the _first_ non-readonly child transaction of a parent transaction to succeed.
+    public static let enforceDurability = Self(rawValue: 1 << 17)
 }
