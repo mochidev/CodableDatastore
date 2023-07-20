@@ -35,7 +35,7 @@ final class DiskTransactionTests: XCTestCase {
             version: Version.zero,
             codedType: TestStruct.self,
             identifierType: UUID.self,
-            decoders: [.zero: { _ in TestStruct() }],
+            decoders: [.zero: { _ in (id: UUID(), instance: TestStruct()) }],
             directIndexes: [],
             computedIndexes: [],
             configuration: .init()

@@ -19,7 +19,7 @@ public actor Datastore<
     let key: DatastoreKey
     let version: Version
     let encoder: (_ instance: CodedType) async throws -> Data
-    let decoders: [Version: (_ data: Data) async throws -> CodedType]
+    let decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType)]
     let directIndexes: [IndexPath<CodedType, _AnyIndexed>]
     let computedIndexes: [IndexPath<CodedType, _AnyIndexed>]
     
@@ -41,7 +41,7 @@ public actor Datastore<
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
         encoder: @escaping (_ instance: CodedType) async throws -> Data,
-        decoders: [Version: (_ data: Data) async throws -> CodedType],
+        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType)],
         directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
@@ -53,6 +53,11 @@ public actor Datastore<
         self.decoders = decoders
         self.directIndexes = directIndexes
         self.computedIndexes = computedIndexes
+        
+        for decoderVersion in Version.allCases {
+            guard decoders[decoderVersion] == nil else { continue }
+            assertionFailure("Decoders missing case for \(decoderVersion). Please make sure you have a decoder configured for this version or you may encounter errors at runtime.")
+        }
     }
     
     public init(
@@ -61,7 +66,7 @@ public actor Datastore<
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
-        decoders: [Version: (_ data: Data) async throws -> CodedType],
+        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType)],
         directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
@@ -95,7 +100,7 @@ extension Datastore {
         return descriptor
     }
     
-    func decoder(for version: Version) throws -> (_ data: Data) async throws -> CodedType {
+    func decoder(for version: Version) throws -> (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType) {
         guard let decoder = decoders[version] else {
             throw DatastoreError.missingDecoder(version: String(describing: version))
         }
@@ -272,7 +277,7 @@ extension Datastore {
                 
                 let entryVersion = try Version(persistedEntry.versionData)
                 let decoder = try await self.decoder(for: entryVersion)
-                let instance = try await decoder(persistedEntry.instanceData)
+                let instance = try await decoder(persistedEntry.instanceData).instance
                 
                 return instance
             } catch DatastoreInterfaceError.instanceNotFound {
@@ -297,7 +302,7 @@ extension Datastore {
                 try await transaction.primaryIndexScan(range: range.applying(order), datastoreKey: self.key) { versionData, instanceData in
                     let entryVersion = try Version(versionData)
                     let decoder = try await self.decoder(for: entryVersion)
-                    let instance = try await decoder(instanceData)
+                    let instance = try await decoder(instanceData).instance
                     
                     try await provider.yield(instance)
                 }
@@ -342,7 +347,7 @@ extension Datastore {
                     ) { versionData, instanceData in
                         let entryVersion = try Version(versionData)
                         let decoder = try await self.decoder(for: entryVersion)
-                        let instance = try await decoder(instanceData)
+                        let instance = try await decoder(instanceData).instance
                         
                         try await provider.yield(instance)
                     }
@@ -356,7 +361,7 @@ extension Datastore {
                         
                         let entryVersion = try Version(persistedEntry.versionData)
                         let decoder = try await self.decoder(for: entryVersion)
-                        let instance = try await decoder(persistedEntry.instanceData)
+                        let instance = try await decoder(persistedEntry.instanceData).instance
                         
                         try await provider.yield(instance)
                     }
@@ -416,7 +421,7 @@ extension Datastore {
             try? await event.mapEntries { entry in
                 let version = try Version(entry.versionData)
                 let decoder = try await self.decoder(for: version)
-                let instance = try await decoder(entry.instanceData)
+                let instance = try await decoder(entry.instanceData).instance
                 return instance
             }
         }
@@ -453,7 +458,7 @@ extension Datastore where AccessMode == ReadWrite {
                     
                     let existingVersion = try Version(existingEntry.versionData)
                     let decoder = try await self.decoder(for: existingVersion)
-                    let existingInstance = try await decoder(existingEntry.instanceData)
+                    let existingInstance = try await decoder(existingEntry.instanceData).instance
                     
                     return (
                         cursor: existingEntry.cursor,
@@ -664,7 +669,7 @@ extension Datastore where AccessMode == ReadWrite {
     @discardableResult
     public func delete(_ idenfifier: IdentifierType) async throws -> CodedType {
         try await warmupIfNeeded()
-                
+        
         return try await persistence._withTransaction(
             actionName: "Delete Entry",
             options: [.idempotent]
@@ -678,7 +683,7 @@ extension Datastore where AccessMode == ReadWrite {
             /// Load the instance completely so we can delete the entry within the direct and secondary indexes too.
             let existingVersion = try Version(existingEntry.versionData)
             let decoder = try await self.decoder(for: existingVersion)
-            let existingInstance = try await decoder(existingEntry.instanceData)
+            let existingInstance = try await decoder(existingEntry.instanceData).instance
             
             try await transaction.emit(
                 event: .deleted(
@@ -805,7 +810,7 @@ extension Datastore where AccessMode == ReadWrite {
         identifierType: IdentifierType.Type,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
         directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
@@ -817,11 +822,9 @@ extension Datastore where AccessMode == ReadWrite {
             codedType: codedType,
             identifierType: identifierType,
             encoder: { try encoder.encode($0) },
-            decoders: migrations.mapValues({ migration in
-                return { data in
-                    return try await migration(data, decoder)
-                }
-            }),
+            decoders: migrations.mapValues { migration in
+                { data in try await migration(data, decoder) }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -835,7 +838,7 @@ extension Datastore where AccessMode == ReadWrite {
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
         directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
@@ -852,11 +855,9 @@ extension Datastore where AccessMode == ReadWrite {
             codedType: codedType,
             identifierType: identifierType,
             encoder: { try encoder.encode($0) },
-            decoders: migrations.mapValues({ migration in
-                return { data in
-                    return try await migration(data, decoder)
-                }
-            }),
+            decoders: migrations.mapValues { migration in
+                { data in try await migration(data, decoder) }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -872,7 +873,7 @@ extension Datastore where AccessMode == ReadOnly {
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
         directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
@@ -883,11 +884,9 @@ extension Datastore where AccessMode == ReadOnly {
             version: version,
             codedType: codedType,
             identifierType: identifierType,
-            decoders: migrations.mapValues({ migration in
-                return { data in
-                   return try await migration(data, decoder)
-                }
-            }),
+            decoders: migrations.mapValues { migration in
+                { data in try await migration(data, decoder) }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -900,7 +899,7 @@ extension Datastore where AccessMode == ReadOnly {
         version: Version,
         codedType: CodedType.Type = CodedType.self,
         identifierType: IdentifierType.Type,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
         directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
@@ -913,11 +912,9 @@ extension Datastore where AccessMode == ReadOnly {
             version: version,
             codedType: codedType,
             identifierType: identifierType,
-            decoders: migrations.mapValues({ migration in
-                return { data in
-                   return try await migration(data, decoder)
-                }
-            }),
+            decoders: migrations.mapValues { migration in
+                { data in try await migration(data, decoder) }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -946,7 +943,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
             codedType: codedType,
             identifierType: codedType.ID.self,
             encoder: encoder,
-            decoders: decoders,
+            decoders: decoders.mapValues { decoder in
+                { data in
+                    let instance = try await decoder(data)
+                    return (id: instance.id, instance: instance)
+                }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -973,7 +975,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
             identifierType: codedType.ID.self,
             encoder: encoder,
             decoder: decoder,
-            migrations: migrations,
+            migrations: migrations.mapValues { migration in
+                { data, decoder in
+                    let instance = try await migration(data, decoder)
+                    return (id: instance.id, instance: instance)
+                }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -998,7 +1005,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
             codedType: codedType,
             identifierType: codedType.ID.self,
             outputFormat: outputFormat,
-            migrations: migrations,
+            migrations: migrations.mapValues { migration in
+                { data, decoder in
+                    let instance = try await migration(data, decoder)
+                    return (id: instance.id, instance: instance)
+                }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -1023,7 +1035,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
             version: version,
             codedType: codedType,
             identifierType: codedType.ID.self,
-            decoders: decoders,
+            decoders: decoders.mapValues { decoder in
+                { data in
+                    let instance = try await decoder(data)
+                    return (id: instance.id, instance: instance)
+                }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -1048,7 +1065,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
             codedType: codedType,
             identifierType: codedType.ID.self,
             decoder: decoder,
-            migrations: migrations,
+            migrations: migrations.mapValues { migration in
+                { data, decoder in
+                    let instance = try await migration(data, decoder)
+                    return (id: instance.id, instance: instance)
+                }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
@@ -1071,7 +1093,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
             version: version,
             codedType: codedType,
             identifierType: codedType.ID.self,
-            migrations: migrations,
+            migrations: migrations.mapValues { migration in
+                { data, decoder in
+                    let instance = try await migration(data, decoder)
+                    return (id: instance.id, instance: instance)
+                }
+            },
             directIndexes: directIndexes,
             computedIndexes: computedIndexes,
             configuration: configuration
