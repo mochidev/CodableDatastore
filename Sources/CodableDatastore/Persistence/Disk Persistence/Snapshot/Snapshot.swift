@@ -106,7 +106,7 @@ extension Snapshot {
     /// Load the manifest from disk, or create a suitable starting value if such a file does not exist.
     private func loadManifest() throws -> SnapshotManifest {
         do {
-            let data = try Data(contentsOf: snapshotURL)
+            let data = try Data(contentsOf: manifestURL)
 
             let manifest = try JSONDecoder.shared.decode(SnapshotManifest.self, from: data)
 
