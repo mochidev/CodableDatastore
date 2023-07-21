@@ -88,11 +88,11 @@ public struct Indexed<T> where T: Indexable {
 /// You should not reach for this directly, and instead use the @``Indexed`` property wrapper.
 public class _AnyIndexed {
     var indexed: any _IndexedProtocol
-    var indexedType: String
+    var indexedType: IndexType
     
     init<T>(indexed: Indexed<T>) {
         self.indexed = indexed
-        indexedType = String(describing: T.self)
+        indexedType = IndexType(T.self)
     }
     
     var anyIndexed: _AnyIndexed {

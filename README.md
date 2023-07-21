@@ -51,7 +51,6 @@ targets: [
 ### Road to 0.1 Betas
 
 As this project matures towards its first beta, a number of features still need to be fleshed out:
-- Typed IndexName, remove use of "key" in datastore
 - Index deletion
 
 The above list will be kept up to date during development and will likely see additions during that process.

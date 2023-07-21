@@ -11,10 +11,10 @@ import XCTest
 
 final class DatastoreDescriptorTests: XCTestCase {
     func testIndexDescriptorEquatable() throws {
-        let desc1 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), key: "abc", indexType: "String")
-        let desc2 = DatastoreDescriptor.IndexDescriptor(version: Data([0]), key: "abc", indexType: "String")
-        let desc3 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), key: "a", indexType: "String")
-        let desc4 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), key: "abc", indexType: "Int")
+        let desc1 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), name: "abc", type: "String")
+        let desc2 = DatastoreDescriptor.IndexDescriptor(version: Data([0]), name: "abc", type: "String")
+        let desc3 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), name: "a", type: "String")
+        let desc4 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), name: "abc", type: "Int")
         
         XCTAssertEqual(desc1, desc1)
         XCTAssertNotEqual(desc1, desc2)
@@ -23,10 +23,10 @@ final class DatastoreDescriptorTests: XCTestCase {
     }
     
     func testIndexDescriptorComparable() throws {
-        let desc1 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), key: "abc", indexType: "String")
-        let desc2 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), key: "abc", indexType: "Int")
-        let desc3 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), key: "aac", indexType: "String")
-        let desc4 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), key: "acc", indexType: "String")
+        let desc1 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), name: "abc", type: "String")
+        let desc2 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), name: "abc", type: "Int")
+        let desc3 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), name: "aac", type: "String")
+        let desc4 = DatastoreDescriptor.IndexDescriptor(version: Data([0, 1, 2]), name: "acc", type: "String")
         
         XCTAssertLessThan(desc3, desc1)
         XCTAssertLessThan(desc1, desc4)
@@ -60,23 +60,23 @@ final class DatastoreDescriptorTests: XCTestCase {
         
         let descA = DatastoreDescriptor.IndexDescriptor(version: Data([0]), sampleInstance: sample, indexPath: IndexPath(uncheckedKeyPath: \.$a, path: "$a"))
         XCTAssertEqual(descA.version, Data([0]))
-        XCTAssertEqual(descA.key, "$a")
-        XCTAssertEqual(descA.indexType, "String")
+        XCTAssertEqual(descA.name, "$a")
+        XCTAssertEqual(descA.type, "String")
         
         let descB = DatastoreDescriptor.IndexDescriptor(version: Data([0]), sampleInstance: sample, indexPath: IndexPath(uncheckedKeyPath: \.$b, path: "$b"))
         XCTAssertEqual(descB.version, Data([0]))
-        XCTAssertEqual(descB.key, "$b")
-        XCTAssertEqual(descB.indexType, "Int")
+        XCTAssertEqual(descB.name, "$b")
+        XCTAssertEqual(descB.type, "Int")
         
         let descC = DatastoreDescriptor.IndexDescriptor(version: Data([0]), sampleInstance: sample, indexPath: IndexPath(uncheckedKeyPath: \.c.$a, path: "c.$a"))
         XCTAssertEqual(descC.version, Data([0]))
-        XCTAssertEqual(descC.key, "c.$a")
-        XCTAssertEqual(descC.indexType, "Enum")
+        XCTAssertEqual(descC.name, "c.$a")
+        XCTAssertEqual(descC.type, "Enum")
         
         let descD = DatastoreDescriptor.IndexDescriptor(version: Data([0]), sampleInstance: sample, indexPath: IndexPath(uncheckedKeyPath: \.d, path: "d"))
         XCTAssertEqual(descD.version, Data([0]))
-        XCTAssertEqual(descD.key, "d")
-        XCTAssertEqual(descD.indexType, "String")
+        XCTAssertEqual(descD.name, "d")
+        XCTAssertEqual(descD.type, "String")
     }
     
     func testTypeReflection() throws {
@@ -122,9 +122,9 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descA.identifierType, "UUID")
         XCTAssertEqual(descA.directIndexes, [:])
         XCTAssertEqual(descA.secondaryIndexes, [
-            "$id" : .init(version: Data([34, 97, 34]), key: "$id", indexType: "UUID"),
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$id" : .init(version: Data([34, 97, 34]), name: "$id", type: "UUID"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descB = try DatastoreDescriptor(
@@ -138,11 +138,11 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descB.codedType, "SampleType")
         XCTAssertEqual(descB.identifierType, "UUID")
         XCTAssertEqual(descB.directIndexes, [
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
         ])
         XCTAssertEqual(descB.secondaryIndexes, [
-            "$id" : .init(version: Data([34, 97, 34]), key: "$id", indexType: "UUID"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$id" : .init(version: Data([34, 97, 34]), name: "$id", type: "UUID"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descC = try DatastoreDescriptor(
@@ -156,12 +156,12 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descC.codedType, "SampleType")
         XCTAssertEqual(descC.identifierType, "UUID")
         XCTAssertEqual(descC.directIndexes, [
-            "c.$a" : .init(version: Data([34, 97, 34]), key: "c.$a", indexType: "Enum"),
+            "c.$a" : .init(version: Data([34, 97, 34]), name: "c.$a", type: "Enum"),
         ])
         XCTAssertEqual(descC.secondaryIndexes, [
-            "$id" : .init(version: Data([34, 97, 34]), key: "$id", indexType: "UUID"),
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$id" : .init(version: Data([34, 97, 34]), name: "$id", type: "UUID"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descD = try DatastoreDescriptor(
@@ -178,12 +178,12 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descD.codedType, "SampleType")
         XCTAssertEqual(descD.identifierType, "UUID")
         XCTAssertEqual(descD.directIndexes, [
-            "c.$a" : .init(version: Data([34, 97, 34]), key: "c.$a", indexType: "Enum"),
+            "c.$a" : .init(version: Data([34, 97, 34]), name: "c.$a", type: "Enum"),
         ])
         XCTAssertEqual(descD.secondaryIndexes, [
-            "$id" : .init(version: Data([34, 97, 34]), key: "$id", indexType: "UUID"),
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$id" : .init(version: Data([34, 97, 34]), name: "$id", type: "UUID"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descE = try DatastoreDescriptor(
@@ -205,10 +205,10 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descE.codedType, "SampleType")
         XCTAssertEqual(descE.identifierType, "UUID")
         XCTAssertEqual(descE.directIndexes, [
-            "$id" : .init(version: Data([34, 97, 34]), key: "$id", indexType: "UUID"),
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
-            "c.$a" : .init(version: Data([34, 97, 34]), key: "c.$a", indexType: "Enum"),
+            "$id" : .init(version: Data([34, 97, 34]), name: "$id", type: "UUID"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
+            "c.$a" : .init(version: Data([34, 97, 34]), name: "c.$a", type: "Enum"),
         ])
         XCTAssertEqual(descE.secondaryIndexes, [:])
     }
@@ -256,8 +256,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descA.identifierType, "UUID")
         XCTAssertEqual(descA.directIndexes, [:])
         XCTAssertEqual(descA.secondaryIndexes, [
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descB = try DatastoreDescriptor(
@@ -273,10 +273,10 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descB.codedType, "SampleType")
         XCTAssertEqual(descB.identifierType, "UUID")
         XCTAssertEqual(descB.directIndexes, [
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
         ])
         XCTAssertEqual(descB.secondaryIndexes, [
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descC = try DatastoreDescriptor(
@@ -292,11 +292,11 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descC.codedType, "SampleType")
         XCTAssertEqual(descC.identifierType, "UUID")
         XCTAssertEqual(descC.directIndexes, [
-            "c.$a" : .init(version: Data([34, 97, 34]), key: "c.$a", indexType: "Enum"),
+            "c.$a" : .init(version: Data([34, 97, 34]), name: "c.$a", type: "Enum"),
         ])
         XCTAssertEqual(descC.secondaryIndexes, [
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descD = try DatastoreDescriptor(
@@ -315,11 +315,11 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descD.codedType, "SampleType")
         XCTAssertEqual(descD.identifierType, "UUID")
         XCTAssertEqual(descD.directIndexes, [
-            "c.$a" : .init(version: Data([34, 97, 34]), key: "c.$a", indexType: "Enum"),
+            "c.$a" : .init(version: Data([34, 97, 34]), name: "c.$a", type: "Enum"),
         ])
         XCTAssertEqual(descD.secondaryIndexes, [
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
         ])
         
         let descE = try DatastoreDescriptor(
@@ -341,9 +341,9 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertEqual(descE.codedType, "SampleType")
         XCTAssertEqual(descE.identifierType, "UUID")
         XCTAssertEqual(descE.directIndexes, [
-            "$a" : .init(version: Data([34, 97, 34]), key: "$a", indexType: "String"),
-            "$b" : .init(version: Data([34, 97, 34]), key: "$b", indexType: "Int"),
-            "c.$a" : .init(version: Data([34, 97, 34]), key: "c.$a", indexType: "Enum"),
+            "$a" : .init(version: Data([34, 97, 34]), name: "$a", type: "String"),
+            "$b" : .init(version: Data([34, 97, 34]), name: "$b", type: "Int"),
+            "c.$a" : .init(version: Data([34, 97, 34]), name: "c.$a", type: "Enum"),
         ])
         XCTAssertEqual(descE.secondaryIndexes, [:])
     }

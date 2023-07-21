@@ -111,9 +111,9 @@ extension DiskPersistence.Datastore.RootObject {
         }
     }
     
-    var directIndexes: [String: DiskPersistence.Datastore.Index] {
+    var directIndexes: [IndexName: DiskPersistence.Datastore.Index] {
         get async throws {
-            var indexes: [String: DiskPersistence.Datastore.Index] = [:]
+            var indexes: [IndexName: DiskPersistence.Datastore.Index] = [:]
             
             for indexInfo in try await rootObject.directIndexManifests {
                 indexes[indexInfo.key] = await datastore.index(for: .direct(index: indexInfo.id, manifest: indexInfo.root))
@@ -123,9 +123,9 @@ extension DiskPersistence.Datastore.RootObject {
         }
     }
     
-    var secondaryIndexes: [String: DiskPersistence.Datastore.Index] {
+    var secondaryIndexes: [IndexName: DiskPersistence.Datastore.Index] {
         get async throws {
-            var indexes: [String: DiskPersistence.Datastore.Index] = [:]
+            var indexes: [IndexName: DiskPersistence.Datastore.Index] = [:]
             
             for indexInfo in try await rootObject.secondaryIndexManifests {
                 indexes[indexInfo.key] = await datastore.index(for: .secondary(index: indexInfo.id, manifest: indexInfo.root))
@@ -163,16 +163,16 @@ extension DiskPersistence.Datastore.RootObject {
         }
         
         for (_, indexDescriptor) in descriptor.directIndexes {
-            let key = indexDescriptor.key
-            let indexType = indexDescriptor.indexType
+            let indexName = indexDescriptor.name
+            let indexType = indexDescriptor.type
             var version = indexDescriptor.version
             
-            if let originalVersion = originalManifest.descriptor.directIndexes[key]?.version {
+            if let originalVersion = originalManifest.descriptor.directIndexes[indexName.rawValue]?.version {
                 version = originalVersion
             } else {
                 let indexInfo = DatastoreRootManifest.IndexInfo(
-                    key: key,
-                    id: DatastoreIndexIdentifier(name: key),
+                    key: indexName,
+                    id: DatastoreIndexIdentifier(name: indexName),
                     root: DatastoreIndexManifestIdentifier()
                 )
                 let index = DiskPersistence.Datastore.Index(
@@ -189,24 +189,24 @@ extension DiskPersistence.Datastore.RootObject {
                 manifest.directIndexManifests.append(indexInfo)
             }
             
-            manifest.descriptor.directIndexes[key] = DatastoreDescriptor.IndexDescriptor(
+            manifest.descriptor.directIndexes[indexName.rawValue] = DatastoreDescriptor.IndexDescriptor(
                 version: version,
-                key: key,
-                indexType: indexType
+                name: indexName,
+                type: indexType
             )
         }
         
         for (_, indexDescriptor) in descriptor.secondaryIndexes {
-            let key = indexDescriptor.key
-            let indexType = indexDescriptor.indexType
+            let indexName = indexDescriptor.name
+            let indexType = indexDescriptor.type
             var version = indexDescriptor.version
             
-            if let originalVersion = originalManifest.descriptor.secondaryIndexes[key]?.version {
+            if let originalVersion = originalManifest.descriptor.secondaryIndexes[indexName.rawValue]?.version {
                 version = originalVersion
             } else {
                 let indexInfo = DatastoreRootManifest.IndexInfo(
-                    key: key,
-                    id: DatastoreIndexIdentifier(name: key),
+                    key: indexName,
+                    id: DatastoreIndexIdentifier(name: indexName),
                     root: DatastoreIndexManifestIdentifier()
                 )
                 let index = DiskPersistence.Datastore.Index(
@@ -223,10 +223,10 @@ extension DiskPersistence.Datastore.RootObject {
                 manifest.secondaryIndexManifests.append(indexInfo)
             }
             
-            manifest.descriptor.secondaryIndexes[key] = DatastoreDescriptor.IndexDescriptor(
+            manifest.descriptor.secondaryIndexes[indexName.rawValue] = DatastoreDescriptor.IndexDescriptor(
                 version: version,
-                key: key,
-                indexType: indexType
+                name: indexName,
+                type: indexType
             )
         }
         

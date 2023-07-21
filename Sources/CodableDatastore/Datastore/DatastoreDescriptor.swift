@@ -57,16 +57,16 @@ extension DatastoreDescriptor {
         
         /// The key this index is based on.
         ///
-        /// Each index is uniquely referred to by their key. If a ``Datastore`` reports a set of Indexes with a different set of keys than was used prior, the difference between them will be calculated, and older indexes will be invalidated while new ones will be built.
-        public var key: String
+        /// Each index is uniquely referred to by their name. If a ``Datastore`` reports a set of Indexes with a different set of keys than was used prior, the difference between them will be calculated, and older indexes will be invalidated while new ones will be built.
+        public var name: IndexName
         
         /// The type the index uses for ordering.
         ///
         /// The index will use the type to automatically determine if an index should be invalidated.
-        public var indexType: String
+        public var type: IndexType
         
         public static func < (lhs: Self, rhs: Self) -> Bool {
-            lhs.key < rhs.key
+            lhs.name < rhs.name
         }
     }
 }
@@ -106,7 +106,7 @@ extension DatastoreDescriptor {
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
+            if indexDescriptor.name == "$id" && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -121,7 +121,7 @@ extension DatastoreDescriptor {
             )
             
             /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.key == "$id" && sampleInstance is any Identifiable {
+            if indexDescriptor.name == "$id" && sampleInstance is any Identifiable {
                 continue
             }
             
@@ -131,10 +131,11 @@ extension DatastoreDescriptor {
         }
         
         Mirror.indexedChildren(from: sampleInstance) { indexName, value in
+            let indexName = IndexName(indexName)
             let indexDescriptor = IndexDescriptor(
                 version: versionData,
-                key: indexName,
-                indexType: value.projectedValue.indexedType
+                name: indexName,
+                type: value.projectedValue.indexedType
             )
             
             if !directIndexes.contains(indexDescriptor) {
@@ -146,8 +147,8 @@ extension DatastoreDescriptor {
             version: versionData,
             codedType: String(describing: type(of: sampleInstance)),
             identifierType: String(describing: identifierType),
-            directIndexes: Dictionary(uniqueKeysWithValues: directIndexes.map({ ($0.key, $0) })),
-            secondaryIndexes: Dictionary(uniqueKeysWithValues: secondaryIndexes.map({ ($0.key, $0) })),
+            directIndexes: Dictionary(uniqueKeysWithValues: directIndexes.map({ ($0.name.rawValue, $0) })),
+            secondaryIndexes: Dictionary(uniqueKeysWithValues: secondaryIndexes.map({ ($0.name.rawValue, $0) })),
             size: 0
         )
     }
@@ -170,8 +171,8 @@ extension DatastoreDescriptor.IndexDescriptor {
         
         self.init(
             version: version,
-            key: indexPath.path,
-            indexType: indexType
+            name: indexPath.path,
+            type: indexType
         )
     }
 }
