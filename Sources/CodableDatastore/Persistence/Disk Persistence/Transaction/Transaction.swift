@@ -347,7 +347,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
             
             let directIndexManifests = descriptor.directIndexes.map { (_, index) in
                 DatastoreRootManifest.IndexInfo(
-                    key: index.name,
+                    name: index.name,
                     id: DatastoreIndexIdentifier(name: index.name),
                     root: DatastoreIndexManifestIdentifier()
                 )
@@ -355,7 +355,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
             
             let secondaryIndexManifests = descriptor.secondaryIndexes.map { (_, index) in
                 DatastoreRootManifest.IndexInfo(
-                    key: index.name,
+                    name: index.name,
                     id: DatastoreIndexIdentifier(name: index.name),
                     root: DatastoreIndexManifestIdentifier()
                 )

@@ -116,7 +116,7 @@ extension DiskPersistence.Datastore.RootObject {
             var indexes: [IndexName: DiskPersistence.Datastore.Index] = [:]
             
             for indexInfo in try await rootObject.directIndexManifests {
-                indexes[indexInfo.key] = await datastore.index(for: .direct(index: indexInfo.id, manifest: indexInfo.root))
+                indexes[indexInfo.name] = await datastore.index(for: .direct(index: indexInfo.id, manifest: indexInfo.root))
             }
             
             return indexes
@@ -128,7 +128,7 @@ extension DiskPersistence.Datastore.RootObject {
             var indexes: [IndexName: DiskPersistence.Datastore.Index] = [:]
             
             for indexInfo in try await rootObject.secondaryIndexManifests {
-                indexes[indexInfo.key] = await datastore.index(for: .secondary(index: indexInfo.id, manifest: indexInfo.root))
+                indexes[indexInfo.name] = await datastore.index(for: .secondary(index: indexInfo.id, manifest: indexInfo.root))
             }
             
             return indexes
@@ -171,7 +171,7 @@ extension DiskPersistence.Datastore.RootObject {
                 version = originalVersion
             } else {
                 let indexInfo = DatastoreRootManifest.IndexInfo(
-                    key: indexName,
+                    name: indexName,
                     id: DatastoreIndexIdentifier(name: indexName),
                     root: DatastoreIndexManifestIdentifier()
                 )
@@ -205,7 +205,7 @@ extension DiskPersistence.Datastore.RootObject {
                 version = originalVersion
             } else {
                 let indexInfo = DatastoreRootManifest.IndexInfo(
-                    key: indexName,
+                    name: indexName,
                     id: DatastoreIndexIdentifier(name: indexName),
                     root: DatastoreIndexManifestIdentifier()
                 )
@@ -324,14 +324,14 @@ extension DiskPersistence.Datastore.RootObject {
         case .direct(let indexID, let manifestID):
             removedIndex = .direct(index: indexID, manifest: manifestID)
             if let entryIndex = updatedManifest.directIndexManifests.firstIndex(where: { $0.id == indexID }) {
-                let indexName = updatedManifest.directIndexManifests[entryIndex].key
+                let indexName = updatedManifest.directIndexManifests[entryIndex].name
                 updatedManifest.directIndexManifests.remove(at: entryIndex)
                 updatedManifest.descriptor.directIndexes.removeValue(forKey: indexName)
             }
         case .secondary(let indexID, let manifestID):
             removedIndex = .secondary(index: indexID, manifest: manifestID)
             if let entryIndex = updatedManifest.secondaryIndexManifests.firstIndex(where: { $0.id == indexID }) {
-                let indexName = updatedManifest.secondaryIndexManifests[entryIndex].key
+                let indexName = updatedManifest.secondaryIndexManifests[entryIndex].name
                 updatedManifest.secondaryIndexManifests.remove(at: entryIndex)
                 updatedManifest.descriptor.secondaryIndexes.removeValue(forKey: indexName)
             }

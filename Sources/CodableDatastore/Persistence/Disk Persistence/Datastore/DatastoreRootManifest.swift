@@ -53,7 +53,7 @@ struct DatastoreRootManifest: Codable, Equatable, Identifiable {
 extension DatastoreRootManifest {
     struct IndexInfo: Codable, Equatable, Identifiable {
         /// The key this index uses.
-        var key: IndexName
+        var name: IndexName
         
         /// The identifier for the index on disk.
         var id: DatastoreIndexIdentifier
