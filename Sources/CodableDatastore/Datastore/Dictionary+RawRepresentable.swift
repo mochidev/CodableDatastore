@@ -22,4 +22,10 @@ extension Dictionary {
             yield &self[key.rawValue]
         }
     }
+    
+    @discardableResult
+    @usableFromInline
+    mutating func removeValue(forKey key: some RawRepresentable<Key>) -> Value? {
+        removeValue(forKey: key.rawValue)
+    }
 }
