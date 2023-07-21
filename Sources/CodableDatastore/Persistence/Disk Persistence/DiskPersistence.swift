@@ -421,7 +421,7 @@ extension DiskPersistence {
             let (datastore, rootID) = try await self.updatingCurrentSnapshot { snapshot in
                 try await snapshot.updatingManifest { snapshotManifest, currentIteration in
                     let (datastore, root) = await snapshot.loadDatastore(for: datastoreKey, from: currentIteration)
-                    currentIteration.dataStores[datastoreKey.rawValue] = .init(key: datastoreKey, id: datastore.id, root: root)
+                    currentIteration.dataStores[datastoreKey] = .init(key: datastoreKey, id: datastore.id, root: root)
                     return (datastore, root)
                 }
             }
@@ -469,7 +469,7 @@ extension DiskPersistence {
         let containsEdits = try await readingCurrentSnapshot { snapshot in
             try await snapshot.readingManifest { manifest, iteration in
                 for (key, root) in roots {
-                    guard iteration.dataStores[key.rawValue]?.root == root.id
+                    guard iteration.dataStores[key]?.root == root.id
                     else { return true }
                 }
                 return false
@@ -490,7 +490,7 @@ extension DiskPersistence {
                 iteration.addedDatastoreRoots = addedDatastoreRoots
                 iteration.removedDatastoreRoots = removedDatastoreRoots
                 for (key, root) in roots {
-                    iteration.dataStores[key.rawValue] = SnapshotIteration.DatastoreInfo(
+                    iteration.dataStores[key] = SnapshotIteration.DatastoreInfo(
                         key: key,
                         id: root.datastore.id,
                         root: root.id

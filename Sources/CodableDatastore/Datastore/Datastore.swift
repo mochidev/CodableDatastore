@@ -192,7 +192,7 @@ extension Datastore {
                 
                 /// Check existing direct indexes for compatibility
                 for (_, persistedIndex) in persistedDescriptor.directIndexes {
-                    if let updatedIndex = updatedDescriptor.directIndexes[persistedIndex.name.rawValue] {
+                    if let updatedIndex = updatedDescriptor.directIndexes[persistedIndex.name] {
                         /// If the index still exists, make sure it is compatible by checking their types, or checking if the primary index must be re-built.
                         if persistedIndex.type != updatedIndex.type || rebuildPrimaryIndex {
                             /// They were not compatible, so delete the bad index, and queue it to be re-built.
@@ -207,14 +207,14 @@ extension Datastore {
                 
                 /// Check for new direct indexes to build
                 for (_, updatedIndex) in updatedDescriptor.directIndexes {
-                    guard persistedDescriptor.directIndexes[updatedIndex.name.rawValue] == nil else { continue }
+                    guard persistedDescriptor.directIndexes[updatedIndex.name] == nil else { continue }
                     /// The index does not yet exist, so queue it to be built.
                     directIndexesToBuild.insert(updatedIndex.name)
                 }
                 
                 /// Check existing secondary indexes for compatibility
                 for (_, persistedIndex) in persistedDescriptor.secondaryIndexes {
-                    if let updatedIndex = updatedDescriptor.secondaryIndexes[persistedIndex.name.rawValue] {
+                    if let updatedIndex = updatedDescriptor.secondaryIndexes[persistedIndex.name] {
                         /// If the index still exists, make sure it is compatible
                         if persistedIndex.type != updatedIndex.type {
                             /// They were not compatible, so delete the bad index, and queue it to be re-built.
@@ -229,7 +229,7 @@ extension Datastore {
                 
                 /// Check for new secondary indexes to build
                 for (_, updatedIndex) in updatedDescriptor.secondaryIndexes {
-                    guard persistedDescriptor.secondaryIndexes[updatedIndex.name.rawValue] == nil else { continue }
+                    guard persistedDescriptor.secondaryIndexes[updatedIndex.name] == nil else { continue }
                     /// The index does not yet exist, so queue it to be built.
                     secondaryIndexesToBuild.insert(updatedIndex.name)
                 }
@@ -384,7 +384,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path.rawValue] ?? descriptor.secondaryIndexes[index.path.rawValue],
+                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
                 let version = try? Version(matchingIndex.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
@@ -403,7 +403,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path.rawValue] ?? descriptor.secondaryIndexes[index.path.rawValue],
+                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
                 let version = try? Version(matchingIndex.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
