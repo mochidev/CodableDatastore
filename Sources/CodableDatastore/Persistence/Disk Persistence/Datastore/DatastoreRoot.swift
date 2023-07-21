@@ -167,7 +167,7 @@ extension DiskPersistence.Datastore.RootObject {
             let indexType = indexDescriptor.type
             var version = indexDescriptor.version
             
-            if let originalVersion = originalManifest.descriptor.directIndexes[indexName.rawValue]?.version {
+            if let originalVersion = originalManifest.descriptor.directIndexes[indexName]?.version {
                 version = originalVersion
             } else {
                 let indexInfo = DatastoreRootManifest.IndexInfo(
@@ -189,7 +189,7 @@ extension DiskPersistence.Datastore.RootObject {
                 manifest.directIndexManifests.append(indexInfo)
             }
             
-            manifest.descriptor.directIndexes[indexName.rawValue] = DatastoreDescriptor.IndexDescriptor(
+            manifest.descriptor.directIndexes[indexName] = DatastoreDescriptor.IndexDescriptor(
                 version: version,
                 name: indexName,
                 type: indexType
@@ -201,7 +201,7 @@ extension DiskPersistence.Datastore.RootObject {
             let indexType = indexDescriptor.type
             var version = indexDescriptor.version
             
-            if let originalVersion = originalManifest.descriptor.secondaryIndexes[indexName.rawValue]?.version {
+            if let originalVersion = originalManifest.descriptor.secondaryIndexes[indexName]?.version {
                 version = originalVersion
             } else {
                 let indexInfo = DatastoreRootManifest.IndexInfo(
@@ -223,7 +223,7 @@ extension DiskPersistence.Datastore.RootObject {
                 manifest.secondaryIndexManifests.append(indexInfo)
             }
             
-            manifest.descriptor.secondaryIndexes[indexName.rawValue] = DatastoreDescriptor.IndexDescriptor(
+            manifest.descriptor.secondaryIndexes[indexName] = DatastoreDescriptor.IndexDescriptor(
                 version: version,
                 name: indexName,
                 type: indexType

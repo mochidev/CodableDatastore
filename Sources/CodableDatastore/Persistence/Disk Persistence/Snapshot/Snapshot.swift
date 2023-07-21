@@ -315,7 +315,7 @@ extension Snapshot {
     /// Load the datastore for the given key.
     func loadDatastore(for key: DatastoreKey, from iteration: SnapshotIteration) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
         let datastoreInfo: (id: DatastoreIdentifier, root: DatastoreRootIdentifier?) = {
-            if let info = iteration.dataStores[key.rawValue] {
+            if let info = iteration.dataStores[key] {
                 return (info.id, info.root)
             } else {
                 return (DatastoreIdentifier(name: key.rawValue), nil)
