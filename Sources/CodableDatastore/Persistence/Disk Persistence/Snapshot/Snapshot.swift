@@ -329,6 +329,6 @@ extension Snapshot {
         let datastore = DiskPersistence<AccessMode>.Datastore(id: datastoreInfo.id, snapshot: self)
         datastores[datastoreInfo.id] = datastore
         
-        return (datastore, nil)
+        return (datastore, datastoreInfo.root)
     }
 }

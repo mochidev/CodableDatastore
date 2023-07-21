@@ -51,6 +51,59 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         XCTAssertEqual(count, 3)
     }
     
+    func testLoadingEntriesFromDisk() async throws {
+        enum Version: Int, CaseIterable {
+            case zero
+        }
+        
+        struct TestStruct: Codable, Identifiable {
+            var id: String
+            var value: String
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                key: "test",
+                version: Version.zero,
+                migrations: [
+                    .zero: { data, decoder in
+                        try decoder.decode(TestStruct.self, from: data)
+                    }
+                ]
+            )
+            
+            try await datastore.persist(TestStruct(id: "3", value: "My name is Dimitri"))
+            try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
+            try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
+        } catch { throw error }
+        
+        /// Create a brand new persistence and load the entries we saved
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            key: "test",
+            version: Version.zero,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestStruct.self, from: data)
+                }
+            ]
+        )
+        let count = try await datastore.count
+        XCTAssertEqual(count, 3)
+        
+        let entry1 = try await datastore.load("1")
+        XCTAssertEqual(entry1?.value, "Hello, World!")
+        let entry2 = try await datastore.load("2")
+        XCTAssertEqual(entry2?.value, "Twenty Three is Number One")
+        let entry3 = try await datastore.load("3")
+        XCTAssertEqual(entry3?.value, "My name is Dimitri")
+    }
+    
     func testWritingEntryWithIndex() async throws {
         enum Version: Int, CaseIterable {
             case zero
