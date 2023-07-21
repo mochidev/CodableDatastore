@@ -12,7 +12,7 @@ public struct IndexPath<Root, Value: _AnyIndexed>: Equatable, Hashable {
     public let keyPath: KeyPath<Root, Value>
     
     /// The path as a string.
-    public let path: String
+    public let path: IndexName
     
     /// Initialize a new ``IndexPath``.
     ///
@@ -20,7 +20,7 @@ public struct IndexPath<Root, Value: _AnyIndexed>: Equatable, Hashable {
     /// - Parameters:
     ///   - uncheckedKeyPath: The keypath to bind to.
     ///   - path: The name of the path as a string, which should match the keypath itself.
-    public init(uncheckedKeyPath: KeyPath<Root, Value>, path: String) {
+    public init(uncheckedKeyPath: KeyPath<Root, Value>, path: IndexName) {
         self.keyPath = uncheckedKeyPath
         self.path = path
     }
@@ -31,7 +31,10 @@ public struct IndexPath<Root, Value: _AnyIndexed>: Equatable, Hashable {
     /// - Parameters:
     ///   - uncheckedKeyPath: The keypath to bind to.
     ///   - path: The name of the path as a string, which should match the keypath itself.
-    public init<IndexedType: Indexable>(uncheckedKeyPath: KeyPath<Root, _SomeIndexed<IndexedType>>, path: String) where Value == _AnyIndexed {
+    public init<IndexedType: Indexable>(
+        uncheckedKeyPath: KeyPath<Root, _SomeIndexed<IndexedType>>,
+        path: IndexName
+    ) where Value == _AnyIndexed {
         self.keyPath = uncheckedKeyPath.appending(path: \.anyIndexed)
         self.path = path
     }

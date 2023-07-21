@@ -347,16 +347,16 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
             
             let directIndexManifests = descriptor.directIndexes.map { (_, index) in
                 DatastoreRootManifest.IndexInfo(
-                    key: index.key,
-                    id: DatastoreIndexIdentifier(name: index.key),
+                    key: index.name,
+                    id: DatastoreIndexIdentifier(name: index.name),
                     root: DatastoreIndexManifestIdentifier()
                 )
             }
             
             let secondaryIndexManifests = descriptor.secondaryIndexes.map { (_, index) in
                 DatastoreRootManifest.IndexInfo(
-                    key: index.key,
-                    id: DatastoreIndexIdentifier(name: index.key),
+                    key: index.name,
+                    id: DatastoreIndexIdentifier(name: index.name),
                     root: DatastoreIndexManifestIdentifier()
                 )
             }
@@ -528,7 +528,7 @@ extension DiskPersistence.Transaction {
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         for indexValue: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
@@ -557,7 +557,7 @@ extension DiskPersistence.Transaction {
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         inserting indexValue: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         try checkIsActive()
@@ -574,7 +574,7 @@ extension DiskPersistence.Transaction {
     func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         for indexValue: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> any InstanceCursorProtocol {
         try checkIsActive()
@@ -593,7 +593,7 @@ extension DiskPersistence.Transaction {
     func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         inserting indexValue: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol {
         try checkIsActive()
@@ -710,7 +710,7 @@ extension DiskPersistence.Transaction {
     
     func directIndexScan<IndexType: Indexable>(
         range: any IndexRangeExpression<IndexType>,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey,
         instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws {
@@ -766,7 +766,7 @@ extension DiskPersistence.Transaction {
     
     func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
         range: any IndexRangeExpression<IndexType>,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey,
         identifierConsumer: (_ identifier: IdentifierType) async throws -> ()
     ) async throws {
@@ -1012,7 +1012,7 @@ extension DiskPersistence.Transaction {
         identifierValue: IdentifierType,
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
         try checkIsActive()
@@ -1038,7 +1038,7 @@ extension DiskPersistence.Transaction {
     
     func deleteDirectIndexEntry(
         cursor: some InstanceCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
         try checkIsActive()
@@ -1055,7 +1055,7 @@ extension DiskPersistence.Transaction {
     }
     
     func deleteDirectIndex(
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
         try checkIsActive()
@@ -1067,7 +1067,7 @@ extension DiskPersistence.Transaction {
         indexValue: IndexType,
         identifierValue: IdentifierType,
         cursor: some InsertionCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
         try checkIsActive()
@@ -1091,7 +1091,7 @@ extension DiskPersistence.Transaction {
     
     func deleteSecondaryIndexEntry(
         cursor: some InstanceCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
         try checkIsActive()
@@ -1108,7 +1108,7 @@ extension DiskPersistence.Transaction {
     }
     
     func deleteSecondaryIndex(
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
         try checkIsActive()

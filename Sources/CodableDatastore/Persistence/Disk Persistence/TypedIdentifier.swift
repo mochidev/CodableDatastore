@@ -53,6 +53,13 @@ extension TypedIdentifierProtocol {
         let stringToken = String(token, radix: 16, uppercase: true)
         self.init(rawValue: "\(fileSafeName)-\(String(repeating: "0", count: 16-stringToken.count))\(stringToken)")
     }
+    
+    init(
+        name: some RawRepresentable<String>,
+        token: UInt64 = .random(in: UInt64.min...UInt64.max)
+    ) {
+        self.init(name: name.rawValue, token: token)
+    }
 }
 
 extension TypedIdentifierProtocol {

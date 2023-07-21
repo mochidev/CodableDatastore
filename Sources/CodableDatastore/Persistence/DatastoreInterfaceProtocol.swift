@@ -78,7 +78,7 @@ public protocol DatastoreInterfaceProtocol {
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         for indexedValue: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> (
         cursor: any InstanceCursorProtocol,
@@ -98,7 +98,7 @@ public protocol DatastoreInterfaceProtocol {
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         inserting index: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol
     
@@ -114,7 +114,7 @@ public protocol DatastoreInterfaceProtocol {
     func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         for index: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> any InstanceCursorProtocol
     
@@ -130,7 +130,7 @@ public protocol DatastoreInterfaceProtocol {
     func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
         inserting index: IndexType,
         identifier: IdentifierType,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws -> any InsertionCursorProtocol
     
@@ -144,14 +144,14 @@ public protocol DatastoreInterfaceProtocol {
     
     func directIndexScan<IndexType: Indexable>(
         range: any IndexRangeExpression<IndexType>,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey,
         instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws
     
     func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
         range: any IndexRangeExpression<IndexType>,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey,
         identifierConsumer: (_ identifier: IdentifierType) async throws -> ()
     ) async throws
@@ -209,7 +209,7 @@ public protocol DatastoreInterfaceProtocol {
         identifierValue: IdentifierType,
         instanceData: Data,
         cursor: some InsertionCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws
     
@@ -220,7 +220,7 @@ public protocol DatastoreInterfaceProtocol {
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteDirectIndexEntry(
         cursor: some InstanceCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws
     
@@ -231,7 +231,7 @@ public protocol DatastoreInterfaceProtocol {
     ///   - indexName: The name of the index.
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteDirectIndex(
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws
     
@@ -246,7 +246,7 @@ public protocol DatastoreInterfaceProtocol {
         indexValue: IndexType,
         identifierValue: IdentifierType,
         cursor: some InsertionCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws
     
@@ -257,7 +257,7 @@ public protocol DatastoreInterfaceProtocol {
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteSecondaryIndexEntry(
         cursor: some InstanceCursorProtocol,
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws
     
@@ -268,7 +268,7 @@ public protocol DatastoreInterfaceProtocol {
     ///   - indexName: The name of the index.
     ///   - datastoreKey: The key of the datastore the index belongs to.
     func deleteSecondaryIndex(
-        indexName: String,
+        indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws
     

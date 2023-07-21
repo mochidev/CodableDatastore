@@ -171,8 +171,8 @@ extension Datastore {
         let primaryIndex = load(IndexRange(), order: .ascending, awaitWarmup: false)
         
         var rebuildPrimaryIndex = false
-        var directIndexesToBuild: Set<String> = []
-        var secondaryIndexesToBuild: Set<String> = []
+        var directIndexesToBuild: Set<IndexName> = []
+        var secondaryIndexesToBuild: Set<IndexName> = []
         var index = 0
         
         let versionData = try Data(self.version)
@@ -191,47 +191,47 @@ extension Datastore {
                 }
                 
                 /// Check existing direct indexes for compatibility
-                for (indexKey, persistedIndex) in persistedDescriptor.directIndexes {
-                    if let updatedIndex = updatedDescriptor.directIndexes[indexKey] {
+                for (_, persistedIndex) in persistedDescriptor.directIndexes {
+                    if let updatedIndex = updatedDescriptor.directIndexes[persistedIndex.name.rawValue] {
                         /// If the index still exists, make sure it is compatible by checking their types, or checking if the primary index must be re-built.
-                        if persistedIndex.indexType != updatedIndex.indexType || rebuildPrimaryIndex {
+                        if persistedIndex.type != updatedIndex.type || rebuildPrimaryIndex {
                             /// They were not compatible, so delete the bad index, and queue it to be re-built.
-                            try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
-                            directIndexesToBuild.insert(indexKey)
+                            try await transaction.deleteDirectIndex(indexName: persistedIndex.name, datastoreKey: key)
+                            directIndexesToBuild.insert(persistedIndex.name)
                         }
                     } else {
                         /// The index is no longer needed, delete it.
-                        try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
+                        try await transaction.deleteDirectIndex(indexName: persistedIndex.name, datastoreKey: key)
                     }
                 }
                 
                 /// Check for new direct indexes to build
-                for (indexKey, _) in updatedDescriptor.directIndexes {
-                    guard persistedDescriptor.directIndexes[indexKey] == nil else { continue }
+                for (_, updatedIndex) in updatedDescriptor.directIndexes {
+                    guard persistedDescriptor.directIndexes[updatedIndex.name.rawValue] == nil else { continue }
                     /// The index does not yet exist, so queue it to be built.
-                    directIndexesToBuild.insert(indexKey)
+                    directIndexesToBuild.insert(updatedIndex.name)
                 }
                 
                 /// Check existing secondary indexes for compatibility
-                for (indexKey, persistedIndex) in persistedDescriptor.secondaryIndexes {
-                    if let updatedIndex = updatedDescriptor.secondaryIndexes[indexKey] {
+                for (_, persistedIndex) in persistedDescriptor.secondaryIndexes {
+                    if let updatedIndex = updatedDescriptor.secondaryIndexes[persistedIndex.name.rawValue] {
                         /// If the index still exists, make sure it is compatible
-                        if persistedIndex.indexType != updatedIndex.indexType {
+                        if persistedIndex.type != updatedIndex.type {
                             /// They were not compatible, so delete the bad index, and queue it to be re-built.
-                            try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
-                            secondaryIndexesToBuild.insert(indexKey)
+                            try await transaction.deleteDirectIndex(indexName: persistedIndex.name, datastoreKey: key)
+                            secondaryIndexesToBuild.insert(persistedIndex.name)
                         }
                     } else {
                         /// The index is no longer needed, delete it.
-                        try await transaction.deleteDirectIndex(indexName: persistedIndex.key, datastoreKey: key)
+                        try await transaction.deleteDirectIndex(indexName: persistedIndex.name, datastoreKey: key)
                     }
                 }
                 
                 /// Check for new secondary indexes to build
-                for (indexKey, _) in updatedDescriptor.secondaryIndexes {
-                    guard persistedDescriptor.secondaryIndexes[indexKey] == nil else { continue }
+                for (_, updatedIndex) in updatedDescriptor.secondaryIndexes {
+                    guard persistedDescriptor.secondaryIndexes[updatedIndex.name.rawValue] == nil else { continue }
                     /// The index does not yet exist, so queue it to be built.
-                    secondaryIndexesToBuild.insert(indexKey)
+                    secondaryIndexesToBuild.insert(updatedIndex.name)
                 }
                 
                 /// Remove any direct indexes from the secondary ones we may have requested.
@@ -265,7 +265,7 @@ extension Datastore {
                 )
             }
             
-            var queriedIndexes: Set<String> = []
+            var queriedIndexes: Set<IndexName> = []
             
             /// Persist the direct indexes with full copies
             for indexPath in directIndexes {
@@ -329,6 +329,7 @@ extension Datastore {
             
             /// Re-insert any remaining indexed values into the new index.
             try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
+                let indexName = IndexName(indexName)
                 guard
                     secondaryIndexesToBuild.contains(indexName),
                     !queriedIndexes.contains(indexName)
@@ -383,7 +384,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+                let matchingIndex = descriptor.directIndexes[index.path.rawValue] ?? descriptor.secondaryIndexes[index.path.rawValue],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
                 let version = try? Version(matchingIndex.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
@@ -402,7 +403,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+                let matchingIndex = descriptor.directIndexes[index.path.rawValue] ?? descriptor.secondaryIndexes[index.path.rawValue],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
                 let version = try? Version(matchingIndex.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
@@ -721,7 +722,7 @@ extension Datastore where AccessMode == ReadWrite {
                 datastoreKey: self.key
             )
             
-            var queriedIndexes: Set<String> = []
+            var queriedIndexes: Set<IndexName> = []
             
             /// Persist the direct indexes with full copies
             for indexPath in self.directIndexes {
@@ -817,6 +818,7 @@ extension Datastore where AccessMode == ReadWrite {
             
             /// Remove any remaining indexed values from the old instance.
             try await Mirror.indexedChildren(from: existingInstance) { indexName, value in
+                let indexName = IndexName(indexName)
                 guard !queriedIndexes.contains(indexName) else { return }
                 
                 /// Grab a cursor to the old value in the index.
@@ -837,6 +839,7 @@ extension Datastore where AccessMode == ReadWrite {
             
             /// Re-insert those indexes into the new index.
             try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
+                let indexName = IndexName(indexName)
                 guard !queriedIndexes.contains(indexName) else { return }
                 
                 /// Grab a cursor to insert the new value in the index.
@@ -900,7 +903,7 @@ extension Datastore where AccessMode == ReadWrite {
                 datastoreKey: self.key
             )
             
-            var queriedIndexes: Set<String> = []
+            var queriedIndexes: Set<IndexName> = []
             
             /// Persist the direct indexes with full copies
             for indexPath in self.directIndexes {
@@ -952,6 +955,7 @@ extension Datastore where AccessMode == ReadWrite {
             
             /// Remove any remaining indexed values from the old instance.
             try await Mirror.indexedChildren(from: existingInstance) { indexName, value in
+                let indexName = IndexName(indexName)
                 guard !queriedIndexes.contains(indexName) else { return }
                 
                 /// Grab a cursor to the old value in the index.
