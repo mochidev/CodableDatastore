@@ -45,19 +45,12 @@ targets: [
 `CodableDatastore` is a collection of types that make it easy to interface with large data stores of independent types without loading the entire data store in memory.
 
 > **Warning**
-> DO NOT USE THIS IN PRODUCTION PROJECTS. As this project is currently still in its alpha phase, I cannot stress how important it is to not ship anything that relies on this code, or you will experience data loss. There is a chance the underlying model may continue to change day to day, or I will not be able to ever finish it.
-> Until then, please enjoy the code as a spectator or play around with it in toy projects to submit feedback!
-
-### Road to 0.1 Betas
-
-As this project matures towards its first beta, a number of features still need to be fleshed out:
-- Index deletion
-
-The above list will be kept up to date during development and will likely see additions during that process.
+> THINK CAREFULLY ABOUT USING THIS IN PRODUCTION PROJECTS. As this project only just entered its beta phase, I cannot stress how important it is to be very careful about shipping anything that relies on this code, as you may experience data loss migrating to a newer version. Although less likely, there is a chance the underlying model may change in an incompatible way that is not worth supporting with migrations.
+> Until then, please enjoy the code as a spectator or play around with it in toy projects to submit feedback! If you would like to be notified when `CodableDatastore` enters a production-ready state, please follow [#CodableDatastore](https://mastodon.social/tags/CodableDatastore) on Mastodon.
 
 ### Road to 1.0
 
-Once an initial beta is released, the project will start focussing on the functionality and work listed below:
+As this project matures towards release, the project will focus on the functionality and work listed below:
 - Force migration methods
 - Composite indexes (via macros?)
 - Cleaning up old resources in memory
@@ -70,6 +63,8 @@ Once an initial beta is released, the project will start focussing on the functi
 - An example app
 - A memory persistence useful for testing apps with
 - A pre-configured data store tuned to storing pure Data, useful for types like Images
+
+The above list will be kept up to date during development and will likely see additions during that process.
 
 ### Beyond 1.0
 

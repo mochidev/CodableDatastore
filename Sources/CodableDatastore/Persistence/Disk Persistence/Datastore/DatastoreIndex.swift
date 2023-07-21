@@ -1399,11 +1399,51 @@ extension DiskPersistence.Datastore.Index {
             }
         }
         
-        if !createdPages.isEmpty {
+        if !createdPages.isEmpty || !removedPages.isEmpty {
             manifest.id = newIndexID.manifestID
             manifest.orderedPages = newOrderedPages
         }
         
         return (manifest: manifest, createdPages: createdPages, removedPages: removedPages)
+    }
+    
+    func manifestDeletingAllEntries() async throws -> (
+        manifest: DatastoreIndexManifest,
+        removedPages: Set<DiskPersistence.Datastore.Page>
+    ) {
+        var manifest = try await manifest
+        
+        let newIndexID = id.with(manifestID: DatastoreIndexManifestIdentifier())
+        var removedPages: Set<DiskPersistence.Datastore.Page> = []
+        
+        let originalOrderedPages = manifest.orderedPages
+        var newOrderedPages: [DatastoreIndexManifest.PageInfo] = []
+        newOrderedPages.reserveCapacity(originalOrderedPages.count)
+        
+        for pageInfo in originalOrderedPages {
+            switch pageInfo {
+            case .removed:
+                /// Skip previously removed entries, unless this index is based on a transient index, and the removed entry was from before the transaction began.
+                if !isPersisted {
+                    newOrderedPages.append(pageInfo)
+                }
+                continue
+            case .existing(let pageID), .added(let pageID):
+                let existingPage = await datastore.page(for: .init(index: self.id, page: pageID))
+                /// If the index had data on disk, or it existed prior to the transaction, mark it as removed.
+                /// Otherwise, simply skip the page, since we added it in a transient index.
+                removedPages.insert(existingPage)
+                if isPersisted || pageInfo.isExisting {
+                    newOrderedPages.append(.removed(pageID))
+                }
+            }
+        }
+        
+        if !removedPages.isEmpty {
+            manifest.id = newIndexID.manifestID
+            manifest.orderedPages = newOrderedPages
+        }
+        
+        return (manifest: manifest, removedPages: removedPages)
     }
 }

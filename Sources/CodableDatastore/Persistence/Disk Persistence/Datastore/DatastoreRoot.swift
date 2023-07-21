@@ -304,5 +304,62 @@ extension DiskPersistence.Datastore.RootObject {
         }
         return updatedManifest
     }
+    
+    func manifest(
+        deleting index: DiskPersistence.Datastore.Index.ID
+    ) async throws -> DatastoreRootManifest {
+        let manifest = try await manifest
+        var updatedManifest = manifest
+        
+        var removedIndex: DatastoreRootManifest.IndexManifestID
+        var addedIndex: DatastoreRootManifest.IndexManifestID?
+        
+        switch index {
+        case .primary(let manifestID):
+            removedIndex = .primary(manifest: manifestID)
+            /// Primary index must have _a_ root, so make a new one.
+            let newManifestID = DatastoreIndexManifestIdentifier()
+            addedIndex = .primary(manifest: newManifestID)
+            updatedManifest.primaryIndexManifest = newManifestID
+        case .direct(let indexID, let manifestID):
+            removedIndex = .direct(index: indexID, manifest: manifestID)
+            if let entryIndex = updatedManifest.directIndexManifests.firstIndex(where: { $0.id == indexID }) {
+                let indexName = updatedManifest.directIndexManifests[entryIndex].key
+                updatedManifest.directIndexManifests.remove(at: entryIndex)
+                updatedManifest.descriptor.directIndexes.removeValue(forKey: indexName)
+            }
+        case .secondary(let indexID, let manifestID):
+            removedIndex = .secondary(index: indexID, manifest: manifestID)
+            if let entryIndex = updatedManifest.secondaryIndexManifests.firstIndex(where: { $0.id == indexID }) {
+                let indexName = updatedManifest.secondaryIndexManifests[entryIndex].key
+                updatedManifest.secondaryIndexManifests.remove(at: entryIndex)
+                updatedManifest.descriptor.secondaryIndexes.removeValue(forKey: indexName)
+            }
+        }
+        
+        if manifest != updatedManifest {
+            let modificationDate = Date()
+            updatedManifest.id = DatastoreRootIdentifier(date: modificationDate)
+            updatedManifest.modificationDate = modificationDate
+            
+            if isPersisted {
+                updatedManifest.removedIndexes = []
+                updatedManifest.removedIndexManifests = []
+                updatedManifest.addedIndexes = []
+                updatedManifest.addedIndexManifests = []
+            }
+            
+            if updatedManifest.addedIndexManifests.contains(removedIndex) {
+                updatedManifest.addedIndexManifests.remove(removedIndex)
+            } else {
+                updatedManifest.removedIndexManifests.insert(removedIndex)
+            }
+            
+            if let addedIndex {
+                updatedManifest.addedIndexManifests.insert(addedIndex)
+            }
+        }
+        return updatedManifest
+    }
 }
 

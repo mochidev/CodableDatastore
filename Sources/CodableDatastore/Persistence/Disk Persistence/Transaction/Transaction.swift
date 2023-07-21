@@ -1003,7 +1003,54 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        let existingIndex = try await existingRootObject.primaryIndex
+        
+        let datastore = existingRootObject.datastore
+        
+        let (indexManifest, removedPages) = try await existingIndex.manifestDeletingAllEntries()
+        
+        /// No change occured, bail early
+        guard existingIndex.id.manifestID != indexManifest.id else { return }
+        
+        deletedPages.formUnion(removedPages)
+        
+        let newIndex = DiskPersistence.Datastore.Index(
+            datastore: datastore,
+            id: existingIndex.id.with(manifestID: indexManifest.id),
+            manifest: indexManifest
+        )
+        createdIndexes.insert(newIndex)
+        if createdIndexes.contains(existingIndex) {
+            createdIndexes.insert(existingIndex)
+        } else {
+            deletedIndexes.insert(existingIndex)
+        }
+        await datastore.adopt(index: newIndex)
+        
+        var rootManifest = try await existingRootObject.manifest(replacing: newIndex.id)
+        
+        /// Reset the number of entries we are managing.
+        rootManifest.descriptor.size = 0
+        
+        /// No change occured, bail early
+        guard existingRootObject.id != rootManifest.id else { return }
+        
+        let newRootObject = DiskPersistence.Datastore.RootObject(
+            datastore: existingRootObject.datastore,
+            id: rootManifest.id,
+            rootObject: rootManifest
+        )
+        createdRootObjects.insert(newRootObject)
+        if createdRootObjects.contains(existingRootObject) {
+            createdRootObjects.remove(existingRootObject)
+        } else {
+            deletedRootObjects.insert(existingRootObject)
+        }
+        await datastore.adopt(rootObject: newRootObject)
+        rootObjects[datastoreKey] = newRootObject
     }
     
     func persistDirectIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
@@ -1060,7 +1107,34 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let existingIndex = try await existingRootObject.directIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        let datastore = existingRootObject.datastore
+        
+        deletedIndexes.insert(existingIndex)
+        
+        let rootManifest = try await existingRootObject.manifest(deleting: existingIndex.id)
+        
+        /// No change occured, bail early
+        guard existingRootObject.id != rootManifest.id else { return }
+        
+        let newRootObject = DiskPersistence.Datastore.RootObject(
+            datastore: existingRootObject.datastore,
+            id: rootManifest.id,
+            rootObject: rootManifest
+        )
+        createdRootObjects.insert(newRootObject)
+        if createdRootObjects.contains(existingRootObject) {
+            createdRootObjects.remove(existingRootObject)
+        } else {
+            deletedRootObjects.insert(existingRootObject)
+        }
+        await datastore.adopt(rootObject: newRootObject)
+        rootObjects[datastoreKey] = newRootObject
     }
     
     func persistSecondaryIndexEntry<IndexType: Indexable, IdentifierType: Indexable>(
@@ -1113,7 +1187,34 @@ extension DiskPersistence.Transaction {
     ) async throws {
         try checkIsActive()
         
-        preconditionFailure("Unimplemented")
+        guard let existingRootObject = try await rootObject(for: datastoreKey)
+        else { throw DatastoreInterfaceError.datastoreKeyNotFound }
+        
+        guard let existingIndex = try await existingRootObject.secondaryIndexes[indexName]
+        else { throw DatastoreInterfaceError.indexNotFound }
+        
+        let datastore = existingRootObject.datastore
+        
+        deletedIndexes.insert(existingIndex)
+        
+        let rootManifest = try await existingRootObject.manifest(deleting: existingIndex.id)
+        
+        /// No change occured, bail early
+        guard existingRootObject.id != rootManifest.id else { return }
+        
+        let newRootObject = DiskPersistence.Datastore.RootObject(
+            datastore: existingRootObject.datastore,
+            id: rootManifest.id,
+            rootObject: rootManifest
+        )
+        createdRootObjects.insert(newRootObject)
+        if createdRootObjects.contains(existingRootObject) {
+            createdRootObjects.remove(existingRootObject)
+        } else {
+            deletedRootObjects.insert(existingRootObject)
+        }
+        await datastore.adopt(rootObject: newRootObject)
+        rootObjects[datastoreKey] = newRootObject
     }
 }
 
