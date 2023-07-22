@@ -12,7 +12,7 @@ typealias DatastoreRootIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Da
 
 extension DiskPersistence.Datastore {
     actor RootObject: Identifiable {
-        unowned let datastore: DiskPersistence<AccessMode>.Datastore
+        let datastore: DiskPersistence<AccessMode>.Datastore
         
         let id: DatastoreRootIdentifier
         
@@ -29,6 +29,12 @@ extension DiskPersistence.Datastore {
             self.id = id
             self._rootObject = rootObject
             self.isPersisted = rootObject == nil
+        }
+        
+        deinit {
+            Task { [id, datastore] in
+                await datastore.invalidate(id)
+            }
         }
     }
 }

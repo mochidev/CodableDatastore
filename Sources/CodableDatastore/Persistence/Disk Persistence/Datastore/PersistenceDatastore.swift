@@ -10,6 +10,14 @@ import Foundation
 
 typealias DatastoreIdentifier = TypedIdentifier<DiskPersistence<ReadOnly>.Datastore>
 
+struct WeakValue<T: AnyObject> {
+    weak var value: T?
+    
+    init(_ value: T) {
+        self.value = value
+    }
+}
+
 extension DiskPersistence {
     actor Datastore {
         let id: DatastoreIdentifier
@@ -21,9 +29,9 @@ extension DiskPersistence {
         var lastUpdateDescriptorTask: Task<Any, Error>?
         
         /// The root objects that are being tracked in memory.
-        var trackedRootObjects: [RootObject.ID : RootObject] = [:]
-        var trackedIndexes: [Index.ID : Index] = [:]
-        var trackedPages: [Page.ID : Page] = [:]
+        var trackedRootObjects: [RootObject.ID : WeakValue<RootObject>] = [:]
+        var trackedIndexes: [Index.ID : WeakValue<Index>] = [:]
+        var trackedPages: [Page.ID : WeakValue<Page>] = [:]
         
         /// The root objects on the file system that are actively loaded in memory.
         var loadedRootObjects: Set<RootObject.ID> = []
@@ -101,16 +109,23 @@ extension DiskPersistence.Datastore {
 
 extension DiskPersistence.Datastore {
     func rootObject(for identifier: RootObject.ID) -> RootObject {
-        if let rootObject = trackedRootObjects[identifier] {
+        if let rootObject = trackedRootObjects[identifier]?.value {
             return rootObject
         }
+//        print("🤷 Cache Miss: Root \(identifier)")
         let rootObject = RootObject(datastore: self, id: identifier)
-        trackedRootObjects[identifier] = rootObject
+        trackedRootObjects[identifier] = WeakValue(rootObject)
+        Task { await snapshot.persistence.cache(rootObject) }
         return rootObject
     }
     
     func adopt(rootObject: RootObject) {
-        trackedRootObjects[rootObject.id] = rootObject
+        trackedRootObjects[rootObject.id] = WeakValue(rootObject)
+        Task { await snapshot.persistence.cache(rootObject) }
+    }
+    
+    func invalidate(_ identifier: RootObject.ID) {
+        trackedRootObjects.removeValue(forKey: identifier)
     }
     
     func mark(identifier: RootObject.ID, asLoaded: Bool) {
@@ -122,16 +137,23 @@ extension DiskPersistence.Datastore {
     }
     
     func index(for identifier: Index.ID) -> Index {
-        if let index = trackedIndexes[identifier] {
+        if let index = trackedIndexes[identifier]?.value {
             return index
         }
+//        print("🤷 Cache Miss: Index \(identifier)")
         let index = Index(datastore: self, id: identifier)
-        trackedIndexes[identifier] = index
+        trackedIndexes[identifier] = WeakValue(index)
+        Task { await snapshot.persistence.cache(index) }
         return index
     }
     
     func adopt(index: Index) {
-        trackedIndexes[index.id] = index
+        trackedIndexes[index.id] = WeakValue(index)
+        Task { await snapshot.persistence.cache(index) }
+    }
+    
+    func invalidate(_ identifier: Index.ID) {
+        trackedIndexes.removeValue(forKey: identifier)
     }
     
     func mark(identifier: Index.ID, asLoaded: Bool) {
@@ -143,16 +165,23 @@ extension DiskPersistence.Datastore {
     }
     
     func page(for identifier: Page.ID) -> Page {
-        if let page = trackedPages[identifier.withoutManifest] {
+        if let page = trackedPages[identifier.withoutManifest]?.value {
             return page
         }
+//        print("🤷 Cache Miss: Page \(identifier.page)")
         let page = Page(datastore: self, id: identifier)
-        trackedPages[identifier.withoutManifest] = page
+        trackedPages[identifier.withoutManifest] = WeakValue(page)
+        Task { await snapshot.persistence.cache(page) }
         return page
     }
     
     func adopt(page: Page) {
-        trackedPages[page.id.withoutManifest] = page
+        trackedPages[page.id.withoutManifest] = WeakValue(page)
+        Task { await snapshot.persistence.cache(page) }
+    }
+    
+    func invalidate(_ identifier: Page.ID) {
+        trackedPages.removeValue(forKey: identifier.withoutManifest)
     }
     
     func mark(identifier: Page.ID, asLoaded: Bool) {

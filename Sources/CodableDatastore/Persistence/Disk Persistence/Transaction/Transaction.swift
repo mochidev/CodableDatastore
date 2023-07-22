@@ -124,6 +124,18 @@ extension DiskPersistence {
         }
         
         private func persist() async throws {
+            defer {
+                rootObjects.removeAll()
+                entryMutations.removeAll()
+                createdRootObjects.removeAll()
+                createdIndexes.removeAll()
+                createdPages.removeAll()
+                deletedRootObjects.removeAll()
+                deletedIndexes.removeAll()
+                deletedPages.removeAll()
+                childTransactions.removeAll()
+            }
+            
             if let parent {
                 try await parent.apply(
                     rootObjects: rootObjects,

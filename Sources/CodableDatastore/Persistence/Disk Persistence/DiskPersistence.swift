@@ -25,6 +25,16 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     
     var lastTransaction: Transaction?
     
+    /// Shared caches across all snapshots and datastores.
+    var rollingRootObjectCacheIndex = 0
+    var rollingRootObjectCache: [Datastore.RootObject] = []
+    
+    var rollingIndexCacheIndex = 0
+    var rollingIndexCache: [Datastore.Index] = []
+    
+    var rollingPageCacheIndex = 0
+    var rollingPageCache: [Datastore.Page] = []
+    
     /// Initialize a ``DiskPersistence`` with a read-write URL.
     ///
     /// Use this initializer when creating a persistence from the main process that will access it, such as your app. To access the same persistence from another process, use ``init(readOnlyURL:)`` instead.
@@ -498,6 +508,43 @@ extension DiskPersistence {
                 }
             }
         }
+    }
+}
+
+// MARK: - Persistence-wide Caches
+
+extension DiskPersistence {
+    func cache(_ rootObject: Datastore.RootObject) {
+        if rollingRootObjectCache.count <= rollingRootObjectCacheIndex {
+            rollingRootObjectCache.append(rootObject)
+        } else {
+            rollingRootObjectCache[rollingRootObjectCacheIndex] = rootObject
+        }
+        /// Limit cache to 16 recent root objects. We only really need one per active datastore.
+        /// Note more-recently accessed entries may be represented multiple times in the cache, and are more likely to survive.
+        rollingRootObjectCacheIndex = (rollingRootObjectCacheIndex + 1) % 16
+    }
+    
+    func cache(_ index: Datastore.Index) {
+        if rollingIndexCache.count <= rollingIndexCacheIndex {
+            rollingIndexCache.append(index)
+        } else {
+            rollingIndexCache[rollingIndexCacheIndex] = index
+        }
+        /// Limit cache to 128 recent indexes, which is 8 per datastore.
+        /// Note more-recently accessed entries may be represented multiple times in the cache, and are more likely to survive.
+        rollingIndexCacheIndex = (rollingIndexCacheIndex + 1) % 128
+    }
+    
+    func cache(_ page: Datastore.Page) {
+        if rollingPageCache.count <= rollingPageCacheIndex {
+            rollingPageCache.append(page)
+        } else {
+            rollingPageCache[rollingPageCacheIndex] = page
+        }
+        /// Limit cache to 4096 recent pages, which is up to 16MB.
+        /// Note more-recently accessed entries may be represented multiple times in the cache, and are more likely to survive.
+        rollingPageCacheIndex = (rollingPageCacheIndex + 1) % 4096
     }
 }
 

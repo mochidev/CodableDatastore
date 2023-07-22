@@ -14,7 +14,7 @@ typealias DatastorePageIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Da
 
 extension DiskPersistence.Datastore {
     actor Page: Identifiable {
-        unowned let datastore: DiskPersistence<AccessMode>.Datastore
+        let datastore: DiskPersistence<AccessMode>.Datastore
         
         let id: ID
         
@@ -35,6 +35,12 @@ extension DiskPersistence.Datastore {
                 }
             }
             self.isPersisted = blocks == nil
+        }
+        
+        deinit {
+            Task { [id, datastore] in
+                await datastore.invalidate(id)
+            }
         }
     }
 }
