@@ -13,7 +13,7 @@ typealias DatastoreIndexIdentifier = TypedIdentifier<DiskPersistence<ReadOnly>.D
 
 extension DiskPersistence.Datastore {
     actor Index: Identifiable {
-        unowned let datastore: DiskPersistence<AccessMode>.Datastore
+        let datastore: DiskPersistence<AccessMode>.Datastore
         
         let id: ID
         
@@ -33,6 +33,12 @@ extension DiskPersistence.Datastore {
             self.id = id
             self._manifest = manifest
             self.isPersisted = manifest == nil
+        }
+        
+        deinit {
+            Task { [id, datastore] in
+                await datastore.invalidate(id)
+            }
         }
     }
 }

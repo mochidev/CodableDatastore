@@ -53,7 +53,6 @@ targets: [
 As this project matures towards release, the project will focus on the functionality and work listed below:
 - Force migration methods
 - Composite indexes (via macros?)
-- Cleaning up old resources in memory
 - Cleaning up old resources on disk
 - Reversed ranged reads
 - Controls for the edit history
@@ -63,6 +62,7 @@ As this project matures towards release, the project will focus on the functiona
 - An example app
 - A memory persistence useful for testing apps with
 - A pre-configured data store tuned to storing pure Data, useful for types like Images
+- Cleaning up memory leaks
 
 The above list will be kept up to date during development and will likely see additions during that process.
 
