@@ -54,7 +54,7 @@ As this project matures towards release, the project will focus on the functiona
 - Force migration methods
 - Composite indexes (via macros?)
 - Cleaning up old resources on disk
-- Reversed ranged reads
+- Ranged deletes
 - Controls for the edit history
 - Helper types to use with SwiftUI/Observability/Combine that can make data available on the main actor and filter and stay up to date
 - Comprehensive test coverage
