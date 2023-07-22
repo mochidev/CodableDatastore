@@ -535,7 +535,7 @@ extension Datastore {
         order: RangeOrder = .ascending,
         from indexPath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
     ) -> some TypedAsyncSequence<CodedType> {
-        let a: AsyncThrowingBackpressureStream<CodedType> = AsyncThrowingBackpressureStream { provider in
+        AsyncThrowingBackpressureStream { provider in
             try await self.warmupIfNeeded()
             
             try await self.persistence._withTransaction(
@@ -573,7 +573,6 @@ extension Datastore {
                 }
             }
         }
-        return a
     }
     
     @_disfavoredOverload
