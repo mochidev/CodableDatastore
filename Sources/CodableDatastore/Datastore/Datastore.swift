@@ -476,6 +476,9 @@ extension Datastore {
                 return instance
             } catch DatastoreInterfaceError.instanceNotFound {
                 return nil
+            } catch DatastoreInterfaceError.datastoreKeyNotFound {
+                /// There isn't a datastore yet, so no entries would exist either.
+                return nil
             } catch {
                 throw error
             }
@@ -496,12 +499,16 @@ extension Datastore {
                 actionName: nil,
                 options: [.readOnly]
             ) { transaction, _ in
-                try await transaction.primaryIndexScan(range: range.applying(order), datastoreKey: self.key) { versionData, instanceData in
-                    let entryVersion = try Version(versionData)
-                    let decoder = try await self.decoder(for: entryVersion)
-                    let decodedValue = try await decoder(instanceData)
-                    
-                    try await provider.yield(decodedValue)
+                do {
+                    try await transaction.primaryIndexScan(range: range.applying(order), datastoreKey: self.key) { versionData, instanceData in
+                        let entryVersion = try Version(versionData)
+                        let decoder = try await self.decoder(for: entryVersion)
+                        let decodedValue = try await decoder(instanceData)
+                        
+                        try await provider.yield(decodedValue)
+                    }
+                } catch DatastoreInterfaceError.datastoreKeyNotFound {
+                    /// There isn't a datastore yet, so no entries would exist either. Do nothing and let the stream end.
                 }
             }
         }
@@ -542,34 +549,38 @@ extension Datastore {
                 actionName: nil,
                 options: [.readOnly]
             ) { transaction, _ in
-                let isDirectIndex = self.directIndexes.contains { $0.path == indexPath.path }
-                
-                if isDirectIndex {
-                    try await transaction.directIndexScan(
-                        range: range.applying(order),
-                        indexName: indexPath.path,
-                        datastoreKey: self.key
-                    ) { versionData, instanceData in
-                        let entryVersion = try Version(versionData)
-                        let decoder = try await self.decoder(for: entryVersion)
-                        let instance = try await decoder(instanceData).instance
-                        
-                        try await provider.yield(instance)
+                do {
+                    let isDirectIndex = self.directIndexes.contains { $0.path == indexPath.path }
+                    
+                    if isDirectIndex {
+                        try await transaction.directIndexScan(
+                            range: range.applying(order),
+                            indexName: indexPath.path,
+                            datastoreKey: self.key
+                        ) { versionData, instanceData in
+                            let entryVersion = try Version(versionData)
+                            let decoder = try await self.decoder(for: entryVersion)
+                            let instance = try await decoder(instanceData).instance
+                            
+                            try await provider.yield(instance)
+                        }
+                    } else {
+                        try await transaction.secondaryIndexScan(
+                            range: range.applying(order),
+                            indexName: indexPath.path,
+                            datastoreKey: self.key
+                        ) { (identifier: IdentifierType) in
+                            let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
+                            
+                            let entryVersion = try Version(persistedEntry.versionData)
+                            let decoder = try await self.decoder(for: entryVersion)
+                            let instance = try await decoder(persistedEntry.instanceData).instance
+                            
+                            try await provider.yield(instance)
+                        }
                     }
-                } else {
-                    try await transaction.secondaryIndexScan(
-                        range: range.applying(order),
-                        indexName: indexPath.path,
-                        datastoreKey: self.key
-                    ) { (identifier: IdentifierType) in
-                        let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
-                        
-                        let entryVersion = try Version(persistedEntry.versionData)
-                        let decoder = try await self.decoder(for: entryVersion)
-                        let instance = try await decoder(persistedEntry.instanceData).instance
-                        
-                        try await provider.yield(instance)
-                    }
+                } catch DatastoreInterfaceError.datastoreKeyNotFound {
+                    /// There isn't a datastore yet, so no entries would exist either. Do nothing and let the stream end.
                 }
             }
         }
