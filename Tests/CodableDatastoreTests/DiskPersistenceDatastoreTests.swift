@@ -75,6 +75,12 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 ]
             )
             
+            let count = try await datastore.count
+            XCTAssertEqual(count, 0)
+            
+            let entry0 = try await datastore.load("0")
+            XCTAssertNil(entry0)
+            
             try await datastore.persist(TestStruct(id: "3", value: "My name is Dimitri"))
             try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
             try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
@@ -96,6 +102,8 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
         
+        let entry0 = try await datastore.load("0")
+        XCTAssertNil(entry0)
         let entry1 = try await datastore.load("1")
         XCTAssertEqual(entry1?.value, "Hello, World!")
         let entry2 = try await datastore.load("2")
@@ -215,6 +223,10 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             ]
         )
         
+        /// Read before persisting anything
+        var values = try await datastore.load(...).map { $0.value }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, [])
+        
         for n in 0..<200 {
             try await datastore.persist(TestStruct(id: n*2, value: "\(n*2)"))
         }
@@ -223,7 +235,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         XCTAssertEqual(count, 200)
         
         /// Simple ranges
-        var values = try await datastore.load(5..<9).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(5..<9).map { $0.value }.reduce(into: []) { $0.append($1) }
         XCTAssertEqual(values, ["6", "8"])
         
         values = try await datastore.load((5..<9).reversed).map { $0.value }.reduce(into: []) { $0.append($1) }
