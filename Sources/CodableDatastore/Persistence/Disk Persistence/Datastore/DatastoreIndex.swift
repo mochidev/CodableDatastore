@@ -580,7 +580,7 @@ extension DiskPersistence.Datastore.Index {
         
         var bytesForEntry: Bytes?
         var isEntryComplete = false
-        var previousBlock: DiskPersistence.CursorBlock? = nil
+        var previousCompleteBlock: DiskPersistence.CursorBlock? = nil
         var currentBlock: DiskPersistence.CursorBlock? = nil
         var pageIndex = startingPageIndex
         
@@ -613,8 +613,15 @@ extension DiskPersistence.Datastore.Index {
                     /// In the final position, lets save and continue.
                     bytesForEntry?.append(contentsOf: bytes)
                 case .tail(let bytes):
-                    /// In the first position, lets skip it.
-                    guard bytesForEntry != nil else { continue }
+                    /// In the first position, lets skip it, but add it as the last complete block in case the next one is a step too far.
+                    guard bytesForEntry != nil else {
+                        previousCompleteBlock = DiskPersistence.CursorBlock(
+                            pageIndex: pageIndex,
+                            page: page,
+                            blockIndex: blockIndex
+                        )
+                        continue
+                    }
                     /// In the final position, lets save and stop.
                     bytesForEntry?.append(contentsOf: bytes)
                     isEntryComplete = true
@@ -625,7 +632,14 @@ extension DiskPersistence.Datastore.Index {
                     page: page,
                     blockIndex: blockIndex
                 )
-                defer { previousBlock = currentBlock }
+                
+                /// Make sure to only keep a reference to the end of the last complete block, so if we roll back, we'll have a valid cursor
+                defer {
+                    switch block {
+                    case .complete, .tail: previousCompleteBlock = currentBlock
+                    case .head, .slice: break
+                    }
+                }
                 
                 if let bytes = bytesForEntry, isEntryComplete {
                     let entry = try DatastorePageEntry(bytes: bytes, isPartial: false)
@@ -643,7 +657,7 @@ extension DiskPersistence.Datastore.Index {
                             persistence: datastore.snapshot.persistence,
                             datastore: datastore,
                             index: self,
-                            insertAfter: previousBlock
+                            insertAfter: previousCompleteBlock
                         )
                     }
                     
@@ -658,7 +672,7 @@ extension DiskPersistence.Datastore.Index {
             persistence: datastore.snapshot.persistence,
             datastore: datastore,
             index: self,
-            insertAfter: previousBlock
+            insertAfter: previousCompleteBlock
         )
     }
 }
