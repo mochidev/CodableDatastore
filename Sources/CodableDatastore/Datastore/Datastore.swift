@@ -885,6 +885,13 @@ extension Datastore where AccessMode == ReadWrite {
     
     @discardableResult
     public func delete(_ idenfifier: IdentifierType) async throws -> CodedType {
+        guard let deletedInstance = try await deleteIfPresent(idenfifier)
+        else { throw DatastoreInterfaceError.instanceNotFound }
+        return deletedInstance
+    }
+    
+    @discardableResult
+    public func deleteIfPresent(_ idenfifier: IdentifierType) async throws -> CodedType? {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -892,7 +899,17 @@ extension Datastore where AccessMode == ReadWrite {
             options: [.idempotent]
         ) { transaction, _ in
             /// Get a cursor to the entry within the primary index.
-            let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+            let existingEntry: (cursor: any InstanceCursorProtocol, instanceData: Data, versionData: Data)
+            do {
+                existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+            } catch DatastoreInterfaceError.instanceNotFound {
+                return nil
+            } catch DatastoreInterfaceError.datastoreKeyNotFound {
+                /// There isn't a datastore yet, so no entries would exist either.
+                return nil
+            } catch {
+                throw error
+            }
             
             /// Delete the instance at that cursor.
             try await transaction.deletePrimaryIndexEntry(cursor: existingEntry.cursor, datastoreKey: self.key)
