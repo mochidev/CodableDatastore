@@ -1010,25 +1010,29 @@ extension Datastore where AccessMode == ReadWrite {
     public var readOnly: Datastore<Version, CodedType, IdentifierType, ReadOnly> { self as Any as! Datastore<Version, CodedType, IdentifierType, ReadOnly> }
 }
 
-// MARK: Idetifiable CodedType
+// MARK: Identifiable CodedType
 
 extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
     /// Persist an instance to the data store.
     ///
     /// If an instance does not already exist for the specified identifier, it will be created. If an instance already exists, it will be updated.
     /// - Parameter instance: The instance to persist.
+    @_disfavoredOverload
     public func persist(_ instance: CodedType) async throws where AccessMode == ReadWrite {
         try await self.persist(instance, to: instance.id)
     }
     
+    @_disfavoredOverload
     public func delete(_ instance: CodedType) async throws where AccessMode == ReadWrite {
         try await self.delete(instance.id)
     }
     
+    @_disfavoredOverload
     public func load(_ instance: CodedType) async throws -> CodedType? {
         try await self.load(instance.id)
     }
     
+    @_disfavoredOverload
     public func observe(_ instance: CodedType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
         try await observe(instance.id)
     }
