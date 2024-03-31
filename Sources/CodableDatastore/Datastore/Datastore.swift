@@ -653,14 +653,15 @@ extension Datastore where AccessMode == ReadWrite {
     /// - Parameters:
     ///   - instance: The instance to persist.
     ///   - idenfifier: The unique identifier to use to reference the item being persisted.
-    public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws {
+    @discardableResult
+    public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws -> CodedType? {
         try await warmupIfNeeded()
         
         let updatedDescriptor = try self.updatedDescriptor(for: instance)
         let versionData = try Data(self.version)
         let instanceData = try await self.encoder(instance)
         
-        try await persistence._withTransaction(
+        return try await persistence._withTransaction(
             actionName: "Persist Entry",
             options: [.idempotent]
         ) { transaction, _ in
@@ -869,6 +870,8 @@ extension Datastore where AccessMode == ReadWrite {
                     datastoreKey: self.key
                 )
             }
+            
+            return existingInstance
         }
     }
     
@@ -879,7 +882,8 @@ extension Datastore where AccessMode == ReadWrite {
     /// - Parameters:
     ///   - instance: The instance to persist.
     ///   - keypath: The keypath the identifier is located at.
-    public func persist(_ instance: CodedType, id keypath: KeyPath<CodedType, IdentifierType>) async throws {
+    @discardableResult
+    public func persist(_ instance: CodedType, id keypath: KeyPath<CodedType, IdentifierType>) async throws -> CodedType? {
         try await persist(instance, to: instance[keyPath: keypath])
     }
     
@@ -1018,13 +1022,21 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     /// If an instance does not already exist for the specified identifier, it will be created. If an instance already exists, it will be updated.
     /// - Parameter instance: The instance to persist.
     @_disfavoredOverload
-    public func persist(_ instance: CodedType) async throws where AccessMode == ReadWrite {
+    @discardableResult
+    public func persist(_ instance: CodedType) async throws -> CodedType? where AccessMode == ReadWrite {
         try await self.persist(instance, to: instance.id)
     }
     
     @_disfavoredOverload
-    public func delete(_ instance: CodedType) async throws where AccessMode == ReadWrite {
+    @discardableResult
+    public func delete(_ instance: CodedType) async throws -> CodedType where AccessMode == ReadWrite {
         try await self.delete(instance.id)
+    }
+    
+    @_disfavoredOverload
+    @discardableResult
+    public func deleteIfPresent(_ instance: CodedType) async throws -> CodedType? where AccessMode == ReadWrite {
+        try await self.deleteIfPresent(instance.id)
     }
     
     @_disfavoredOverload
