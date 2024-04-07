@@ -46,10 +46,9 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
     
     public init(
         persistence: some Persistence<AccessMode>,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
-        identifierType: IdentifierType.Type,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         encoder: @escaping (_ instance: InstanceType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -72,10 +71,9 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
     
     public init(
         persistence: some Persistence,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
-        identifierType: IdentifierType.Type,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1065,10 +1063,9 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
 extension Datastore where AccessMode == ReadWrite {
     public static func JSONStore(
         persistence: some Persistence<AccessMode>,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
-        identifierType: IdentifierType.Type,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
@@ -1080,8 +1077,6 @@ extension Datastore where AccessMode == ReadWrite {
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: identifierType,
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
@@ -1094,10 +1089,9 @@ extension Datastore where AccessMode == ReadWrite {
     
     public static func propertyListStore(
         persistence: some Persistence<AccessMode>,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
-        identifierType: IdentifierType.Type,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1113,8 +1107,6 @@ extension Datastore where AccessMode == ReadWrite {
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: identifierType,
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
@@ -1129,10 +1121,9 @@ extension Datastore where AccessMode == ReadWrite {
 extension Datastore where AccessMode == ReadOnly {
     public static func readOnlyJSONStore(
         persistence: some Persistence,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
-        identifierType: IdentifierType.Type,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1143,8 +1134,6 @@ extension Datastore where AccessMode == ReadOnly {
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: identifierType,
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
             },
@@ -1156,10 +1145,9 @@ extension Datastore where AccessMode == ReadOnly {
     
     public static func readOnlyPropertyListStore(
         persistence: some Persistence,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
-        identifierType: IdentifierType.Type,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1171,8 +1159,6 @@ extension Datastore where AccessMode == ReadOnly {
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: identifierType,
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
             },
@@ -1188,9 +1174,9 @@ extension Datastore where AccessMode == ReadOnly {
 extension Datastore where InstanceType: Identifiable, IdentifierType == InstanceType.ID, AccessMode == ReadWrite {
     public init(
         persistence: some Persistence<AccessMode>,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         encoder: @escaping (_ object: InstanceType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> InstanceType],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1201,8 +1187,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: codedType.ID.self,
             encoder: encoder,
             decoders: decoders.mapValues { decoder in
                 { data in
@@ -1218,9 +1202,9 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     
     public static func JSONStore(
         persistence: some Persistence<AccessMode>,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
@@ -1232,8 +1216,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: codedType.ID.self,
             encoder: encoder,
             decoder: decoder,
             migrations: migrations.mapValues { migration in
@@ -1250,9 +1232,9 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     
     public static func propertyListStore(
         persistence: some Persistence<AccessMode>,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1263,8 +1245,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: codedType.ID.self,
             outputFormat: outputFormat,
             migrations: migrations.mapValues { migration in
                 { data, decoder in
@@ -1282,9 +1262,9 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
 extension Datastore where InstanceType: Identifiable, IdentifierType == InstanceType.ID, AccessMode == ReadOnly {
     public init(
         persistence: some Persistence,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         decoders: [Version: (_ data: Data) async throws -> InstanceType],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1294,8 +1274,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: codedType.ID.self,
             decoders: decoders.mapValues { decoder in
                 { data in
                     let instance = try await decoder(data)
@@ -1310,9 +1288,9 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     
     public static func readOnlyJSONStore(
         persistence: some Persistence,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1323,8 +1301,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: codedType.ID.self,
             decoder: decoder,
             migrations: migrations.mapValues { migration in
                 { data, decoder in
@@ -1340,9 +1316,9 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     
     public static func readOnlyPropertyListStore(
         persistence: some Persistence,
-        key: DatastoreKey,
-        version: Version,
-        codedType: InstanceType.Type = InstanceType.self,
+        format: Format.Type = Format.self,
+        key: DatastoreKey = Format.defaultKey,
+        version: Version = Format.currentVersion,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
         directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
@@ -1352,8 +1328,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             persistence: persistence,
             key: key,
             version: version,
-            codedType: codedType,
-            identifierType: codedType.ID.self,
             migrations: migrations.mapValues { migration in
                 { data, decoder in
                     let instance = try await migration(data, decoder)

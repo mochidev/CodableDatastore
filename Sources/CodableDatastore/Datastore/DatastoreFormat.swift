@@ -31,7 +31,14 @@ public protocol DatastoreFormat<Version, Instance, Identifier> {
     /// Although ``Instance`` does _not_ need to be ``Identifiable``, a consistent identifier must still be provided for every instance to retrive and persist them. This identifier can be different from `Instance.ID` if truly necessary, though most conformers can simply set it to `Instance.ID`
     associatedtype Identifier: Indexable
     
+    /// A default initializer creating a format instance the datastore can use for evaluation.
     init()
+    
+    /// The default key to use when accessing the datastore for this type.
+    static var defaultKey: DatastoreKey { get }
+    
+    /// The current version to normalize the persisted datastore to.
+    static var currentVersion: Version { get }
 }
 
 extension DatastoreFormat where Instance: Identifiable, Instance.ID: Indexable {

@@ -30,14 +30,16 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: String
                 var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
@@ -63,15 +65,17 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: String
                 var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         do {
             let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
             
-            let datastore = Datastore<TestFormat, _>.JSONStore(
+            let datastore = Datastore.JSONStore(
                 persistence: persistence,
-                key: "test",
-                version: .zero,
+                format: TestFormat.self,
                 migrations: [
                     .zero: { data, decoder in
                         try decoder.decode(TestFormat.Instance.self, from: data)
@@ -126,14 +130,16 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: String
                 @Indexed var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
@@ -162,14 +168,16 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: String
                 var value: Int
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
@@ -218,14 +226,16 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: Int
                 var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
@@ -309,15 +319,17 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: UUID = UUID()
                 var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
@@ -354,15 +366,17 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: UUID = UUID()
                 var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
@@ -401,15 +415,17 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: Int
                 var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
@@ -449,15 +465,17 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
                 var id: Int
                 var value: String
             }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore<TestFormat, _>.JSONStore(
+        let datastore = Datastore.JSONStore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
+            format: TestFormat.self,
             migrations: [
                 .zero: { data, decoder in
                     try decoder.decode(TestFormat.Instance.self, from: data)
