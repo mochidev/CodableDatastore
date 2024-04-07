@@ -391,8 +391,8 @@ extension DiskPersistence where AccessMode == ReadWrite {
 // MARK: - Datastore Registration
 
 extension DiskPersistence {
-    func register<Version, CodedType, IdentifierType, Access>(
-        datastore newDatastore: CodableDatastore.Datastore<Version, CodedType, IdentifierType, Access>
+    func register<Format: DatastoreFormat, Access>(
+        datastore newDatastore: CodableDatastore.Datastore<Format, Access>
     ) throws {
         guard
             let datastorePersistence = newDatastore.persistence as? DiskPersistence,
@@ -555,34 +555,33 @@ class WeakDatastore {
     
     var isAlive: Bool { return true }
     
-    func contains<Version, CodedType, IdentifierType, AccessMode>(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) -> Bool {
+    func contains<Format: DatastoreFormat, AccessMode>(
+        datastore: Datastore<Format, AccessMode>
+    ) -> Bool {
         return false
     }
 }
 
-class WeakSpecificDatastore<
-    Version: RawRepresentable & Hashable & CaseIterable,
-    CodedType: Codable,
-    IdentifierType: Indexable,
-    AccessMode: _AccessMode
->: WeakDatastore where Version.RawValue: Indexable & Comparable {
-    weak var datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>?
+class WeakSpecificDatastore<Format: DatastoreFormat, AccessMode: _AccessMode>: WeakDatastore {
+    weak var datastore: Datastore<Format, AccessMode>?
     
     override var isAlive: Bool { return datastore != nil }
     
-    init(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) {
+    init(datastore: Datastore<Format, AccessMode>) {
         self.datastore = datastore
         super.init()
         self.canWrite = false
     }
     
-    init(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) where AccessMode == ReadWrite {
+    init(datastore: Datastore<Format, AccessMode>) where AccessMode == ReadWrite {
         self.datastore = datastore
         super.init()
         self.canWrite = true
     }
     
-    override func contains<OtherVersion, OtherCodedType, OtherIdentifierType, OtherAccessMode>(datastore: Datastore<OtherVersion, OtherCodedType, OtherIdentifierType, OtherAccessMode>) -> Bool {
+    override func contains<OtherFormat: DatastoreFormat, OtherAccessMode>(
+        datastore: Datastore<OtherFormat, OtherAccessMode>
+    ) -> Bool {
         return datastore === self.datastore
     }
 }

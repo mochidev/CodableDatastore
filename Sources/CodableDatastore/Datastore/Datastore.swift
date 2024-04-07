@@ -9,19 +9,29 @@
 import Foundation
 
 /// A store for a homogenous collection of instances.
-public actor Datastore<
-    Version: RawRepresentable & Hashable & CaseIterable,
-    CodedType: Codable,
-    IdentifierType: Indexable,
-    AccessMode: _AccessMode
-> where Version.RawValue: Indexable & Comparable {
+public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
+    /// A type representing the version of the datastore within the persistence.
+    ///
+    /// - SeeAlso: ``DatastoreFormat/Version``
+    public typealias Version = Format.Version
+    
+    /// The instance type to use when persisting and loading values from the datastore.
+    ///
+    /// - SeeAlso: ``DatastoreFormat/Instance``
+    public typealias InstanceType = Format.Instance
+    
+    /// The identifier to be used when de-duplicating instances saved in the persistence.
+    ///
+    /// - SeeAlso: ``DatastoreFormat/Identifier``
+    public typealias IdentifierType = Format.Identifier
+    
     let persistence: any Persistence
     let key: DatastoreKey
     let version: Version
-    let encoder: (_ instance: CodedType) async throws -> Data
-    let decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType)]
-    let directIndexes: [IndexPath<CodedType, _AnyIndexed>]
-    let computedIndexes: [IndexPath<CodedType, _AnyIndexed>]
+    let encoder: (_ instance: InstanceType) async throws -> Data
+    let decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)]
+    let directIndexes: [IndexPath<InstanceType, _AnyIndexed>]
+    let computedIndexes: [IndexPath<InstanceType, _AnyIndexed>]
     
     var updatedDescriptor: DatastoreDescriptor?
     
@@ -31,19 +41,19 @@ public actor Datastore<
     fileprivate var storeMigrationStatus: TaskStatus = .waiting
     fileprivate var storeMigrationProgressHandlers: [ProgressHandler] = []
     
-    fileprivate var indexMigrationStatus: [IndexPath<CodedType, _AnyIndexed> : TaskStatus] = [:]
-    fileprivate var indexMigrationProgressHandlers: [IndexPath<CodedType, _AnyIndexed> : ProgressHandler] = [:]
+    fileprivate var indexMigrationStatus: [IndexPath<InstanceType, _AnyIndexed> : TaskStatus] = [:]
+    fileprivate var indexMigrationProgressHandlers: [IndexPath<InstanceType, _AnyIndexed> : ProgressHandler] = [:]
     
     public init(
         persistence: some Persistence<AccessMode>,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         identifierType: IdentifierType.Type,
-        encoder: @escaping (_ instance: CodedType) async throws -> Data,
-        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType)],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        encoder: @escaping (_ instance: InstanceType) async throws -> Data,
+        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
         self.persistence = persistence
@@ -64,11 +74,11 @@ public actor Datastore<
         persistence: some Persistence,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         identifierType: IdentifierType.Type,
-        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType)],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
         self.persistence = persistence
@@ -84,7 +94,7 @@ public actor Datastore<
 // MARK: - Helper Methods
 
 extension Datastore {
-    func updatedDescriptor(for instance: CodedType) throws -> DatastoreDescriptor {
+    func updatedDescriptor(for instance: InstanceType) throws -> DatastoreDescriptor {
         if let updatedDescriptor {
             return updatedDescriptor
         }
@@ -100,7 +110,7 @@ extension Datastore {
         return descriptor
     }
     
-    func decoder(for version: Version) throws -> (_ data: Data) async throws -> (id: IdentifierType, instance: CodedType) {
+    func decoder(for version: Version) throws -> (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType) {
         guard let decoder = decoders[version] else {
             throw DatastoreError.missingDecoder(version: String(describing: version))
         }
@@ -149,7 +159,7 @@ extension Datastore {
         let persistedDescriptor = try await transaction.register(datastore: self)
         
         /// Only operate on read-write datastores beyond this point.
-        guard let self = self as? Datastore<Version, CodedType, IdentifierType, ReadWrite>
+        guard let self = self as? Datastore<Format, ReadWrite>
         else { return }
         
         /// Make sure we have a descriptor, and that there is at least one entry, otherwise stop here.
@@ -374,7 +384,7 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - index: The index to migrate.
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrate(index: IndexPath<CodedType, _AnyIndexed>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
+    public func migrate(index: IndexPath<InstanceType, _AnyIndexed>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
         try await persistence._withTransaction(
             actionName: "Migrate Entries",
             options: []
@@ -419,7 +429,7 @@ extension Datastore where AccessMode == ReadWrite {
         }
     }
     
-    func migrate(index: IndexPath<CodedType, _AnyIndexed>, progressHandler: ProgressHandler? = nil) async throws {
+    func migrate(index: IndexPath<InstanceType, _AnyIndexed>, progressHandler: ProgressHandler? = nil) async throws {
         // TODO: Migrate just that index, use indexMigrationStatus and indexMigrationProgressHandlers to record progress.
     }
     
@@ -459,7 +469,7 @@ extension Datastore {
         }
     }
     
-    public func load(_ identifier: IdentifierType) async throws -> CodedType? {
+    public func load(_ identifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -489,7 +499,7 @@ extension Datastore {
         _ range: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder,
         awaitWarmup: Bool
-    ) -> some TypedAsyncSequence<(id: IdentifierType, instance: CodedType)> {
+    ) -> some TypedAsyncSequence<(id: IdentifierType, instance: InstanceType)> {
         AsyncThrowingBackpressureStream { provider in
             if awaitWarmup {
                 try await self.warmupIfNeeded()
@@ -517,7 +527,7 @@ extension Datastore {
     nonisolated public func load(
         _ range: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<CodedType> {
+    ) -> some TypedAsyncSequence<InstanceType> {
         load(range, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
@@ -526,22 +536,22 @@ extension Datastore {
     public nonisolated func load(
         _ range: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<CodedType> {
+    ) -> some TypedAsyncSequence<InstanceType> {
         load(range, order: order)
     }
     
     public nonisolated func load(
         _ range: Swift.UnboundedRange,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<CodedType> {
+    ) -> some TypedAsyncSequence<InstanceType> {
         load(IndexRange(), order: order)
     }
     
     public nonisolated func load<IndexedValue: Indexable>(
         _ range: some IndexRangeExpression<IndexedValue>,
         order: RangeOrder = .ascending,
-        from indexPath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
-    ) -> some TypedAsyncSequence<CodedType> {
+        from indexPath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
+    ) -> some TypedAsyncSequence<InstanceType> {
         AsyncThrowingBackpressureStream { provider in
             try await self.warmupIfNeeded()
             
@@ -590,24 +600,24 @@ extension Datastore {
     public nonisolated func load<IndexedValue: Indexable>(
         _ range: IndexRange<IndexedValue>,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
-    ) -> some TypedAsyncSequence<CodedType> {
+        from keypath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
+    ) -> some TypedAsyncSequence<InstanceType> {
         load(range, order: order, from: keypath)
     }
     
     public nonisolated func load<IndexedValue: Indexable>(
         _ range: Swift.UnboundedRange,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
-    ) -> some TypedAsyncSequence<CodedType> {
+        from keypath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
+    ) -> some TypedAsyncSequence<InstanceType> {
         load(IndexRange<IndexedValue>(), order: order, from: keypath)
     }
     
     public nonisolated func load<IndexedValue: Indexable>(
         _ value: IndexedValue,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<CodedType, _SomeIndexed<IndexedValue>>
-    ) -> some TypedAsyncSequence<CodedType> {
+        from keypath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
+    ) -> some TypedAsyncSequence<InstanceType> {
         load(value...value, order: order, from: keypath)
     }
 }
@@ -615,12 +625,12 @@ extension Datastore {
 // MARK: - Observation
 
 extension Datastore {
-    public func observe(_ idenfifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
+    public func observe(_ idenfifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
         try await self.observe()
             .filter { $0.id == idenfifier }
     }
     
-    public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
+    public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -654,7 +664,7 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - instance: The instance to persist.
     ///   - idenfifier: The unique identifier to use to reference the item being persisted.
     @discardableResult
-    public func persist(_ instance: CodedType, to idenfifier: IdentifierType) async throws -> CodedType? {
+    public func persist(_ instance: InstanceType, to idenfifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         let updatedDescriptor = try self.updatedDescriptor(for: instance)
@@ -668,7 +678,7 @@ extension Datastore where AccessMode == ReadWrite {
             /// Create any missing indexes or prime the datastore for writing.
             try await transaction.apply(descriptor: updatedDescriptor, for: self.key)
             
-            let existingEntry: (cursor: any InstanceCursorProtocol, instance: CodedType, versionData: Data, instanceData: Data)? = try await {
+            let existingEntry: (cursor: any InstanceCursorProtocol, instance: InstanceType, versionData: Data, instanceData: Data)? = try await {
                 do {
                     let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
                     
@@ -883,19 +893,19 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - instance: The instance to persist.
     ///   - keypath: The keypath the identifier is located at.
     @discardableResult
-    public func persist(_ instance: CodedType, id keypath: KeyPath<CodedType, IdentifierType>) async throws -> CodedType? {
+    public func persist(_ instance: InstanceType, id keypath: KeyPath<InstanceType, IdentifierType>) async throws -> InstanceType? {
         try await persist(instance, to: instance[keyPath: keypath])
     }
     
     @discardableResult
-    public func delete(_ idenfifier: IdentifierType) async throws -> CodedType {
+    public func delete(_ idenfifier: IdentifierType) async throws -> InstanceType {
         guard let deletedInstance = try await deleteIfPresent(idenfifier)
         else { throw DatastoreInterfaceError.instanceNotFound }
         return deletedInstance
     }
     
     @discardableResult
-    public func deleteIfPresent(_ idenfifier: IdentifierType) async throws -> CodedType? {
+    public func deleteIfPresent(_ idenfifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -1011,41 +1021,41 @@ extension Datastore where AccessMode == ReadWrite {
     
     /// A read-only view into the data store.
     // TODO: Make a proper copy here
-    public var readOnly: Datastore<Version, CodedType, IdentifierType, ReadOnly> { self as Any as! Datastore<Version, CodedType, IdentifierType, ReadOnly> }
+    public var readOnly: Datastore<Format, ReadOnly> { self as Any as! Datastore<Format, ReadOnly> }
 }
 
-// MARK: Identifiable CodedType
+// MARK: Identifiable InstanceType
 
-extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID {
+extension Datastore where InstanceType: Identifiable, IdentifierType == InstanceType.ID {
     /// Persist an instance to the data store.
     ///
     /// If an instance does not already exist for the specified identifier, it will be created. If an instance already exists, it will be updated.
     /// - Parameter instance: The instance to persist.
     @_disfavoredOverload
     @discardableResult
-    public func persist(_ instance: CodedType) async throws -> CodedType? where AccessMode == ReadWrite {
+    public func persist(_ instance: InstanceType) async throws -> InstanceType? where AccessMode == ReadWrite {
         try await self.persist(instance, to: instance.id)
     }
     
     @_disfavoredOverload
     @discardableResult
-    public func delete(_ instance: CodedType) async throws -> CodedType where AccessMode == ReadWrite {
+    public func delete(_ instance: InstanceType) async throws -> InstanceType where AccessMode == ReadWrite {
         try await self.delete(instance.id)
     }
     
     @_disfavoredOverload
     @discardableResult
-    public func deleteIfPresent(_ instance: CodedType) async throws -> CodedType? where AccessMode == ReadWrite {
+    public func deleteIfPresent(_ instance: InstanceType) async throws -> InstanceType? where AccessMode == ReadWrite {
         try await self.deleteIfPresent(instance.id)
     }
     
     @_disfavoredOverload
-    public func load(_ instance: CodedType) async throws -> CodedType? {
+    public func load(_ instance: InstanceType) async throws -> InstanceType? {
         try await self.load(instance.id)
     }
     
     @_disfavoredOverload
-    public func observe(_ instance: CodedType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, CodedType>> {
+    public func observe(_ instance: InstanceType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
         try await observe(instance.id)
     }
 }
@@ -1057,13 +1067,13 @@ extension Datastore where AccessMode == ReadWrite {
         persistence: some Persistence<AccessMode>,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         identifierType: IdentifierType.Type,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1086,12 +1096,12 @@ extension Datastore where AccessMode == ReadWrite {
         persistence: some Persistence<AccessMode>,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         identifierType: IdentifierType.Type,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let encoder = PropertyListEncoder()
@@ -1121,12 +1131,12 @@ extension Datastore where AccessMode == ReadOnly {
         persistence: some Persistence,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         identifierType: IdentifierType.Type,
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1148,11 +1158,11 @@ extension Datastore where AccessMode == ReadOnly {
         persistence: some Persistence,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         identifierType: IdentifierType.Type,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: CodedType)],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let decoder = PropertyListDecoder()
@@ -1173,18 +1183,18 @@ extension Datastore where AccessMode == ReadOnly {
     }
 }
 
-// MARK: - Identifiable CodedType Initializers
+// MARK: - Identifiable InstanceType Initializers
 
-extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadWrite {
+extension Datastore where InstanceType: Identifiable, IdentifierType == InstanceType.ID, AccessMode == ReadWrite {
     public init(
         persistence: some Persistence<AccessMode>,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
-        encoder: @escaping (_ object: CodedType) async throws -> Data,
-        decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        codedType: InstanceType.Type = InstanceType.self,
+        encoder: @escaping (_ object: InstanceType) async throws -> Data,
+        decoders: [Version: (_ data: Data) async throws -> InstanceType],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -1210,12 +1220,12 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         persistence: some Persistence<AccessMode>,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.JSONStore(
@@ -1242,11 +1252,11 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         persistence: some Persistence<AccessMode>,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.propertyListStore(
@@ -1269,15 +1279,15 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
     }
 }
 
-extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.ID, AccessMode == ReadOnly {
+extension Datastore where InstanceType: Identifiable, IdentifierType == InstanceType.ID, AccessMode == ReadOnly {
     public init(
         persistence: some Persistence,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
-        decoders: [Version: (_ data: Data) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        codedType: InstanceType.Type = InstanceType.self,
+        decoders: [Version: (_ data: Data) async throws -> InstanceType],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -1302,11 +1312,11 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         persistence: some Persistence,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
+        codedType: InstanceType.Type = InstanceType.self,
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyJSONStore(
@@ -1332,10 +1342,10 @@ extension Datastore where CodedType: Identifiable, IdentifierType == CodedType.I
         persistence: some Persistence,
         key: DatastoreKey,
         version: Version,
-        codedType: CodedType.Type = CodedType.self,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> CodedType],
-        directIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<CodedType, _AnyIndexed>] = [],
+        codedType: InstanceType.Type = InstanceType.self,
+        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
+        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
+        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyPropertyListStore(

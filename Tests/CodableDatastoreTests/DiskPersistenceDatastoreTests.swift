@@ -21,56 +21,60 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testWritingEntry() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: String
-            var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
         
-        try await datastore.persist(TestStruct(id: "3", value: "My name is Dimitri"))
-        try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
-        try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
+        try await datastore.persist(.init(id: "3", value: "My name is Dimitri"))
+        try await datastore.persist(.init(id: "1", value: "Hello, World!"))
+        try await datastore.persist(.init(id: "2", value: "Twenty Three is Number One"))
         
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
     }
     
     func testLoadingEntriesFromDisk() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: String
-            var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+            }
         }
         
         do {
             let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
             
-            let datastore = Datastore.JSONStore(
+            let datastore = Datastore<TestFormat, _>.JSONStore(
                 persistence: persistence,
                 key: "test",
-                version: Version.zero,
+                version: .zero,
                 migrations: [
                     .zero: { data, decoder in
-                        try decoder.decode(TestStruct.self, from: data)
+                        try decoder.decode(TestFormat.Instance.self, from: data)
                     }
                 ]
             )
@@ -81,21 +85,21 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let entry0 = try await datastore.load("0")
             XCTAssertNil(entry0)
             
-            try await datastore.persist(TestStruct(id: "3", value: "My name is Dimitri"))
-            try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
-            try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
+            try await datastore.persist(.init(id: "3", value: "My name is Dimitri"))
+            try await datastore.persist(.init(id: "1", value: "Hello, World!"))
+            try await datastore.persist(.init(id: "2", value: "Twenty Three is Number One"))
         } catch { throw error }
         
         /// Create a brand new persistence and load the entries we saved
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
@@ -113,31 +117,33 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testWritingEntryWithIndex() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: String
-            @Indexed var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                @Indexed var value: String
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
         
-        try await datastore.persist(TestStruct(id: "3", value: "My name is Dimitri"))
-        try await datastore.persist(TestStruct(id: "1", value: "Hello, World!"))
-        try await datastore.persist(TestStruct(id: "2", value: "Twenty Three is Number One"))
+        try await datastore.persist(.init(id: "3", value: "My name is Dimitri"))
+        try await datastore.persist(.init(id: "1", value: "Hello, World!"))
+        try await datastore.persist(.init(id: "2", value: "Twenty Three is Number One"))
         
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
@@ -147,24 +153,26 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testObservingEntries() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: String
-            var value: Int
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: Int
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
@@ -187,12 +195,12 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             return total
         }
         
-        try await datastore.persist(TestStruct(id: "3", value: 3))
-        try await datastore.persist(TestStruct(id: "1", value: 1))
-        try await datastore.persist(TestStruct(id: "2", value: 2))
-        try await datastore.persist(TestStruct(id: "1", value: 5))
+        try await datastore.persist(.init(id: "3", value: 3))
+        try await datastore.persist(.init(id: "1", value: 1))
+        try await datastore.persist(.init(id: "2", value: 2))
+        try await datastore.persist(.init(id: "1", value: 5))
         try await datastore.delete("2")
-        try await datastore.persist(TestStruct(id: "1", value: 3))
+        try await datastore.persist(.init(id: "1", value: 3))
         
         let count = try await datastore.count
         XCTAssertEqual(count, 2)
@@ -201,24 +209,26 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testRangeReads() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: Int
-            var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: Int
+                var value: String
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
@@ -228,7 +238,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         XCTAssertEqual(values, [])
         
         for n in 0..<200 {
-            try await datastore.persist(TestStruct(id: n*2, value: "\(n*2)"))
+            try await datastore.persist(.init(id: n*2, value: "\(n*2)"))
         }
         
         let count = try await datastore.count
@@ -290,25 +300,27 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testWritingManyEntries() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: UUID = UUID()
-            var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: UUID = UUID()
+                var value: String
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
@@ -325,7 +337,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         for n in 1...100 {
             let time = ProcessInfo.processInfo.systemUptime
             for _ in 0..<100 {
-                try await datastore.persist(TestStruct(value: valueBank.randomElement()!))
+                try await datastore.persist(.init(value: valueBank.randomElement()!))
             }
             let now = ProcessInfo.processInfo.systemUptime
             print("\(n*100): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
@@ -333,25 +345,27 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testWritingManyEntriesInTransactions() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: UUID = UUID()
-            var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: UUID = UUID()
+                var value: String
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
@@ -369,7 +383,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let time = ProcessInfo.processInfo.systemUptime
             try await persistence.perform {
                 for _ in 0..<5000 {
-                    try await datastore.persist(TestStruct(value: valueBank.randomElement()!))
+                    try await datastore.persist(.init(value: valueBank.randomElement()!))
                 }
             }
             let now = ProcessInfo.processInfo.systemUptime
@@ -378,25 +392,27 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testWritingManyConsecutiveEntriesInTransactions() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: Int
-            var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: Int
+                var value: String
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
@@ -415,7 +431,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             try await persistence.perform {
                 for m in 0..<5000 {
                     let id = (n-1)*5000 + m
-                    try await datastore.persist(TestStruct(id: id, value: valueBank.randomElement()!))
+                    try await datastore.persist(.init(id: id, value: valueBank.randomElement()!))
                 }
             }
             let now = ProcessInfo.processInfo.systemUptime
@@ -424,25 +440,27 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
     }
     
     func testReplacingEntriesInTransactions() async throws {
-        enum Version: Int, CaseIterable {
-            case zero
-        }
-        
-        struct TestStruct: Codable, Identifiable {
-            var id: Int
-            var value: String
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: Int
+                var value: String
+            }
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         try await persistence.createPersistenceIfNecessary()
         
-        let datastore = Datastore.JSONStore(
+        let datastore = Datastore<TestFormat, _>.JSONStore(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
+            version: .zero,
             migrations: [
                 .zero: { data, decoder in
-                    try decoder.decode(TestStruct.self, from: data)
+                    try decoder.decode(TestFormat.Instance.self, from: data)
                 }
             ]
         )
@@ -457,7 +475,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         
         try await persistence.perform {
             for id in 0..<5000 {
-                try await datastore.persist(TestStruct(id: id, value: valueBank.randomElement()!))
+                try await datastore.persist(.init(id: id, value: valueBank.randomElement()!))
             }
         }
         
@@ -466,7 +484,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let time = ProcessInfo.processInfo.systemUptime
             try await persistence.perform {
                 for _ in 0..<100 {
-                    try await datastore.persist(TestStruct(id: Int.random(in: 0..<5000), value: valueBank.randomElement()!))
+                    try await datastore.persist(.init(id: Int.random(in: 0..<5000), value: valueBank.randomElement()!))
                 }
             }
             let now = ProcessInfo.processInfo.systemUptime

@@ -304,8 +304,8 @@ extension DiskPersistence {
 // MARK: - Datastore Interface
 
 extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
-    func register<Version, CodedType, IdentifierType, Access>(
-        datastore: Datastore<Version, CodedType, IdentifierType, Access>
+    func register<Format: DatastoreFormat, Access>(
+        datastore: Datastore<Format, Access>
     ) async throws -> DatastoreDescriptor? {
         try checkIsActive()
         
