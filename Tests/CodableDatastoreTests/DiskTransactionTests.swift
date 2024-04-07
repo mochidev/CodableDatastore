@@ -30,14 +30,15 @@ final class DiskTransactionTests: XCTestCase {
             
             struct Instance: Codable {}
             typealias Identifier = UUID
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
         }
         
         
-        let datastore = Datastore<TestFormat, _>(
+        let datastore = Datastore(
             persistence: persistence,
-            key: "test",
-            version: .zero,
-            identifierType: UUID.self,
+            format: TestFormat.self,
             decoders: [.zero: { _ in (id: UUID(), instance: TestFormat.Instance()) }],
             directIndexes: [],
             computedIndexes: [],
