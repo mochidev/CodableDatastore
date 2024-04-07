@@ -23,19 +23,22 @@ final class DiskTransactionTests: XCTestCase {
     func testApplyDescriptor() async throws {
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
         
-        enum Version: Int, CaseIterable {
-            case zero
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable {}
+            typealias Identifier = UUID
         }
         
-        struct TestStruct: Codable {}
         
-        let datastore = Datastore(
+        let datastore = Datastore<TestFormat, _>(
             persistence: persistence,
             key: "test",
-            version: Version.zero,
-            codedType: TestStruct.self,
+            version: .zero,
             identifierType: UUID.self,
-            decoders: [.zero: { _ in (id: UUID(), instance: TestStruct()) }],
+            decoders: [.zero: { _ in (id: UUID(), instance: TestFormat.Instance()) }],
             directIndexes: [],
             computedIndexes: [],
             configuration: .init()

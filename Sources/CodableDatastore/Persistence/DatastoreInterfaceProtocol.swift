@@ -19,7 +19,7 @@ public protocol DatastoreInterfaceProtocol {
     /// A datastore should only be registered once to a single persistence.
     /// - Parameter datastore: The datastore to register.
     /// - Returns: A descriptor of the datastore as the persistence knows it.
-    func register<Version, CodedType, IdentifierType, AccessMode>(datastore: Datastore<Version, CodedType, IdentifierType, AccessMode>) async throws -> DatastoreDescriptor?
+    func register<Format: DatastoreFormat, AccessMode>(datastore: Datastore<Format, AccessMode>) async throws -> DatastoreDescriptor?
     
     // MARK: Descriptors
     
