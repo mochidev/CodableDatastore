@@ -8,9 +8,6 @@
 
 import Foundation
 
-/// An alias representing the requirements for a property to be indexable, namely that they conform to both ``/Swift/Codable`` and ``/Swift/Comparable``.
-public typealias Indexable = Comparable & Codable
-
 /// A property wrapper to mark a property as one that is indexable by a data store.
 ///
 /// Indexable properties must be ``/Swift/Codable`` so that their values can be encoded and decoded,
