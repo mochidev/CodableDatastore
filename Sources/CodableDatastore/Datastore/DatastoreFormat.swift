@@ -12,7 +12,42 @@ import Foundation
 ///
 /// A ``DatastoreFormat`` will be instanciated and owned by the datastore associated with it to provide both type and index information to the store. It is expected to represent the ideal types for the latest version of the code that is instantiating the datastore.
 ///
+/// This type also exists so implementers can conform a `struct` to it that declares a number of key paths as stored properties.
+///
 /// Conformers can create subtypes for their versioned models either in the body of their struct or in legacy extentions. Additionally, you are encouraged to make **static** properties available for things like the current version, or a configured ``Datastore`` — this allows easy access to them without mucking around declaring them in far-away places in your code base.
+///
+/// ```swift
+/// struct BooksFormat {
+///     static let defaultKey: DatastoreKey = "BooksStore"
+///     static let currentVersion: Version = .one
+///
+///     enum Version: String {
+///         case zero = "2024-04-01"
+///         case one = "2024-04-09"
+///     }
+///
+///     typealias Instance = Book
+///
+///     struct BookV1: Codable, Identifiable {
+///         var id: UUID
+///         var title: String
+///         var author: String
+///     }
+///
+///     struct Book: Codable, Identifiable {
+///         var id: UUID
+///         var title: SortableTitle
+///         var authors: [AuthorID]
+///         var isbn: ISBN
+///     }
+///
+///     let title = Index(\.title)
+///     let author = ManyToMany(\.author)
+///     let isbn = OneToOne(\.isbn)
+/// }
+/// ```
+///
+/// - Note: If your ``Instance`` type is ``/Swift/Identifiable``,  you should _not_ declare an index for `id` — special accessors are created on your behalf that can be used instead.
 ///
 /// - Important: We discourage declaring non-static stored and computed properties on your conforming type, as that will polute the key-path namespace of the format which is used for generating getters on the datastore.
 public protocol DatastoreFormat<Version, Instance, Identifier> {
