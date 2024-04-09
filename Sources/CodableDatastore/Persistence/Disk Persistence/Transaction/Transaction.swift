@@ -365,7 +365,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
                 )
             }
             
-            let secondaryIndexManifests = descriptor.secondaryIndexes.map { (_, index) in
+            let secondaryIndexManifests = descriptor.referenceIndexes.map { (_, index) in
                 DatastoreRootManifest.IndexInfo(
                     name: index.name,
                     id: DatastoreIndexIdentifier(name: index.name),

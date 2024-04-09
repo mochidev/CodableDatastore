@@ -26,6 +26,7 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
     public typealias IdentifierType = Format.Identifier
     
     let persistence: any Persistence
+    let format: Format
     let key: DatastoreKey
     let version: Version
     let encoder: (_ instance: InstanceType) async throws -> Data
@@ -56,6 +57,7 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
         self.persistence = persistence
+        self.format = Format()
         self.key = key
         self.version = version
         self.encoder = encoder
@@ -80,6 +82,7 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
         self.persistence = persistence
+        self.format = Format()
         self.key = key
         self.version = version
         self.encoder = { _ in preconditionFailure("Encode called on read-only instance.") }
@@ -92,17 +95,15 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
 // MARK: - Helper Methods
 
 extension Datastore {
+    // TODO: Remove instance requirement from this method.
     func updatedDescriptor(for instance: InstanceType) throws -> DatastoreDescriptor {
         if let updatedDescriptor {
             return updatedDescriptor
         }
         
         let descriptor = try DatastoreDescriptor(
-            version: version,
-            sampleInstance: instance,
-            identifierType: IdentifierType.self,
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes
+            format: format,
+            version: version
         )
         updatedDescriptor = descriptor
         return descriptor
@@ -221,8 +222,8 @@ extension Datastore {
                 }
                 
                 /// Check existing secondary indexes for compatibility
-                for (_, persistedIndex) in persistedDescriptor.secondaryIndexes {
-                    if let updatedIndex = updatedDescriptor.secondaryIndexes[persistedIndex.name] {
+                for (_, persistedIndex) in persistedDescriptor.referenceIndexes {
+                    if let updatedIndex = updatedDescriptor.referenceIndexes[persistedIndex.name] {
                         /// If the index still exists, make sure it is compatible
                         if persistedIndex.type != updatedIndex.type {
                             /// They were not compatible, so delete the bad index, and queue it to be re-built.
@@ -236,8 +237,8 @@ extension Datastore {
                 }
                 
                 /// Check for new secondary indexes to build
-                for (_, updatedIndex) in updatedDescriptor.secondaryIndexes {
-                    guard persistedDescriptor.secondaryIndexes[updatedIndex.name] == nil else { continue }
+                for (_, updatedIndex) in updatedDescriptor.referenceIndexes {
+                    guard persistedDescriptor.referenceIndexes[updatedIndex.name] == nil else { continue }
                     /// The index does not yet exist, so queue it to be built.
                     secondaryIndexesToBuild.insert(updatedIndex.name)
                 }
@@ -392,7 +393,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.referenceIndexes[index.path],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
                 let version = try? Version(matchingIndex.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
@@ -411,7 +412,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.secondaryIndexes[index.path],
+                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.referenceIndexes[index.path],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
                 let version = try? Version(matchingIndex.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.

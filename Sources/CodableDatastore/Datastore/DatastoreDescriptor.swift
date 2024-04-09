@@ -11,7 +11,7 @@ import Foundation
 /// A description of a ``Datastore``'s requirements of a persistence.
 ///
 /// A persistence is expected to save a description and retrieve it when a connected ``Datastore`` requests it. The ``Datastore`` then uses it to compute if indexes need to be invalidated or re-built.
-public struct DatastoreDescriptor: Codable, Equatable, Hashable {
+public struct DatastoreDescriptor: Equatable, Hashable {
     /// The version that was current at time of serialization.
     ///
     /// If a ``Datastore`` cannot decode this version, the datastore is presumed inaccessible, and any reads or writes will fail.
@@ -20,7 +20,7 @@ public struct DatastoreDescriptor: Codable, Equatable, Hashable {
     /// The main type the ``Datastore`` serves.
     ///
     /// This type information is strictly informational — it can freely change between runs so long as the codable representations are compatible.
-    public var codedType: String
+    public var instanceType: String
     
     /// The type used to identify instances in the ``Datastore``.
     ///
@@ -39,10 +39,57 @@ public struct DatastoreDescriptor: Codable, Equatable, Hashable {
     /// Secondary indexes store just the value being indexed, and point to the object in the primary datastore.
     ///
     /// If the index produces the same value, the identifier of the instance is implicitly used as a secondary sort parameter.
-    public var secondaryIndexes: [String : IndexDescriptor]
+    public var referenceIndexes: [String : IndexDescriptor]
     
     /// The number of instances the ``Datastore`` manages.
     public var size: Int
+}
+
+extension DatastoreDescriptor {
+    @available(*, deprecated, renamed: "instanceType", message: "Deprecated in favor of instanceType.")
+    public var codedType: String {
+        get { instanceType }
+        set { instanceType = newValue }
+    }
+    
+    @available(*, deprecated, renamed: "referenceIndexes", message: "Deprecated in favor of referenceIndexes.")
+    public var secondaryIndexes: [String : IndexDescriptor] {
+        get { referenceIndexes }
+        set { referenceIndexes = newValue }
+    }
+}
+
+extension DatastoreDescriptor: Codable {
+    enum CodingKeys: CodingKey {
+        case version
+        case instanceType
+        case codedType // Deprecated
+        case identifierType
+        case directIndexes
+        case referenceIndexes
+        case secondaryIndexes // Deprecated
+        case size
+    }
+    
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.version = try container.decode(Data.self, forKey: .version)
+        self.instanceType = try container.decodeIfPresent(String.self, forKey: .instanceType) ?? container.decode(String.self, forKey: .codedType)
+        self.identifierType = try container.decode(String.self, forKey: .identifierType)
+        self.directIndexes = try container.decode([String : DatastoreDescriptor.IndexDescriptor].self, forKey: .directIndexes)
+        self.referenceIndexes = try container.decodeIfPresent([String : DatastoreDescriptor.IndexDescriptor].self, forKey: .referenceIndexes) ?? container.decode([String : DatastoreDescriptor.IndexDescriptor].self, forKey: .secondaryIndexes)
+        self.size = try container.decode(Int.self, forKey: .size)
+    }
+    
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.version, forKey: .version)
+        try container.encode(self.instanceType, forKey: .instanceType)
+        try container.encode(self.identifierType, forKey: .identifierType)
+        try container.encode(self.directIndexes, forKey: .directIndexes)
+        try container.encode(self.referenceIndexes, forKey: .referenceIndexes)
+        try container.encode(self.size, forKey: .size)
+    }
 }
 
 extension DatastoreDescriptor {
@@ -74,105 +121,55 @@ extension DatastoreDescriptor {
 extension DatastoreDescriptor {
     /// Initialize a descriptor from types a ``Datastore`` deals in directly.
     /// 
-    /// This will use Swift reflection to infer the indexable properties from those that use the @``Indexed`` property wrapper.
-    /// 
+    /// This will use Swift reflection to infer the indexes from the conforming ``DatastoreFormat`` instance.
+    ///
     /// - Parameters:
+    ///   - format:The format of the datastore as described by the caller.
     ///   - version: The current version being used by a data store.
-    ///   - sampleInstance: A sample instance to use reflection on.
-    ///   - identifierType: The identifier type the data store was created with.
-    ///   - directIndexPaths: A list of direct indexes to describe from the sample instance.
-    ///   - computedIndexPaths: Additional secondary indexes to describe from the same instance.
-    init<
-        Version: RawRepresentable & Hashable & CaseIterable,
-        CodedType: Codable,
-        IdentifierType: Indexable
-    >(
-        version: Version,
-        sampleInstance: CodedType,
-        identifierType: IdentifierType.Type,
-        directIndexes directIndexPaths: [IndexPath<CodedType, _AnyIndexed>],
-        computedIndexes computedIndexPaths: [IndexPath<CodedType, _AnyIndexed>]
-    ) throws where Version.RawValue: Indexable {
+    init<Format: DatastoreFormat>(
+        format: Format,
+        version: Format.Version
+    ) throws {
         let versionData = try Data(version)
         
-        var directIndexes: Set<IndexDescriptor> = []
-        var secondaryIndexes: Set<IndexDescriptor> = []
+        var directIndexes: [String : IndexDescriptor] = [:]
+        var referenceIndexes: [String : IndexDescriptor] = [:]
         
-        for indexPath in computedIndexPaths {
-            let indexDescriptor = IndexDescriptor(
-                version: versionData,
-                sampleInstance: sampleInstance,
-                indexPath: indexPath
-            )
+        format.mapReferenceIndexes { indexName, index in
+            guard Format.Instance.self as? any Identifiable.Type == nil || indexName != "id"
+            else { return }
             
-            /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.name == "$id" && sampleInstance is any Identifiable {
-                continue
-            }
-            
-            secondaryIndexes.insert(indexDescriptor)
-        }
-        
-        for indexPath in directIndexPaths {
-            let indexDescriptor = IndexDescriptor(
-                version: versionData,
-                sampleInstance: sampleInstance,
-                indexPath: indexPath
-            )
-            
-            /// If the type is identifiable, skip the `id` index as we always make one based on `id`
-            if indexDescriptor.name == "$id" && sampleInstance is any Identifiable {
-                continue
-            }
-            
-            /// Make sure the secondary indexes don't contain any of the direct indexes
-            secondaryIndexes.remove(indexDescriptor)
-            directIndexes.insert(indexDescriptor)
-        }
-        
-        Mirror.indexedChildren(from: sampleInstance) { indexName, value in
-            let indexName = IndexName(indexName)
             let indexDescriptor = IndexDescriptor(
                 version: versionData,
                 name: indexName,
-                type: value.projectedValue.indexedType
+                type: index.indexType
             )
             
-            if !directIndexes.contains(indexDescriptor) {
-                secondaryIndexes.insert(indexDescriptor)
-            }
+            referenceIndexes[indexName.rawValue] = indexDescriptor
+        }
+        
+        format.mapDirectIndexes { indexName, index in
+            guard Format.Instance.self as? any Identifiable.Type == nil || indexName != "id"
+            else { return }
+            
+            let indexDescriptor = IndexDescriptor(
+                version: versionData,
+                name: indexName,
+                type: index.indexType
+            )
+            
+            /// Make sure the reference indexes don't contain any of the direct indexes
+            referenceIndexes.removeValue(forKey: indexName.rawValue)
+            directIndexes[indexName.rawValue] = indexDescriptor
         }
         
         self.init(
             version: versionData,
-            codedType: String(describing: type(of: sampleInstance)),
-            identifierType: String(describing: identifierType),
-            directIndexes: Dictionary(uniqueKeysWithValues: directIndexes.map({ ($0.name.rawValue, $0) })),
-            secondaryIndexes: Dictionary(uniqueKeysWithValues: secondaryIndexes.map({ ($0.name.rawValue, $0) })),
+            instanceType: String(describing: Format.Instance.self),
+            identifierType: String(describing: Format.Identifier.self),
+            directIndexes: directIndexes,
+            referenceIndexes: referenceIndexes,
             size: 0
-        )
-    }
-}
-
-extension DatastoreDescriptor.IndexDescriptor {
-    /// Initialize a descriptor from a key path.
-    ///
-    /// - Parameters:
-    ///   - version: The current version being used by a data store.
-    ///   - sampleInstance: A sample instance to probe for type information.
-    ///   - indexPath: The ``IndexPath`` to the indexed property.
-    init<CodedType: Codable>(
-        version: Data,
-        sampleInstance: CodedType,
-        indexPath: IndexPath<CodedType, _AnyIndexed>
-    ) {
-        let sampleIndexValue = sampleInstance[keyPath: indexPath]
-        let indexType = sampleIndexValue.indexedType
-        
-        self.init(
-            version: version,
-            name: indexPath.path,
-            type: indexType
         )
     }
 }

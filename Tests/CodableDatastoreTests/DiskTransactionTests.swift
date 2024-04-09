@@ -47,10 +47,10 @@ final class DiskTransactionTests: XCTestCase {
         
         let descriptor = DatastoreDescriptor(
             version: Data([0x00]),
-            codedType: "TestStruct",
+            instanceType: "TestStruct",
             identifierType: "UUID",
             directIndexes: [:],
-            secondaryIndexes: [:],
+            referenceIndexes: [:],
             size: 0
         )
         

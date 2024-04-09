@@ -156,7 +156,7 @@ extension DiskPersistence.Datastore.RootObject {
         var manifest = originalManifest
         
         manifest.descriptor.version = descriptor.version
-        manifest.descriptor.codedType = descriptor.codedType
+        manifest.descriptor.instanceType = descriptor.instanceType
         manifest.descriptor.identifierType = descriptor.identifierType
         
         var createdIndexes: Set<DiskPersistence.Datastore.Index> = []
@@ -202,12 +202,12 @@ extension DiskPersistence.Datastore.RootObject {
             )
         }
         
-        for (_, indexDescriptor) in descriptor.secondaryIndexes {
+        for (_, indexDescriptor) in descriptor.referenceIndexes {
             let indexName = indexDescriptor.name
             let indexType = indexDescriptor.type
             var version = indexDescriptor.version
             
-            if let originalVersion = originalManifest.descriptor.secondaryIndexes[indexName]?.version {
+            if let originalVersion = originalManifest.descriptor.referenceIndexes[indexName]?.version {
                 version = originalVersion
             } else {
                 let indexInfo = DatastoreRootManifest.IndexInfo(
@@ -229,7 +229,7 @@ extension DiskPersistence.Datastore.RootObject {
                 manifest.secondaryIndexManifests.append(indexInfo)
             }
             
-            manifest.descriptor.secondaryIndexes[indexName] = DatastoreDescriptor.IndexDescriptor(
+            manifest.descriptor.referenceIndexes[indexName] = DatastoreDescriptor.IndexDescriptor(
                 version: version,
                 name: indexName,
                 type: indexType
@@ -339,7 +339,7 @@ extension DiskPersistence.Datastore.RootObject {
             if let entryIndex = updatedManifest.secondaryIndexManifests.firstIndex(where: { $0.id == indexID }) {
                 let indexName = updatedManifest.secondaryIndexManifests[entryIndex].name
                 updatedManifest.secondaryIndexManifests.remove(at: entryIndex)
-                updatedManifest.descriptor.secondaryIndexes.removeValue(forKey: indexName)
+                updatedManifest.descriptor.referenceIndexes.removeValue(forKey: indexName)
             }
         }
         
