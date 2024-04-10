@@ -95,58 +95,92 @@ public protocol DatastoreFormat<Version, Instance, Identifier> {
     /// This type of index is common when building relationships between different instances, where one instance may be related to several others in some way.
     typealias ManyToOneIndex<S: Sequence<Value>, Value: Indexable & DiscreteIndexable> = ManyToOneIndexRepresentation<Instance, S, Value>
     
-    /// Map through the declared direct indexes, processing them as necessary.
+    /// Map through the declared indexes, processing them as necessary.
     ///
     /// Although a default implementation is provided, this method can also be implemented manually by calling transform once for every index that should be registered.
-    /// - Parameter transform: A transformation that will be called for every direct index.
-    func mapDirectIndexes(transform: (_ indexName: IndexName, _ index: any IndexRepresentation<Instance>) throws -> ()) rethrows
+    /// - Parameter transform: A transformation that will be called for every index.
+    func mapIndexRepresentations(assertIdentifiable: Bool, transform: (GeneratedIndexRepresentation<Instance>) throws -> ()) rethrows
     
-    /// Map through the declared reference or secondary indexes, processing them as necessary.
+    /// Map through the declared indexes asynchronously, processing them as necessary.
     ///
     /// Although a default implementation is provided, this method can also be implemented manually by calling transform once for every index that should be registered.
-    /// - Parameter transform: A transformation that will be called for every reference index.
-    func mapReferenceIndexes(transform: (_ indexName: IndexName, _ index: any IndexRepresentation<Instance>) throws -> ()) rethrows
+    /// - Parameter transform: A transformation that will be called for every index.
+    func mapIndexRepresentations(assertIdentifiable: Bool, transform: (GeneratedIndexRepresentation<Instance>) async throws -> ()) async rethrows
 }
 
 extension DatastoreFormat {
-    func mapDirectIndexes(transform: (_ indexName: IndexName, _ index: any IndexRepresentation<Instance>) throws -> ()) rethrows {
+    public func mapIndexRepresentations(
+        assertIdentifiable: Bool = false,
+        transform: (GeneratedIndexRepresentation<Instance>) throws -> ()
+    ) rethrows {
         let mirror = Mirror(reflecting: self)
         
         for child in mirror.children {
-            guard let label = child.label else { continue }
-            guard 
-                let erasedIndexRepresentation = child.value as? any DirectIndexRepresentation,
-                let index = erasedIndexRepresentation.index(matching: Instance.self)
+            guard let generatedIndex = generateIndexRepresentation(child: child, assertIdentifiable: assertIdentifiable)
             else { continue }
-
-            let indexName = if label.prefix(1) == "_" {
-                IndexName("\(label.dropFirst())")
-            } else {
-                IndexName(label)
-            }
             
-            try transform(indexName, index)
+            try transform(generatedIndex)
         }
     }
     
-    func mapReferenceIndexes(transform: (_ indexName: IndexName, _ index: any IndexRepresentation<Instance>) throws -> ()) rethrows {
+    public func mapIndexRepresentations(
+        assertIdentifiable: Bool = false,
+        transform: (GeneratedIndexRepresentation<Instance>) async throws -> ()
+    ) async rethrows {
         let mirror = Mirror(reflecting: self)
         
         for child in mirror.children {
-            guard let label = child.label else { continue }
-            guard 
-                let erasedIndexRepresentation = child.value as? any IndexRepresentation,
-                let index = erasedIndexRepresentation.matches(Instance.self)
+            guard let generatedIndex = generateIndexRepresentation(child: child, assertIdentifiable: assertIdentifiable)
             else { continue }
             
-            let indexName = if label.prefix(1) == "_" {
-                IndexName("\(label.dropFirst())")
-            } else {
-                IndexName(label)
-            }
-            
-            try transform(indexName, index)
+            try await transform(generatedIndex)
         }
+    }
+    
+    /// Generate an index representation for a given mirror's child, or return nil if no valid index was found.
+    /// - Parameters:
+    ///   - child: The child to introspect.
+    ///   - assertIdentifiable: A flag to throw an assert if an `id` field was found when it would otherwise be a mistake.
+    /// - Returns: The generated index representation, or nil if one could not be found.
+    public func generateIndexRepresentation(
+        child: Mirror.Child,
+        assertIdentifiable: Bool = false
+    ) -> GeneratedIndexRepresentation<Instance>? {
+        guard let label = child.label else { return nil }
+        
+        let storage: IndexStorage
+        let index: any IndexRepresentation<Instance>
+        if let erasedIndexRepresentation = child.value as? any DirectIndexRepresentation,
+           let matchingIndex = erasedIndexRepresentation.index(matching: Instance.self) {
+            index = matchingIndex
+            storage = .direct
+        } else if let erasedIndexRepresentation = child.value as? any IndexRepresentation,
+                  let matchingIndex = erasedIndexRepresentation.matches(Instance.self) {
+            index = matchingIndex
+            storage = .reference
+        } else {
+            return nil
+        }
+        
+        let indexName = if label.prefix(1) == "_" {
+            IndexName("\(label.dropFirst())")
+        } else {
+            IndexName(label)
+        }
+        
+        /// If the type is identifiable, skip the `id` index as we always make one based on `id`
+        if indexName == "id", Instance.self as? any Identifiable.Type != nil {
+            if assertIdentifiable {
+                assertionFailure("\(String(describing: Self.self)) declared `id` as an index, when the conformance is automatic since \(String(describing: Instance.self)) is Identifiable and \(String(describing: Self.self)).ID matches \(String(describing: Identifier.self)). Please remove the `id` member from the format.")
+            }
+            return nil
+        }
+        
+        return GeneratedIndexRepresentation(
+            indexName: indexName,
+            index: index,
+            storage: storage
+        )
     }
 }
 

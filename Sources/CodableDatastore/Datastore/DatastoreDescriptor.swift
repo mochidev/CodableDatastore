@@ -135,32 +135,25 @@ extension DatastoreDescriptor {
         var directIndexes: [String : IndexDescriptor] = [:]
         var referenceIndexes: [String : IndexDescriptor] = [:]
         
-        format.mapReferenceIndexes { indexName, index in
+        format.mapIndexRepresentations { generatedRepresentation in
+            let indexName = generatedRepresentation.indexName
             guard Format.Instance.self as? any Identifiable.Type == nil || indexName != "id"
             else { return }
             
             let indexDescriptor = IndexDescriptor(
                 version: versionData,
                 name: indexName,
-                type: index.indexType
+                type: generatedRepresentation.index.indexType
             )
             
-            referenceIndexes[indexName.rawValue] = indexDescriptor
-        }
-        
-        format.mapDirectIndexes { indexName, index in
-            guard Format.Instance.self as? any Identifiable.Type == nil || indexName != "id"
-            else { return }
-            
-            let indexDescriptor = IndexDescriptor(
-                version: versionData,
-                name: indexName,
-                type: index.indexType
-            )
-            
-            /// Make sure the reference indexes don't contain any of the direct indexes
-            referenceIndexes.removeValue(forKey: indexName.rawValue)
-            directIndexes[indexName.rawValue] = indexDescriptor
+            switch generatedRepresentation.storage {
+            case .direct:
+                /// Make sure the reference indexes don't contain any of the direct indexes
+                referenceIndexes.removeValue(forKey: indexName.rawValue)
+                directIndexes[indexName.rawValue] = indexDescriptor
+            case .reference:
+                referenceIndexes[indexName.rawValue] = indexDescriptor
+            }
         }
         
         self.init(
