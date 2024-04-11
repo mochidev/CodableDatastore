@@ -10,6 +10,13 @@ enum SortOrder {
     case ascending
     case equal
     case descending
+    
+    init(_ order: RangeOrder) {
+        switch order {
+        case .ascending: self = .ascending
+        case .descending: self = .descending
+        }
+    }
 }
 
 extension Comparable {
@@ -22,25 +29,13 @@ extension Comparable {
 
 extension RangeBoundExpression {
     func sortOrder(comparedTo rhs: Bound, order: RangeOrder) -> SortOrder {
-        switch order {
-        case .ascending:
-            switch self {
-            case .extent:
-                return .ascending
-            case .excluding(let bound):
-                return bound < rhs ? .ascending : .descending
-            case .including(let bound):
-                return bound <= rhs ? .ascending : .descending
-            }
-        case .descending:
-            switch self {
-            case .extent:
-                return .descending
-            case .excluding(let bound):
-                return bound <= rhs ? .ascending : .descending
-            case .including(let bound):
-                return bound < rhs ? .ascending : .descending
-            }
+        switch (order, self) {
+        case (.ascending, .extent):                 .ascending
+        case (.ascending, .excluding(let bound)):   bound < rhs ? .ascending : .descending
+        case (.ascending, .including(let bound)):   bound <= rhs ? .ascending : .descending
+        case (.descending, .extent):                .descending
+        case (.descending, .excluding(let bound)):  rhs < bound ? .descending : .ascending
+        case (.descending, .including(let bound)):  rhs <= bound ? .descending : .ascending
         }
     }
 }

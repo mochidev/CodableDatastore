@@ -626,8 +626,9 @@ private func primaryIndexBoundComparator<IdentifierType: Indexable>(lhs: (bound:
     guard rhs.headers.count == 2
     else { throw DiskPersistenceError.invalidEntryFormat }
     
-    let identifierBytes = rhs.headers[1]
+    if case .extent = lhs.bound { return SortOrder(lhs.order) }
     
+    let identifierBytes = rhs.headers[1]
     let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(identifierBytes))
     
     return lhs.bound.sortOrder(comparedTo: entryIdentifier, order: lhs.order)
@@ -637,8 +638,9 @@ private func directIndexBoundComparator<IndexType: Indexable>(lhs: (bound: Range
     guard rhs.headers.count == 3
     else { throw DiskPersistenceError.invalidEntryFormat }
     
-    let indexBytes = rhs.headers[1]
+    if case .extent = lhs.bound { return SortOrder(lhs.order) }
     
+    let indexBytes = rhs.headers[1]
     let indexedValue = try JSONDecoder.shared.decode(IndexType.self, from: Data(indexBytes))
     
     return lhs.bound.sortOrder(comparedTo: indexedValue, order: lhs.order)
@@ -648,8 +650,9 @@ private func secondaryIndexBoundComparator<IndexType: Indexable>(lhs: (bound: Ra
     guard rhs.headers.count == 1
     else { throw DiskPersistenceError.invalidEntryFormat }
     
-    let indexBytes = rhs.headers[0]
+    if case .extent = lhs.bound { return SortOrder(lhs.order) }
     
+    let indexBytes = rhs.headers[0]
     let indexedValue = try JSONDecoder.shared.decode(IndexType.self, from: Data(indexBytes))
     
     return lhs.bound.sortOrder(comparedTo: indexedValue, order: lhs.order)
@@ -670,22 +673,23 @@ extension DiskPersistence.Transaction {
         
         switch range.order {
         case .ascending:
-            let startCursor: DiskPersistence.InsertionCursor
-            if range.lowerBoundExpression == .extent {
-                startCursor = await index.firstInsertionCursor
+            let startCursor = if range.lowerBoundExpression == .extent {
+                await index.firstInsertionCursor
             } else {
-                startCursor = try await index.insertionCursor(
-                    for: (range.lowerBoundExpression, range.order),
+                try await index.insertionCursor(
+                    for: (range.lowerBoundExpression, .ascending),
                     comparator: primaryIndexBoundComparator
                 )
             }
             
             try await index.forwardScanEntries(after: startCursor) { entry in
-                guard case .descending = try primaryIndexBoundComparator(
-                    lhs: (bound: range.upperBoundExpression, order: .descending),
-                    rhs: entry
-                )
-                else { return false }
+                if range.upperBoundExpression != .extent {
+                    guard case .descending = try primaryIndexBoundComparator(
+                        lhs: (bound: range.upperBoundExpression, order: .descending),
+                        rhs: entry
+                    )
+                    else { return false }
+                }
                 
                 let versionData = Data(entry.headers[0])
                 let instanceData = Data(entry.content)
@@ -694,22 +698,23 @@ extension DiskPersistence.Transaction {
                 return true
             }
         case .descending:
-            let startCursor: DiskPersistence.InsertionCursor
-            if range.upperBoundExpression == .extent {
-                startCursor = try await index.lastInsertionCursor
+            let startCursor = if range.upperBoundExpression == .extent {
+                try await index.lastInsertionCursor
             } else {
-                startCursor = try await index.insertionCursor(
-                    for: (range.upperBoundExpression, range.order),
+                try await index.insertionCursor(
+                    for: (range.upperBoundExpression, .descending),
                     comparator: primaryIndexBoundComparator
                 )
             }
             
             try await index.backwardScanEntries(before: startCursor) { entry in
-                guard case .ascending = try primaryIndexBoundComparator(
-                    lhs: (bound: range.lowerBoundExpression, order: .ascending),
-                    rhs: entry
-                )
-                else { return false }
+                if range.lowerBoundExpression != .extent {
+                    guard case .ascending = try primaryIndexBoundComparator(
+                        lhs: (bound: range.lowerBoundExpression, order: .ascending),
+                        rhs: entry
+                    )
+                    else { return false }
+                }
                 
                 let versionData = Data(entry.headers[0])
                 let instanceData = Data(entry.content)
@@ -736,17 +741,23 @@ extension DiskPersistence.Transaction {
         
         switch range.order {
         case .ascending:
-            let startCursor = try await index.insertionCursor(
-                for: (range.lowerBoundExpression, range.order),
-                comparator: directIndexBoundComparator
-            )
+            let startCursor = if range.lowerBoundExpression == .extent {
+                await index.firstInsertionCursor
+            } else {
+                try await index.insertionCursor(
+                    for: (range.lowerBoundExpression, .ascending),
+                    comparator: directIndexBoundComparator
+                )
+            }
             
             try await index.forwardScanEntries(after: startCursor) { entry in
-                guard case .descending = try directIndexBoundComparator(
-                    lhs: (bound: range.upperBoundExpression, order: .descending),
-                    rhs: entry
-                )
-                else { return false }
+                if range.upperBoundExpression != .extent {
+                    guard case .descending = try directIndexBoundComparator(
+                        lhs: (bound: range.upperBoundExpression, order: .descending),
+                        rhs: entry
+                    )
+                    else { return false }
+                }
                 
                 let versionData = Data(entry.headers[0])
                 let instanceData = Data(entry.content)
@@ -755,17 +766,23 @@ extension DiskPersistence.Transaction {
                 return true
             }
         case .descending:
-            let startCursor = try await index.insertionCursor(
-                for: (range.upperBoundExpression, range.order),
-                comparator: directIndexBoundComparator
-            )
+            let startCursor = if range.upperBoundExpression == .extent {
+                try await index.lastInsertionCursor
+            } else {
+                try await index.insertionCursor(
+                    for: (range.upperBoundExpression, .descending),
+                    comparator: directIndexBoundComparator
+                )
+            }
             
             try await index.backwardScanEntries(before: startCursor) { entry in
-                guard case .ascending = try directIndexBoundComparator(
-                    lhs: (bound: range.lowerBoundExpression, order: .ascending),
-                    rhs: entry
-                )
-                else { return false }
+                if range.lowerBoundExpression != .extent {
+                    guard case .ascending = try directIndexBoundComparator(
+                        lhs: (bound: range.lowerBoundExpression, order: .ascending),
+                        rhs: entry
+                    )
+                    else { return false }
+                }
                 
                 let versionData = Data(entry.headers[0])
                 let instanceData = Data(entry.content)
@@ -792,34 +809,46 @@ extension DiskPersistence.Transaction {
         
         switch range.order {
         case .ascending:
-            let startCursor = try await index.insertionCursor(
-                for: (range.lowerBoundExpression, range.order),
-                comparator: secondaryIndexBoundComparator
-            )
+            let startCursor = if range.lowerBoundExpression == .extent {
+                await index.firstInsertionCursor
+            } else {
+                try await index.insertionCursor(
+                    for: (range.lowerBoundExpression, .ascending),
+                    comparator: secondaryIndexBoundComparator
+                )
+            }
             
             try await index.forwardScanEntries(after: startCursor) { entry in
-                guard case .descending = try secondaryIndexBoundComparator(
-                    lhs: (bound: range.upperBoundExpression, order: .descending),
-                    rhs: entry
-                )
-                else { return false }
+                if range.upperBoundExpression != .extent {
+                    guard case .descending = try secondaryIndexBoundComparator(
+                        lhs: (bound: range.upperBoundExpression, order: .descending),
+                        rhs: entry
+                    )
+                    else { return false }
+                }
                 
                 let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(entry.content))
                 try await identifierConsumer(entryIdentifier)
                 return true
             }
         case .descending:
-            let startCursor = try await index.insertionCursor(
-                for: (range.upperBoundExpression, range.order),
-                comparator: secondaryIndexBoundComparator
-            )
+            let startCursor = if range.upperBoundExpression == .extent {
+                try await index.lastInsertionCursor
+            } else {
+                try await index.insertionCursor(
+                    for: (range.upperBoundExpression, .descending),
+                    comparator: secondaryIndexBoundComparator
+                )
+            }
             
             try await index.backwardScanEntries(before: startCursor) { entry in
-                guard case .ascending = try secondaryIndexBoundComparator(
-                    lhs: (bound: range.lowerBoundExpression, order: .ascending),
-                    rhs: entry
-                )
-                else { return false }
+                if range.lowerBoundExpression != .extent {
+                    guard case .ascending = try secondaryIndexBoundComparator(
+                        lhs: (bound: range.lowerBoundExpression, order: .ascending),
+                        rhs: entry
+                    )
+                    else { return false }
+                }
                 
                 let entryIdentifier = try JSONDecoder.shared.decode(IdentifierType.self, from: Data(entry.content))
                 try await identifierConsumer(entryIdentifier)
