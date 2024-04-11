@@ -180,6 +180,13 @@ public struct IndexRange<Bound: Comparable>: IndexRangeExpression {
         self.upperBoundExpression = upperBoundExpression
         self.order = order
     }
+    
+    /// An index range spanning a single value.
+    public init(only value: Bound) {
+        self.lowerBoundExpression = .including(value)
+        self.upperBoundExpression = .including(value)
+        self.order = .ascending
+    }
 }
 
 infix operator ..>
