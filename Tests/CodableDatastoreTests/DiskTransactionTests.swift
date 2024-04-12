@@ -40,8 +40,6 @@ final class DiskTransactionTests: XCTestCase {
             persistence: persistence,
             format: TestFormat.self,
             decoders: [.zero: { _ in (id: UUID(), instance: TestFormat.Instance()) }],
-            directIndexes: [],
-            computedIndexes: [],
             configuration: .init()
         )
         

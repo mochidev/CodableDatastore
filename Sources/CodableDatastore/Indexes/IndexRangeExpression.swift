@@ -189,6 +189,10 @@ public struct IndexRange<Bound: Comparable>: IndexRangeExpression {
     }
 }
 
+extension IndexRange where Bound == Never {
+    static let unbounded = IndexRange()
+}
+
 infix operator ..>
 postfix operator ..>
 
