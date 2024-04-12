@@ -182,5 +182,5 @@ extension DatastoreFormat {
 //}
 
 extension DatastoreFormat where Instance: Identifiable, Instance.ID: Indexable & DiscreteIndexable {
-    typealias Identifier = Instance.ID
+    public typealias Identifier = Instance.ID
 }
