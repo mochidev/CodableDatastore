@@ -128,11 +128,13 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             
             struct Instance: Codable, Identifiable {
                 var id: String
-                @Indexed var value: String
+                var value: String
             }
             
             static let defaultKey: DatastoreKey = "test"
             static let currentVersion = Version.zero
+            
+            let value = Index(\.value)
         }
         
         let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
@@ -154,8 +156,160 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
         
-        let values = try await datastore.load("A"..."Z", order: .descending, from: IndexPath(uncheckedKeyPath: \.$value, path: "$value")).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
         XCTAssertEqual(values, ["2", "3", "1"])
+    }
+    
+    func testWritingEntryWithOneToOneIndex() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let value = OneToOneIndex(\.value)
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        try await datastore.persist(.init(id: "3", value: "My name is Dimitri"))
+        try await datastore.persist(.init(id: "1", value: "Hello, World!"))
+        try await datastore.persist(.init(id: "2", value: "Twenty Three is Number One"))
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 3)
+        
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["2", "3", "1"])
+        let value3 = try await datastore.load("My name is Dimitri", from: \.value).map { $0.id }
+        XCTAssertEqual(value3, "3")
+        let value1 = try await datastore.load("Hello, World!", from: \.value).map { $0.id }
+        XCTAssertEqual(value1, "1")
+        let value2 = try await datastore.load("Twenty Three is Number One", from: \.value).map { $0.id }
+        XCTAssertEqual(value2, "2")
+        let valueNil = try await datastore.load("D", from: \.value).map { $0.id }
+        XCTAssertNil(valueNil)
+    }
+    
+    func testWritingEntryWithManyToManyIndex() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: [String]
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let value = ManyToManyIndex(\.value)
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        try await datastore.persist(.init(id: "3", value: ["My name is Dimitri", "A", "B"]))
+        try await datastore.persist(.init(id: "1", value: ["Hello, World!", "B", "B", "C"]))
+        try await datastore.persist(.init(id: "2", value: ["Twenty Three is Number One", "C"]))
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 3)
+        
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["2", "3", "1", "2", "1", "3", "1", "3"])
+        let valuesA = try await datastore.load("A", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesA, ["3"])
+        let valuesB = try await datastore.load("B", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesB, ["3", "1"])
+        let valuesC = try await datastore.load("C", order: .ascending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesC, ["1", "2"])
+        let valuesD = try await datastore.load("D", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesD, [])
+    }
+    
+    func testWritingEntryWithManyToOneIndex() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: [String]
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let value = ManyToOneIndex(\.value)
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        try await datastore.persist(.init(id: "3", value: ["My name is Dimitri", "A", "B"]))
+        try await datastore.persist(.init(id: "1", value: ["Hello, World!", "B", "B", "C"]))
+        try await datastore.persist(.init(id: "2", value: ["Twenty Three is Number One", "C"]))
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 3)
+        
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(values, ["2", "3", "1", "2", "1", "3", "1", "3"])
+        let valuesA = try await datastore.load("A", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesA, ["3"])
+        let valueA = try await datastore.load("A", from: \.value).map { $0.id }
+        XCTAssertEqual(valueA, "3")
+        let valuesB = try await datastore.load("B", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesB, ["3", "1"])
+        let valueB = try await datastore.load("B", from: \.value).map { $0.id }
+        XCTAssertEqual(valueB, "1")
+        let valuesC = try await datastore.load("C", order: .ascending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesC, ["1", "2"])
+        let valueC = try await datastore.load("C", from: \.value).map { $0.id }
+        XCTAssertEqual(valueC, "1")
+        let valuesD = try await datastore.load("D", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        XCTAssertEqual(valuesD, [])
+        let valueNil = try await datastore.load("D", from: \.value).map { $0.id }
+        XCTAssertNil(valueNil)
     }
     
     func testObservingEntries() async throws {

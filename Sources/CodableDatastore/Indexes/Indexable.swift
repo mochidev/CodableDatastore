@@ -9,7 +9,29 @@
 import Foundation
 
 /// An alias representing the requirements for a property to be indexable, namely that they conform to both ``/Swift/Codable`` and ``/Swift/Comparable``.
-public typealias Indexable = Comparable & Codable
+public typealias Indexable = Comparable & Hashable & Codable
+
+/// A type-erased container for Indexable values
+public struct AnyIndexable {
+    /// The original indexable value.
+    public var indexed: any Indexable
+    
+    /// Initialize a type-erased indexable value. Access it again with ``indexed``.
+    public init(_ indexable: some Indexable) {
+        indexed = indexable
+    }
+}
+
+/// Matching implementation from https://github.com/apple/swift/pull/64899/files
+extension Never: Codable {
+    public init(from decoder: any Decoder) throws {
+        let context = DecodingError.Context(
+            codingPath: decoder.codingPath,
+            debugDescription: "Unable to decode an instance of Never.")
+        throw DecodingError.typeMismatch(Never.self, context)
+    }
+    public func encode(to encoder: any Encoder) throws {}
+}
 
 /// A marker protocol for types that can be used as a ranged index.
 ///
@@ -19,7 +41,7 @@ public typealias Indexable = Comparable & Codable
 /// ```swift
 /// extension UUID: RangedIndexable {}
 /// ```
-public protocol RangedIndexable: Comparable & Codable {}
+public protocol RangedIndexable: Comparable & Hashable & Codable {}
 
 /// A marker protocol for types that can be used as a discrete index.
 ///
@@ -29,22 +51,23 @@ public protocol RangedIndexable: Comparable & Codable {}
 /// ```swift
 /// extension Double: DiscreteIndexable {}
 /// ```
-public protocol DiscreteIndexable: Equatable & Codable {}
+public protocol DiscreteIndexable: Hashable & Codable {}
 
 // MARK: - Swift Standard Library Conformances
 
 extension Bool: DiscreteIndexable {}
 extension Double: RangedIndexable {}
-@available(macOS 13.0, *)
+@available(macOS 13.0, iOS 16, tvOS 16, watchOS 9, *)
 extension Duration: RangedIndexable {}
 extension Float: RangedIndexable {}
-@available(macOS 11.0, *)
+@available(macOS 11.0, iOS 14, tvOS 14, watchOS 7, *)
 extension Float16: RangedIndexable {}
 extension Int: DiscreteIndexable, RangedIndexable {}
 extension Int8: DiscreteIndexable, RangedIndexable {}
 extension Int16: DiscreteIndexable, RangedIndexable {}
 extension Int32: DiscreteIndexable, RangedIndexable {}
 extension Int64: DiscreteIndexable, RangedIndexable {}
+extension Never: DiscreteIndexable, RangedIndexable {}
 extension String: DiscreteIndexable, RangedIndexable {}
 extension UInt: DiscreteIndexable, RangedIndexable {}
 extension UInt8: DiscreteIndexable, RangedIndexable {}

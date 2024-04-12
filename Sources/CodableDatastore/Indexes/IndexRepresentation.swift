@@ -22,12 +22,34 @@ public protocol IndexRepresentation<Instance>: Hashable {
     /// - Parameter instance: The instance type that we would like to verify.
     /// - Returns: The casted index.
     func matches<T>(_ instance: T.Type) -> (any IndexRepresentation<T>)?
+    
+    /// The type erased values the index matches against for a given index.
+    func valuesToIndex(for instance: Instance) -> [AnyIndexable]
+}
+
+extension IndexRepresentation {
+    /// The index representation in a form suitable for keying in a dictionary.
+    public var key: AnyIndexRepresentation<Instance> { AnyIndexRepresentation(indexRepresentation: self) }
+    
+    /// Check if two ``IndexRepresentation``s are equal.
+    func isEqual(rhs: some IndexRepresentation<Instance>) -> Bool {
+        return self == rhs as? Self
+    }
 }
 
 /// A representation of an index for a given instance, preserving value information.
 public protocol RetrievableIndexRepresentation<Instance, Value>: IndexRepresentation {
     /// The value represented within the index.
-    associatedtype Value: Indexable
+    associatedtype Value: Indexable & Hashable
+    
+    /// The concrete values the index matches against for a given index.
+    func valuesToIndex(for instance: Instance) -> Set<Value>
+}
+
+extension RetrievableIndexRepresentation {
+    public func valuesToIndex(for instance: Instance) -> [AnyIndexable] {
+        valuesToIndex(for: instance).map { AnyIndexable($0)}
+    }
 }
 
 /// A representation of an index for a given instance, where a single instance matches every provided value.
@@ -42,6 +64,7 @@ public protocol MultipleInputIndexRepresentation<
     Sequence,
     Value
 >: RetrievableIndexRepresentation {
+    /// The sequence of values represented in the index.
     associatedtype Sequence: Swift.Sequence<Value>
 }
 
@@ -68,6 +91,10 @@ public struct OneToOneIndexRepresentation<
         else { return nil }
         return copy
     }
+    
+    public func valuesToIndex(for instance: Instance) -> Set<Value> {
+        [instance[keyPath: keypath]]
+    }
 }
 
 /// An index where every value can match any number of instances, but every instance is represented by a single value.
@@ -92,6 +119,10 @@ public struct OneToManyIndexRepresentation<
         guard let copy = self as? OneToManyIndexRepresentation<T, Value>
         else { return nil }
         return copy
+    }
+    
+    public func valuesToIndex(for instance: Instance) -> Set<Value> {
+        [instance[keyPath: keypath]]
     }
 }
 
@@ -119,6 +150,10 @@ public struct ManyToOneIndexRepresentation<
         else { return nil }
         return copy
     }
+    
+    public func valuesToIndex(for instance: Instance) -> Set<Value> {
+        Set(instance[keyPath: keypath])
+    }
 }
 
 /// An index where every value can match any number of instances, and every instance can be represented by more than a single value.
@@ -145,6 +180,10 @@ public struct ManyToManyIndexRepresentation<
         else { return nil }
         return copy
     }
+    
+    public func valuesToIndex(for instance: Instance) -> Set<Value> {
+        Set(instance[keyPath: keypath])
+    }
 }
 
 /// A property wrapper for marking which indexes should store instances in their entirety without needing to do a secondary lookup.
@@ -159,7 +198,7 @@ public struct Direct<Index: IndexRepresentation> {
     /// This is ordinarily handled transparently when used as a property wrapper.
     public let wrappedValue: Index
     
-    /// Initialize an ``Indexed`` value with an initial value.
+    /// Initialize a ``Direct`` index with an initial ``IndexRepresentation`` value.
     ///
     /// This is ordinarily handled transparently when used as a property wrapper.
     public init(wrappedValue: Index) {
@@ -183,5 +222,30 @@ extension Direct: DirectIndexRepresentation {
     func index<T>(matching instance: T.Type) -> (any IndexRepresentation<T>)? {
         guard let index = wrappedValue.matches(instance) else { return nil }
         return index
+    }
+}
+
+extension Encodable {
+    /// Retrieve the type erased values for a given index.
+    subscript<Index: IndexRepresentation<Self>>(index indexRepresentation: Index) -> [AnyIndexable] {
+        return indexRepresentation.valuesToIndex(for: self)
+    }
+    
+    /// Retrieve the concrete values for a given index.
+    subscript<Index: RetrievableIndexRepresentation<Self, Value>, Value>(index indexRepresentation: Index) -> Set<Value> {
+        return indexRepresentation.valuesToIndex(for: self)
+    }
+}
+
+/// A type erased index representation to be used for keying indexes in a dictionary.
+public struct AnyIndexRepresentation<Instance>: Hashable {
+    var indexRepresentation: any IndexRepresentation<Instance>
+    
+    public static func == (lhs: AnyIndexRepresentation<Instance>, rhs: AnyIndexRepresentation<Instance>) -> Bool {
+        return lhs.indexRepresentation.isEqual(rhs: rhs.indexRepresentation)
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(indexRepresentation)
     }
 }

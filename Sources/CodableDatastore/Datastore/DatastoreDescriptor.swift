@@ -135,10 +135,10 @@ extension DatastoreDescriptor {
         var directIndexes: [String : IndexDescriptor] = [:]
         var referenceIndexes: [String : IndexDescriptor] = [:]
         
-        format.mapIndexRepresentations { generatedRepresentation in
+        for (_, generatedRepresentation) in format.generateIndexRepresentations() {
             let indexName = generatedRepresentation.indexName
             guard Format.Instance.self as? any Identifiable.Type == nil || indexName != "id"
-            else { return }
+            else { continue }
             
             let indexDescriptor = IndexDescriptor(
                 version: versionData,

@@ -10,6 +10,8 @@ import Foundation
 
 /// A ``Datastore``-specific error.
 public enum DatastoreError: LocalizedError {
+    case missingIndex
+    
     /// A decoder was missing for the specified version.
     case missingDecoder(version: String)
     
@@ -18,6 +20,8 @@ public enum DatastoreError: LocalizedError {
     
     public var errorDescription: String? {
         switch self {
+        case .missingIndex:
+            return "The specified index was not properly declared on this datastore. Please double check your implementation of `DatastoreFormat.generateIndexRepresentations()`."
         case .missingDecoder(let version):
             return "The decoder for version \(version) is missing."
         case .incompatibleVersion(.some(let version)):

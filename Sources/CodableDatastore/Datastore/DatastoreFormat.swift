@@ -10,7 +10,7 @@ import Foundation
 
 /// A representation of the underlying format of a ``Datastore``.
 ///
-/// A ``DatastoreFormat`` will be instanciated and owned by the datastore associated with it to provide both type and index information to the store. It is expected to represent the ideal types for the latest version of the code that is instantiating the datastore.
+/// A ``DatastoreFormat`` will be instantiated and owned by the datastore associated with it to provide both type and index information to the store. It is expected to represent the ideal types for the latest version of the code that is instantiating the datastore.
 ///
 /// This type also exists so implementers can conform a `struct` to it that declares a number of key paths as stored properties.
 ///
@@ -95,46 +95,38 @@ public protocol DatastoreFormat<Version, Instance, Identifier> {
     /// This type of index is common when building relationships between different instances, where one instance may be related to several others in some way.
     typealias ManyToOneIndex<S: Sequence<Value>, Value: Indexable & DiscreteIndexable> = ManyToOneIndexRepresentation<Instance, S, Value>
     
-    /// Map through the declared indexes, processing them as necessary.
+    /// Generate index representations for the datastore.
     ///
-    /// Although a default implementation is provided, this method can also be implemented manually by calling transform once for every index that should be registered.
-    /// - Parameter transform: A transformation that will be called for every index.
-    func mapIndexRepresentations(assertIdentifiable: Bool, transform: (GeneratedIndexRepresentation<Instance>) throws -> ()) rethrows
-    
-    /// Map through the declared indexes asynchronously, processing them as necessary.
+    /// The default implementation will create an entry for each member of the conforming type that is an ``IndexRepresentation`` type. If two members represent the _same_ type, only the one with the name that sorts _earliest_ will be used. Only stored members will be evaluated — computed members will be skipped.
     ///
-    /// Although a default implementation is provided, this method can also be implemented manually by calling transform once for every index that should be registered.
-    /// - Parameter transform: A transformation that will be called for every index.
-    func mapIndexRepresentations(assertIdentifiable: Bool, transform: (GeneratedIndexRepresentation<Instance>) async throws -> ()) async rethrows
+    /// It is recommended that these results should be cached rather than re-generated every time.
+    ///
+    /// - Important: It is up to the implementer to ensure that no two _indexes_ refer to the same index name. Doing so is a mistake and will result in undefined behavior not guaranteed by the library, likely indexes being invalidated on different runs of your app.
+    ///
+    /// - Parameter assertIdentifiable: A flag to throw an assert if an `id` field was found when it would otherwise be a mistake.
+    /// - Returns: A mapping between unique indexes and their usable metadata.
+    func generateIndexRepresentations(assertIdentifiable: Bool) -> [AnyIndexRepresentation<Instance> : GeneratedIndexRepresentation<Instance>]
 }
 
 extension DatastoreFormat {
-    public func mapIndexRepresentations(
-        assertIdentifiable: Bool = false,
-        transform: (GeneratedIndexRepresentation<Instance>) throws -> ()
-    ) rethrows {
+    public func generateIndexRepresentations(assertIdentifiable: Bool = false) -> [AnyIndexRepresentation<Instance> : GeneratedIndexRepresentation<Instance>] {
         let mirror = Mirror(reflecting: self)
+        var results: [AnyIndexRepresentation<Instance> : GeneratedIndexRepresentation<Instance>] = [:]
         
         for child in mirror.children {
-            guard let generatedIndex = generateIndexRepresentation(child: child, assertIdentifiable: assertIdentifiable)
+            guard 
+                let generatedIndex = generateIndexRepresentation(child: child, assertIdentifiable: assertIdentifiable)
             else { continue }
             
-            try transform(generatedIndex)
+            let key = AnyIndexRepresentation(indexRepresentation: generatedIndex.index)
+            /// If two indexes share a name, use the one that sorts earlier.
+            if let oldIndex = results[key], oldIndex.indexName < generatedIndex.indexName { continue }
+            
+            /// Otherwise replace it with the current index.
+            results[key] = generatedIndex
         }
-    }
-    
-    public func mapIndexRepresentations(
-        assertIdentifiable: Bool = false,
-        transform: (GeneratedIndexRepresentation<Instance>) async throws -> ()
-    ) async rethrows {
-        let mirror = Mirror(reflecting: self)
         
-        for child in mirror.children {
-            guard let generatedIndex = generateIndexRepresentation(child: child, assertIdentifiable: assertIdentifiable)
-            else { continue }
-            
-            try await transform(generatedIndex)
-        }
+        return results
     }
     
     /// Generate an index representation for a given mirror's child, or return nil if no valid index was found.
@@ -183,6 +175,11 @@ extension DatastoreFormat {
         )
     }
 }
+
+//extension DatastoreFormat where Instance: Identifiable, Instance.ID: Indexable & DiscreteIndexable, Self.Identifier == Instance.ID {
+//    @available(*, unavailable, message: "id is reserved on Identifiable Instance types.")
+//    var id: Never { preconditionFailure("id is reserved on Identifiable Instance types.") }
+//}
 
 extension DatastoreFormat where Instance: Identifiable, Instance.ID: Indexable & DiscreteIndexable {
     typealias Identifier = Instance.ID

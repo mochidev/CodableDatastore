@@ -34,7 +34,6 @@ final class DatastoreDescriptorTests: XCTestCase {
         XCTAssertFalse(desc2 < desc1)
     }
     
-    
     func testTypeReflection() throws {
         enum SharedVersion: String, CaseIterable {
             case a, b, c
@@ -297,5 +296,55 @@ final class DatastoreDescriptorTests: XCTestCase {
             "c" : .init(version: Data([34, 97, 34]), name: "c", type: "OneToManyIndex(Enum)"),
         ])
         XCTAssertEqual(descD.referenceIndexes, [:])
+    }
+    
+    func testTypeDuplicatePaths() throws {
+        enum SharedVersion: String, CaseIterable {
+            case a, b, c
+        }
+        
+        enum Enum: Codable, Comparable {
+            case a, b, c
+        }
+        
+        struct Nested: Codable {
+            var a: Enum
+        }
+        
+        struct SampleType: Codable {
+            var id: UUID
+            var a: String
+            var b: Int
+            var c: Nested
+            var d: String { "\(a).\(b)" }
+        }
+        
+        struct SampleFormatA: DatastoreFormat {
+            static var defaultKey = DatastoreKey("sample")
+            static var currentVersion = SharedVersion.a
+            
+            typealias Version = SharedVersion
+            typealias Instance = SampleType
+            typealias Identifier = UUID
+            
+            let id = OneToOneIndex(\.id)
+            let a = Index(\.a)
+            let b = Index(\.b)
+            @Direct var otherB = Index(\.b)
+        }
+        
+        let descA = try DatastoreDescriptor(
+            format: SampleFormatA(),
+            version: .a
+        )
+        XCTAssertEqual(descA.version, Data([34, 97, 34]))
+        XCTAssertEqual(descA.instanceType, "SampleType")
+        XCTAssertEqual(descA.identifierType, "UUID")
+        XCTAssertEqual(descA.directIndexes, [:])
+        XCTAssertEqual(descA.referenceIndexes, [
+            "id" : .init(version: Data([34, 97, 34]), name: "id", type: "OneToOneIndex(UUID)"),
+            "a" : .init(version: Data([34, 97, 34]), name: "a", type: "OneToManyIndex(String)"),
+            "b" : .init(version: Data([34, 97, 34]), name: "b", type: "OneToManyIndex(Int)"),
+        ])
     }
 }

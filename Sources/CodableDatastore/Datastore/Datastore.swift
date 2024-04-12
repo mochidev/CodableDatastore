@@ -31,8 +31,7 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
     let version: Version
     let encoder: (_ instance: InstanceType) async throws -> Data
     let decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)]
-    let directIndexes: [IndexPath<InstanceType, _AnyIndexed>]
-    let computedIndexes: [IndexPath<InstanceType, _AnyIndexed>]
+    let indexRepresentations: [AnyIndexRepresentation<InstanceType> : GeneratedIndexRepresentation<InstanceType>]
     
     var updatedDescriptor: DatastoreDescriptor?
     
@@ -42,8 +41,8 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
     fileprivate var storeMigrationStatus: TaskStatus = .waiting
     fileprivate var storeMigrationProgressHandlers: [ProgressHandler] = []
     
-    fileprivate var indexMigrationStatus: [IndexPath<InstanceType, _AnyIndexed> : TaskStatus] = [:]
-    fileprivate var indexMigrationProgressHandlers: [IndexPath<InstanceType, _AnyIndexed> : ProgressHandler] = [:]
+    fileprivate var indexMigrationStatus: [AnyIndexRepresentation<InstanceType> : TaskStatus] = [:]
+    fileprivate var indexMigrationProgressHandlers: [AnyIndexRepresentation<InstanceType> : ProgressHandler] = [:]
     
     public init(
         persistence: some Persistence<AccessMode>,
@@ -52,18 +51,24 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
         version: Version = Format.currentVersion,
         encoder: @escaping (_ instance: InstanceType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
         self.persistence = persistence
-        self.format = Format()
+        let format = Format()
+        self.format = format
+        self.indexRepresentations = format.generateIndexRepresentations(assertIdentifiable: true)
         self.key = key
         self.version = version
         self.encoder = encoder
         self.decoders = decoders
-        self.directIndexes = directIndexes
-        self.computedIndexes = computedIndexes
+        
+        var usedIndexNames: Set<IndexName> = []
+        for (indexKey, indexRepresentation) in indexRepresentations {
+            assert(!usedIndexNames.contains(indexRepresentation.indexName), "Index \"\(indexRepresentation.indexName.rawValue)\" (\(indexRepresentation.index.indexType.rawValue)) was used more than once, which will lead to undefined behavior on every run. Please make sure \(String(describing: Format.self)) only declares a single index for \"\(indexRepresentation.indexName.rawValue)\".")
+            usedIndexNames.insert(indexRepresentation.indexName)
+            
+            assert(indexKey == AnyIndexRepresentation(indexRepresentation: indexRepresentation.index), "The key returned for index \"\(indexRepresentation.indexName.rawValue)\" does not match the generated representation. Please double check to make sure that these values are aligned!")
+        }
         
         for decoderVersion in Version.allCases {
             guard decoders[decoderVersion] == nil else { continue }
@@ -77,18 +82,29 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
         self.persistence = persistence
-        self.format = Format()
+        let format = Format()
+        self.format = format
+        self.indexRepresentations = format.generateIndexRepresentations(assertIdentifiable: true)
         self.key = key
         self.version = version
         self.encoder = { _ in preconditionFailure("Encode called on read-only instance.") }
         self.decoders = decoders
-        self.directIndexes = directIndexes
-        self.computedIndexes = computedIndexes
+        
+        var usedIndexNames: Set<IndexName> = []
+        for (indexKey, indexRepresentation) in indexRepresentations {
+            assert(!usedIndexNames.contains(indexRepresentation.indexName), "Index \"\(indexRepresentation.indexName.rawValue)\" (\(indexRepresentation.index.indexType.rawValue)) was used more than once, which will lead to undefined behavior on every run. Please make sure \(String(describing: Format.self)) only declares a single index for \"\(indexRepresentation.indexName.rawValue)\".")
+            usedIndexNames.insert(indexRepresentation.indexName)
+            
+            assert(indexKey == AnyIndexRepresentation(indexRepresentation: indexRepresentation.index), "The key returned for index \"\(indexRepresentation.indexName.rawValue)\" does not match the generated representation. Please double check to make sure that these values are aligned!")
+        }
+        
+        for decoderVersion in Version.allCases {
+            guard decoders[decoderVersion] == nil else { continue }
+            assertionFailure("Decoders missing case for \(decoderVersion). Please make sure you have a decoder configured for this version or you may encounter errors at runtime.")
+        }
     }
 }
 
@@ -177,7 +193,7 @@ extension Datastore {
         
         var newDescriptor: DatastoreDescriptor?
         
-        let primaryIndex = load(IndexRange(), order: .ascending, awaitWarmup: false)
+        let primaryIndex = _load(IndexRange(), order: .ascending, awaitWarmup: false)
         
         var rebuildPrimaryIndex = false
         var directIndexesToBuild: Set<IndexName> = []
@@ -276,90 +292,62 @@ extension Datastore {
             
             var queriedIndexes: Set<IndexName> = []
             
-            /// Persist the direct indexes with full copies
-            for indexPath in directIndexes {
-                let indexName = indexPath.path
-                guard
-                    directIndexesToBuild.contains(indexName),
-                    !queriedIndexes.contains(indexName)
-                else { continue }
-                queriedIndexes.insert(indexName)
-                
-                let updatedValue = instance[keyPath: indexPath]
-                
-                /// Grab a cursor to insert the new value in the index.
-                let updatedValueCursor = try await transaction.directIndexCursor(
-                    inserting: updatedValue.indexed,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: key
-                )
-                
-                /// Insert it.
-                try await transaction.persistDirectIndexEntry(
-                    versionData: versionData,
-                    indexValue: updatedValue.indexed,
-                    identifierValue: idenfifier,
-                    instanceData: instanceData,
-                    cursor: updatedValueCursor,
-                    indexName: indexName,
-                    datastoreKey: key
-                )
-            }
-            
-            /// Next, go through any remaining computed indexes as secondary indexes.
-            for indexPath in computedIndexes {
-                let indexName = indexPath.path
-                guard
-                    secondaryIndexesToBuild.contains(indexName),
-                    !queriedIndexes.contains(indexName)
-                else { continue }
-                queriedIndexes.insert(indexName)
-                
-                let updatedValue = instance[keyPath: indexPath]
-                
-                /// Grab a cursor to insert the new value in the index.
-                let updatedValueCursor = try await transaction.secondaryIndexCursor(
-                    inserting: updatedValue.indexed,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Insert it.
-                try await transaction.persistSecondaryIndexEntry(
-                    indexValue: updatedValue.indexed,
-                    identifierValue: idenfifier,
-                    cursor: updatedValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-            }
-            
-            /// Re-insert any remaining indexed values into the new index.
-            try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
-                let indexName = IndexName(indexName)
-                guard
-                    secondaryIndexesToBuild.contains(indexName),
-                    !queriedIndexes.contains(indexName)
-                else { return }
-                
-                /// Grab a cursor to insert the new value in the index.
-                let updatedValueCursor = try await transaction.secondaryIndexCursor(
-                    inserting: value,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Insert it.
-                try await transaction.persistSecondaryIndexEntry(
-                    indexValue: value,
-                    identifierValue: idenfifier,
-                    cursor: updatedValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
+            for (_, generatedRepresentation) in indexRepresentations {
+                let indexName = generatedRepresentation.indexName
+                switch generatedRepresentation.storage {
+                case .direct:
+                    guard
+                        directIndexesToBuild.contains(indexName),
+                        !queriedIndexes.contains(indexName)
+                    else { return }
+                    queriedIndexes.insert(indexName)
+                    
+                    for updatedValue in instance[index: generatedRepresentation.index] {
+                        /// Grab a cursor to insert the new value in the index.
+                        let updatedValueCursor = try await transaction.directIndexCursor(
+                            inserting: updatedValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: key
+                        )
+                        
+                        /// Insert it.
+                        try await transaction.persistDirectIndexEntry(
+                            versionData: versionData,
+                            indexValue: updatedValue.indexed,
+                            identifierValue: idenfifier,
+                            instanceData: instanceData,
+                            cursor: updatedValueCursor,
+                            indexName: indexName,
+                            datastoreKey: key
+                        )
+                    }
+                case .reference:
+                    guard
+                        secondaryIndexesToBuild.contains(indexName),
+                        !queriedIndexes.contains(indexName)
+                    else { return }
+                    queriedIndexes.insert(indexName)
+                    
+                    for updatedValue in instance[index: generatedRepresentation.index] {
+                        /// Grab a cursor to insert the new value in the index.
+                        let updatedValueCursor = try await transaction.secondaryIndexCursor(
+                            inserting: updatedValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                        
+                        /// Insert it.
+                        try await transaction.persistSecondaryIndexEntry(
+                            indexValue: updatedValue.indexed,
+                            identifierValue: idenfifier,
+                            cursor: updatedValueCursor,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                    }
+                }
             }
         }
         
@@ -375,15 +363,15 @@ extension Datastore {
 // MARK: - Migrations
 
 extension Datastore where AccessMode == ReadWrite {
-    /// Manually migrate an index if the version persisted is less than a given minimum version.
-    /// 
+    /// Force a full migration of an index if the version persisted is less than the specified minimum version.
+    ///
     /// Only use this if you must force an index to be re-calculated, which is sometimes necessary when the implementation of the compare method changes between releases.
     ///
     /// - Parameters:
     ///   - index: The index to migrate.
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrate(index: IndexPath<InstanceType, _AnyIndexed>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
+    public func migrate<Index: IndexRepresentation<InstanceType>>(index: KeyPath<Format, Index>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
         try await persistence._withTransaction(
             actionName: "Migrate Entries",
             options: []
@@ -392,10 +380,13 @@ extension Datastore where AccessMode == ReadWrite {
                 /// If we have no descriptor, then no data exists to be migrated.
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
+                /// If we didn't declare the index, we can't do anything. This is likely an error only encountered to self-implementers of ``DatastoreFormat``'s ``DatastoreFormat/generateIndexRepresentations``.
+                let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])],
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.referenceIndexes[index.path],
+                let matchingDescriptor =
+                    descriptor.directIndexes[declaredIndex.indexName.rawValue] ?? descriptor.referenceIndexes[declaredIndex.indexName.rawValue],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
-                let version = try? Version(matchingIndex.version),
+                let version = try? Version(matchingDescriptor.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
                 version.rawValue < minimumVersion.rawValue
             else { return }
@@ -411,10 +402,13 @@ extension Datastore where AccessMode == ReadWrite {
                 /// If we have no descriptor, then no data exists to be migrated.
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
+                /// If we didn't declare the index, we can't do anything. This is likely an error only encountered to self-implementers of ``DatastoreFormat``'s ``DatastoreFormat/generateIndexRepresentations``.
+                let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])],
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
-                let matchingIndex = descriptor.directIndexes[index.path] ?? descriptor.referenceIndexes[index.path],
+                let matchingDescriptor =
+                    descriptor.directIndexes[declaredIndex.indexName.rawValue] ?? descriptor.referenceIndexes[declaredIndex.indexName.rawValue],
                 /// We don't care in this method of the version is incompatible — the index will be discarded.
-                let version = try? Version(matchingIndex.version),
+                let version = try? Version(matchingDescriptor.version),
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
                 version.rawValue < minimumVersion.rawValue
             else {
@@ -428,7 +422,7 @@ extension Datastore where AccessMode == ReadWrite {
         }
     }
     
-    func migrate(index: IndexPath<InstanceType, _AnyIndexed>, progressHandler: ProgressHandler? = nil) async throws {
+    func migrate<Index: IndexRepresentation<InstanceType>>(index: KeyPath<Format, Index>, progressHandler: ProgressHandler? = nil) async throws {
         // TODO: Migrate just that index, use indexMigrationStatus and indexMigrationProgressHandlers to record progress.
     }
     
@@ -453,7 +447,7 @@ extension Datastore where AccessMode == ReadWrite {
 extension Datastore {
     /// The number of objects in the datastore.
     ///
-    /// - Note: This count may not reflect an up to dat value while data is being written concurrently, but will be acurate after such a transaction finishes.
+    /// - Note: This count may not reflect an up to date value while instances are being written concurrently, but will be acurate after such a transaction finishes.
     public var count: Int {
         get async throws {
             try await warmupIfNeeded()
@@ -468,6 +462,9 @@ extension Datastore {
         }
     }
     
+    /// Load an instance with a given identifier, or return nil if one is not found.
+    /// - Parameter identifier: The identifier of the instance to load.
+    /// - Returns: The instance keyed to the identifier, or nil if none are found.
     public func load(_ identifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
@@ -494,7 +491,13 @@ extension Datastore {
         }
     }
     
-    nonisolated func load(
+    /// **Internal:** Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    ///   - awaitWarmup: Whether the sequence should await warmup or jump right into loading.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
+    nonisolated func _load(
         _ range: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder,
         awaitWarmup: Bool
@@ -523,35 +526,67 @@ extension Datastore {
         }
     }
     
-    nonisolated public func load(
+    /// Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
+    ///
+    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
+    public nonisolated func load(
         _ range: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
-        load(range, order: order, awaitWarmup: true)
+    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
+        _load(range, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
     
+    /// Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
+    /// 
+    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     @_disfavoredOverload
     public nonisolated func load(
         _ range: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
         load(range, order: order)
     }
     
+    /// Load all instances in a datastore as an async sequence.
+    ///
+    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Parameters:
+    ///   - range: The range to load. Specify `...` to load every instance.
+    ///   - order: The order to process instances in.
+    /// - Returns: An asynchronous sequence containing all the instances.
     public nonisolated func load(
         _ range: Swift.UnboundedRange,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> {
-        load(IndexRange(), order: order)
+        _load(IndexRange(), order: order, awaitWarmup: true)
+            .map { $0.instance }
     }
     
-    public nonisolated func load<IndexedValue: Indexable>(
-        _ range: some IndexRangeExpression<IndexedValue>,
+    /// **Internal:** Load a range of instances from a given index as an async sequence.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
+    @usableFromInline
+    nonisolated func _load<Index: IndexRepresentation<InstanceType>, Range: IndexRangeExpression>(
+        _ range: Range,
         order: RangeOrder = .ascending,
-        from indexPath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
-    ) -> some TypedAsyncSequence<InstanceType> {
+        from index: KeyPath<Format, Index>
+    ) -> some TypedAsyncSequence<InstanceType> where Range.Bound: Indexable {
         AsyncThrowingBackpressureStream { provider in
+            guard let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])]
+            else { throw DatastoreError.missingIndex }
+            
             try await self.warmupIfNeeded()
             
             try await self.persistence._withTransaction(
@@ -559,12 +594,11 @@ extension Datastore {
                 options: [.readOnly]
             ) { transaction, _ in
                 do {
-                    let isDirectIndex = self.directIndexes.contains { $0.path == indexPath.path }
-                    
-                    if isDirectIndex {
+                    switch declaredIndex.storage {
+                    case .direct:
                         try await transaction.directIndexScan(
                             range: range.applying(order),
-                            indexName: indexPath.path,
+                            indexName: declaredIndex.indexName,
                             datastoreKey: self.key
                         ) { versionData, instanceData in
                             let entryVersion = try Version(versionData)
@@ -573,10 +607,10 @@ extension Datastore {
                             
                             try await provider.yield(instance)
                         }
-                    } else {
+                    case .reference:
                         try await transaction.secondaryIndexScan(
                             range: range.applying(order),
-                            indexName: indexPath.path,
+                            indexName: declaredIndex.indexName,
                             datastoreKey: self.key
                         ) { (identifier: IdentifierType) in
                             let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
@@ -595,29 +629,101 @@ extension Datastore {
         }
     }
     
-    @_disfavoredOverload
-    public nonisolated func load<IndexedValue: Indexable>(
-        _ range: IndexRange<IndexedValue>,
+    /// Load all instances with the matching indexed value as an async sequence.
+    ///
+    /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified value, but is much more efficient as an index is already maintained for that value.
+    ///
+    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Parameters:
+    ///   - value: The value to match against.
+    ///   - order: The order to process instances in.   
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing the instances matching the specified indexed value.
+    public nonisolated func load<
+        Value: DiscreteIndexable,
+        Index: RetrievableIndexRepresentation<InstanceType, Value>
+    >(
+        _ value: Index.Value,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
+        from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> {
-        load(range, order: order, from: keypath)
+        _load(IndexRange(only: value), order: order, from: index)
     }
     
-    public nonisolated func load<IndexedValue: Indexable>(
+    /// Load an instance with the matching indexed value, or return nil if one is not found.
+    ///
+    /// This requires either a ``DatastoreFormat/OneToOneIndex`` or ``DatastoreFormat/ManyToOneIndex`` to be declared as the index, and a guarantee on the caller's part that at most only a single instance will match the specified value. If multiple instancess match, the one with the identifier that sorts first will be returned.
+    /// - Parameters:
+    ///   - value: The value to match against.
+    ///   - index: The index to load from.
+    /// - Returns: The instance keyed to the specified indexed value, or nil if none are found.
+    public nonisolated func load<
+        Value,
+        Index: SingleInstanceIndexRepresentation<InstanceType, Value>
+    >(
+        _ value: Index.Value,
+        from index: KeyPath<Format, Index>
+    ) async throws -> InstanceType? {
+        try await _load(IndexRange(only: value), from: index).first(where: { _ in true })
+    }
+    
+    /// Load a range of instances from a given index as an async sequence.
+    ///
+    /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified range, but is much more efficient as an index is already maintained for that range of values.
+    ///
+    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
+    public nonisolated func load<
+        Value: RangedIndexable,
+        Index: RetrievableIndexRepresentation<InstanceType, Value>
+    >(
+        _ range: some IndexRangeExpression<Value>,
+        order: RangeOrder = .ascending,
+        from index: KeyPath<Format, Index>
+    ) -> some TypedAsyncSequence<InstanceType> {
+        _load(range, order: order, from: index)
+    }
+    
+    /// Load a range of instances from a given index as an async sequence.
+    ///
+    /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified range, but is much more efficient as an index is already maintained for that range of values.
+    ///
+    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
+    @_disfavoredOverload
+    public nonisolated func load<
+        Value: RangedIndexable,
+        Index: RetrievableIndexRepresentation<InstanceType, Value>
+    >(
+        _ range: IndexRange<Value>,
+        order: RangeOrder = .ascending,
+        from index: KeyPath<Format, Index>
+    ) -> some TypedAsyncSequence<InstanceType> {
+        _load(range, order: order, from: index)
+    }
+    
+    /// Load all instances in a datastore in index order as an async sequence.
+    ///
+    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Parameters:
+    ///   - range: The range to load. Specify `...` to load every instance.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing all the instances, ordered by the specified index.
+    public nonisolated func load<Index: IndexRepresentation<InstanceType>>(
         _ range: Swift.UnboundedRange,
         order: RangeOrder = .ascending,
-        from keypath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
+        from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> {
-        load(IndexRange<IndexedValue>(), order: order, from: keypath)
-    }
-    
-    public nonisolated func load<IndexedValue: Indexable>(
-        _ value: IndexedValue,
-        order: RangeOrder = .ascending,
-        from keypath: IndexPath<InstanceType, _SomeIndexed<IndexedValue>>
-    ) -> some TypedAsyncSequence<InstanceType> {
-        load(value...value, order: order, from: keypath)
+        _load(IndexRange.unbounded, order: order, from: index)
     }
 }
 
@@ -744,140 +850,89 @@ extension Datastore where AccessMode == ReadWrite {
             
             var queriedIndexes: Set<IndexName> = []
             
-            /// Persist the direct indexes with full copies
-            for indexPath in self.directIndexes {
-                let indexName = indexPath.path
+            for (_, generatedRepresentation) in self.indexRepresentations {
+                let indexName = generatedRepresentation.indexName
                 guard !queriedIndexes.contains(indexName) else { continue }
                 queriedIndexes.insert(indexName)
                 
-                let existingValue = existingInstance?[keyPath: indexPath]
-                let updatedValue = instance[keyPath: indexPath]
-//                let indexType = updatedValue.indexedType
-                
-                if let existingValue {
-                    /// Grab a cursor to the old value in the index.
-                    let existingValueCursor = try await transaction.directIndexCursor(
-                        for: existingValue.indexed,
-                        identifier: idenfifier,
-                        indexName: indexName,
-                        datastoreKey: self.key
-                    )
+                switch generatedRepresentation.storage {
+                case .direct:
+                    /// Persist the direct indexes with full copies
+                    for existingValue in existingInstance?[index: generatedRepresentation.index] ?? [] {
+                        /// Grab a cursor to the old value in the index.
+                        let existingValueCursor = try await transaction.directIndexCursor(
+                            for: existingValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                        
+                        /// Delete it.
+                        try await transaction.deleteDirectIndexEntry(
+                            cursor: existingValueCursor.cursor,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                    }
                     
-                    /// Delete it.
-                    try await transaction.deleteDirectIndexEntry(
-                        cursor: existingValueCursor.cursor,
-                        indexName: indexName,
-                        datastoreKey: self.key
-                    )
-                }
-                
-                /// Grab a cursor to insert the new value in the index.
-                let updatedValueCursor = try await transaction.directIndexCursor(
-                    inserting: updatedValue.indexed,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Insert it.
-                try await transaction.persistDirectIndexEntry(
-                    versionData: versionData,
-                    indexValue: updatedValue.indexed,
-                    identifierValue: idenfifier,
-                    instanceData: instanceData,
-                    cursor: updatedValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-            }
-            
-            /// Next, go through any remaining computed indexes as secondary indexes.
-            for indexPath in self.computedIndexes {
-                let indexName = indexPath.path
-                guard !queriedIndexes.contains(indexName) else { continue }
-                queriedIndexes.insert(indexName)
-                
-                let existingValue = existingInstance?[keyPath: indexPath]
-                let updatedValue = instance[keyPath: indexPath]
-//                let indexType = updatedValue.indexedType
-                
-                if let existingValue {
-                    /// Grab a cursor to the old value in the index.
-                    let existingValueCursor = try await transaction.secondaryIndexCursor(
-                        for: existingValue.indexed,
-                        identifier: idenfifier,
-                        indexName: indexName,
-                        datastoreKey: self.key
-                    )
+                    for updatedValue in instance[index: generatedRepresentation.index] {
+                        /// Grab a cursor to insert the new value in the index.
+                        let updatedValueCursor = try await transaction.directIndexCursor(
+                            inserting: updatedValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                        
+                        /// Insert it.
+                        try await transaction.persistDirectIndexEntry(
+                            versionData: versionData,
+                            indexValue: updatedValue.indexed,
+                            identifierValue: idenfifier,
+                            instanceData: instanceData,
+                            cursor: updatedValueCursor,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                    }
+                case .reference:
+                    /// Persist the reference indexes with identifiers only
+                    for existingValue in existingInstance?[index: generatedRepresentation.index] ?? [] {
+                        /// Grab a cursor to the old value in the index.
+                        let existingValueCursor = try await transaction.secondaryIndexCursor(
+                            for: existingValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                        
+                        /// Delete it.
+                        try await transaction.deleteSecondaryIndexEntry(
+                            cursor: existingValueCursor,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                    }
                     
-                    /// Delete it.
-                    try await transaction.deleteSecondaryIndexEntry(
-                        cursor: existingValueCursor,
-                        indexName: indexName,
-                        datastoreKey: self.key
-                    )
+                    for updatedValue in instance[index: generatedRepresentation.index] {
+                        /// Grab a cursor to insert the new value in the index.
+                        let updatedValueCursor = try await transaction.secondaryIndexCursor(
+                            inserting: updatedValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                        
+                        /// Insert it.
+                        try await transaction.persistSecondaryIndexEntry(
+                            indexValue: updatedValue.indexed,
+                            identifierValue: idenfifier,
+                            cursor: updatedValueCursor,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                    }
                 }
-                
-                /// Grab a cursor to insert the new value in the index.
-                let updatedValueCursor = try await transaction.secondaryIndexCursor(
-                    inserting: updatedValue.indexed,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Insert it.
-                try await transaction.persistSecondaryIndexEntry(
-                    indexValue: updatedValue.indexed,
-                    identifierValue: idenfifier,
-                    cursor: updatedValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-            }
-            
-            /// Remove any remaining indexed values from the old instance.
-            try await Mirror.indexedChildren(from: existingInstance) { indexName, value in
-                let indexName = IndexName(indexName)
-                guard !queriedIndexes.contains(indexName) else { return }
-                
-                /// Grab a cursor to the old value in the index.
-                let existingValueCursor = try await transaction.secondaryIndexCursor(
-                    for: value,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Delete it.
-                try await transaction.deleteSecondaryIndexEntry(
-                    cursor: existingValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-            }
-            
-            /// Re-insert those indexes into the new index.
-            try await Mirror.indexedChildren(from: instance, assertIdentifiable: true) { indexName, value in
-                let indexName = IndexName(indexName)
-                guard !queriedIndexes.contains(indexName) else { return }
-                
-                /// Grab a cursor to insert the new value in the index.
-                let updatedValueCursor = try await transaction.secondaryIndexCursor(
-                    inserting: value,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Insert it.
-                try await transaction.persistSecondaryIndexEntry(
-                    indexValue: value,
-                    identifierValue: idenfifier,
-                    cursor: updatedValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
             }
             
             return existingInstance
@@ -945,73 +1000,47 @@ extension Datastore where AccessMode == ReadWrite {
             
             var queriedIndexes: Set<IndexName> = []
             
-            /// Persist the direct indexes with full copies
-            for indexPath in self.directIndexes {
-                let indexName = indexPath.path
+            for (_, generatedRepresentation) in self.indexRepresentations {
+                let indexName = generatedRepresentation.indexName
                 guard !queriedIndexes.contains(indexName) else { continue }
                 queriedIndexes.insert(indexName)
                 
-                let existingValue = existingInstance[keyPath: indexPath]
-                
-                /// Grab a cursor to the old value in the index.
-                let existingValueCursor = try await transaction.directIndexCursor(
-                    for: existingValue.indexed,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Delete it.
-                try await transaction.deleteDirectIndexEntry(
-                    cursor: existingValueCursor.cursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-            }
-            
-            /// Next, go through any remaining computed indexes as secondary indexes.
-            for indexPath in self.computedIndexes {
-                let indexName = indexPath.path
-                guard !queriedIndexes.contains(indexName) else { continue }
-                queriedIndexes.insert(indexName)
-                
-                let existingValue = existingInstance[keyPath: indexPath]
-                
-                /// Grab a cursor to the old value in the index.
-                let existingValueCursor = try await transaction.secondaryIndexCursor(
-                    for: existingValue.indexed,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Delete it.
-                try await transaction.deleteSecondaryIndexEntry(
-                    cursor: existingValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-            }
-            
-            /// Remove any remaining indexed values from the old instance.
-            try await Mirror.indexedChildren(from: existingInstance) { indexName, value in
-                let indexName = IndexName(indexName)
-                guard !queriedIndexes.contains(indexName) else { return }
-                
-                /// Grab a cursor to the old value in the index.
-                let existingValueCursor = try await transaction.secondaryIndexCursor(
-                    for: value,
-                    identifier: idenfifier,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
-                
-                /// Delete it.
-                try await transaction.deleteSecondaryIndexEntry(
-                    cursor: existingValueCursor,
-                    indexName: indexName,
-                    datastoreKey: self.key
-                )
+                switch generatedRepresentation.storage {
+                case .direct:
+                    for existingValue in existingInstance[index: generatedRepresentation.index] {
+                        /// Grab a cursor to the old value in the index.
+                        let existingValueCursor = try await transaction.directIndexCursor(
+                            for: existingValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                        
+                        /// Delete it.
+                        try await transaction.deleteDirectIndexEntry(
+                            cursor: existingValueCursor.cursor,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                    }
+                case .reference:
+                    for existingValue in existingInstance[index: generatedRepresentation.index] {
+                        /// Grab a cursor to the old value in the index.
+                        let existingValueCursor = try await transaction.secondaryIndexCursor(
+                            for: existingValue.indexed,
+                            identifier: idenfifier,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                        
+                        /// Delete it.
+                        try await transaction.deleteSecondaryIndexEntry(
+                            cursor: existingValueCursor,
+                            indexName: indexName,
+                            datastoreKey: self.key
+                        )
+                    }
+                }
             }
             
             return existingInstance
@@ -1020,7 +1049,16 @@ extension Datastore where AccessMode == ReadWrite {
     
     /// A read-only view into the data store.
     // TODO: Make a proper copy here
-    public var readOnly: Datastore<Format, ReadOnly> { self as Any as! Datastore<Format, ReadOnly> }
+    public var readOnly: Datastore<Format, ReadOnly> {
+        Datastore<Format, ReadOnly>(
+            persistence: persistence,
+            format: Format.self,
+            key: key,
+            version: version,
+            decoders: decoders
+//            configuration: configuration // TODO: Copy configuration here
+        )
+    }
 }
 
 // MARK: Identifiable InstanceType
@@ -1070,8 +1108,6 @@ extension Datastore where AccessMode == ReadWrite {
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1082,8 +1118,6 @@ extension Datastore where AccessMode == ReadWrite {
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1095,8 +1129,6 @@ extension Datastore where AccessMode == ReadWrite {
         version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let encoder = PropertyListEncoder()
@@ -1112,8 +1144,6 @@ extension Datastore where AccessMode == ReadWrite {
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1127,8 +1157,6 @@ extension Datastore where AccessMode == ReadOnly {
         version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1138,8 +1166,6 @@ extension Datastore where AccessMode == ReadOnly {
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1150,8 +1176,6 @@ extension Datastore where AccessMode == ReadOnly {
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         let decoder = PropertyListDecoder()
@@ -1163,8 +1187,6 @@ extension Datastore where AccessMode == ReadOnly {
             decoders: migrations.mapValues { migration in
                 { data in try await migration(data, decoder) }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1180,8 +1202,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         version: Version = Format.currentVersion,
         encoder: @escaping (_ object: InstanceType) async throws -> Data,
         decoders: [Version: (_ data: Data) async throws -> InstanceType],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -1195,8 +1215,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
                     return (id: instance.id, instance: instance)
                 }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1209,8 +1227,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.JSONStore(
@@ -1225,8 +1241,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
                     return (id: instance.id, instance: instance)
                 }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1238,8 +1252,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.propertyListStore(
@@ -1253,8 +1265,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
                     return (id: instance.id, instance: instance)
                 }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1267,8 +1277,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         decoders: [Version: (_ data: Data) async throws -> InstanceType],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -1281,8 +1289,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
                     return (id: instance.id, instance: instance)
                 }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1294,8 +1300,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
         migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyJSONStore(
@@ -1309,8 +1313,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
                     return (id: instance.id, instance: instance)
                 }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
@@ -1321,8 +1323,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
-        directIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
-        computedIndexes: [IndexPath<InstanceType, _AnyIndexed>] = [],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyPropertyListStore(
@@ -1335,8 +1335,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
                     return (id: instance.id, instance: instance)
                 }
             },
-            directIndexes: directIndexes,
-            computedIndexes: computedIndexes,
             configuration: configuration
         )
     }
