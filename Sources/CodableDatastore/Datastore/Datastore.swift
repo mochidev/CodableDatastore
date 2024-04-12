@@ -493,12 +493,12 @@ extension Datastore {
     
     /// **Internal:** Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
     /// - Parameters:
-    ///   - range: The range to load.
+    ///   - identifierRange: The range to load.
     ///   - order: The order to process instances in.
     ///   - awaitWarmup: Whether the sequence should await warmup or jump right into loading.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     nonisolated func _load(
-        _ range: some IndexRangeExpression<IdentifierType>,
+        _ identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder,
         awaitWarmup: Bool
     ) -> some TypedAsyncSequence<(id: IdentifierType, instance: InstanceType)> {
@@ -512,7 +512,7 @@ extension Datastore {
                 options: [.readOnly]
             ) { transaction, _ in
                 do {
-                    try await transaction.primaryIndexScan(range: range.applying(order), datastoreKey: self.key) { versionData, instanceData in
+                    try await transaction.primaryIndexScan(range: identifierRange.applying(order), datastoreKey: self.key) { versionData, instanceData in
                         let entryVersion = try Version(versionData)
                         let decoder = try await self.decoder(for: entryVersion)
                         let decodedValue = try await decoder(instanceData)
@@ -530,14 +530,14 @@ extension Datastore {
     ///
     /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
-    ///   - range: The range to load.
+    ///   - identifierRange: The range to load.
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     public nonisolated func load(
-        _ range: some IndexRangeExpression<IdentifierType>,
+        _ identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
-        _load(range, order: order, awaitWarmup: true)
+        _load(identifierRange, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
     
@@ -545,26 +545,26 @@ extension Datastore {
     /// 
     /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
-    ///   - range: The range to load.
+    ///   - identifierRange: The range to load.
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     @_disfavoredOverload
     public nonisolated func load(
-        _ range: IndexRange<IdentifierType>,
+        _ identifierRange: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
-        load(range, order: order)
+        load(identifierRange, order: order)
     }
     
     /// Load all instances in a datastore as an async sequence.
     ///
     /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
-    ///   - range: The range to load. Specify `...` to load every instance.
+    ///   - unboundedRange: The range to load. Specify `...` to load every instance.
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing all the instances.
     public nonisolated func load(
-        _ range: Swift.UnboundedRange,
+        _ unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> {
         _load(IndexRange(), order: order, awaitWarmup: true)
@@ -713,13 +713,15 @@ extension Datastore {
     /// Load all instances in a datastore in index order as an async sequence.
     ///
     /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    ///
+    /// - Note: If the index is a Mant-to-Any type of index, a smaller or larger number of results may be returned here, as some instances may not be respresented in the index, while others are other-represented and may show up multiple times.
     /// - Parameters:
-    ///   - range: The range to load. Specify `...` to load every instance.
+    ///   - unboundedRange: The range to load. Specify `...` to load every instance.
     ///   - order: The order to process instances in.
     ///   - index: The index to load from.
     /// - Returns: An asynchronous sequence containing all the instances, ordered by the specified index.
     public nonisolated func load<Index: IndexRepresentation<InstanceType>>(
-        _ range: Swift.UnboundedRange,
+        _ unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> {
