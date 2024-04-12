@@ -14,16 +14,16 @@ import Foundation
 ///
 /// This type also exists so implementers can conform a `struct` to it that declares a number of key paths as stored properties.
 ///
-/// Conformers can create subtypes for their versioned models either in the body of their struct or in legacy extentions. Additionally, you are encouraged to make **static** properties available for things like the current version, or a configured ``Datastore`` — this allows easy access to them without mucking around declaring them in far-away places in your code base.
+/// Conformers can create subtypes for their versioned models either in the body of their struct or in legacy extensions. Additionally, you are encouraged to make **static** properties available for things like the current version, or a configured ``Datastore`` — this allows easy access to them without mucking around declaring them in far-away places in your code base.
 ///
 /// ```swift
 /// struct BooksFormat {
 ///     static let defaultKey: DatastoreKey = "BooksStore"
-///     static let currentVersion: Version = .one
+///     static let currentVersion: Version = .current
 ///
 ///     enum Version: String {
-///         case zero = "2024-04-01"
-///         case one = "2024-04-09"
+///         case v1 = "2024-04-01"
+///         case current = "2024-04-09"
 ///     }
 ///
 ///     typealias Instance = Book
@@ -41,9 +41,36 @@ import Foundation
 ///         var isbn: ISBN
 ///     }
 ///
+///     static func datastore(for persistence: DiskPersistence<ReadWrite>) -> Datastore {
+///         .JSONStore(
+///             persistence: persistence,
+///             migrations: [
+///                 .v1: { data, decoder in
+///                     Book(try decoder.decode(BookV1.self, from: data))
+///                 },
+///                 .current: { data, decoder in
+///                     try decoder.decode(Book.self, from: data)
+///                 }
+///             ]
+///         )
+///     }
+///
 ///     let title = Index(\.title)
-///     let author = ManyToMany(\.author)
-///     let isbn = OneToOne(\.isbn)
+///     let author = ManyToManyIndex(\.authors)
+///     let isbn = OneToOneIndex(\.isbn)
+/// }
+///
+/// typealias Book = BooksFormat.Book
+///
+/// extension Book {
+///     init(_ bookV1: BooksFormat.BookV1) {
+///         self.init(
+///             id: id,
+///             title: SortableTitle(title),
+///             authors: [AuthorID(authors)],
+///             isbn: ISBN.generate()
+///         )
+///     }
 /// }
 /// ```
 ///
