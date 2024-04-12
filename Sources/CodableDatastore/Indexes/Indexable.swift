@@ -22,6 +22,7 @@ public struct AnyIndexable {
     }
 }
 
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 /// Matching implementation from https://github.com/apple/swift/pull/64899/files
 extension Never: Codable {
     public init(from decoder: any Decoder) throws {
@@ -32,6 +33,7 @@ extension Never: Codable {
     }
     public func encode(to encoder: any Encoder) throws {}
 }
+#endif
 
 /// A marker protocol for types that can be used as a ranged index.
 ///
