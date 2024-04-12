@@ -111,8 +111,7 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
 // MARK: - Helper Methods
 
 extension Datastore {
-    // TODO: Remove instance requirement from this method.
-    func updatedDescriptor(for instance: InstanceType) throws -> DatastoreDescriptor {
+    func generateUpdatedDescriptor() throws -> DatastoreDescriptor {
         if let updatedDescriptor {
             return updatedDescriptor
         }
@@ -206,7 +205,7 @@ extension Datastore {
             defer { index += 1 }
             /// Use the first index to grab an up-to-date descriptor
             if newDescriptor == nil {
-                let updatedDescriptor = try updatedDescriptor(for: instance)
+                let updatedDescriptor = try generateUpdatedDescriptor()
                 newDescriptor = updatedDescriptor
                 
                 /// Check the primary index for compatibility.
@@ -774,7 +773,7 @@ extension Datastore where AccessMode == ReadWrite {
     public func persist(_ instance: InstanceType, to idenfifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
-        let updatedDescriptor = try self.updatedDescriptor(for: instance)
+        let updatedDescriptor = try self.generateUpdatedDescriptor()
         let versionData = try Data(self.version)
         let instanceData = try await self.encoder(instance)
         
