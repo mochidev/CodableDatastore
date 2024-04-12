@@ -176,6 +176,14 @@ extension DatastoreFormat {
     }
 }
 
+extension DatastoreFormat {
+    /// A typealias of the read-write datastore this format describes.
+    public typealias Datastore = CodableDatastore.Datastore<Self, ReadWrite>
+    
+    /// A typealias of the read-only datastore this format describes.
+    public typealias ReadOnlyDatastore = CodableDatastore.Datastore<Self, ReadOnly>
+}
+
 //extension DatastoreFormat where Instance: Identifiable, Instance.ID: Indexable & DiscreteIndexable, Self.Identifier == Instance.ID {
 //    @available(*, unavailable, message: "id is reserved on Identifiable Instance types.")
 //    var id: Never { preconditionFailure("id is reserved on Identifiable Instance types.") }
