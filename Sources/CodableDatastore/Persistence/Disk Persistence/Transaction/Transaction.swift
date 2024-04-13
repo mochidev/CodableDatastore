@@ -139,6 +139,13 @@ extension DiskPersistence {
             if let parent {
                 /// If the transaction is read-only, stop here without applying anything to the parent.
                 guard !options.contains(.readOnly) else {
+                    assert(entryMutations.isEmpty, "Entries were mutated in a read-only transaction!")
+                    assert(createdRootObjects.isEmpty, "Root objects were created in a read-only transaction!")
+                    assert(createdIndexes.isEmpty, "Indexes were created in a read-only transaction!")
+                    assert(createdPages.isEmpty, "Pages were created in a read-only transaction!")
+                    assert(deletedRootObjects.isEmpty, "Root objects were deleted in a read-only transaction!")
+                    assert(deletedIndexes.isEmpty, "Indexes were deleted in a read-only transaction!")
+                    assert(deletedPages.isEmpty, "Pages were deleted in a read-only transaction!")
                     return
                 }
                 try await parent.apply(
@@ -223,6 +230,7 @@ extension DiskPersistence {
             options: UnsafeTransactionOptions,
             handler: @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
+            assert(!self.options.contains(.readOnly) || options.contains(.readOnly), "A child transaction was declared read-write, even though its parent was read-only!")
             let transaction = Transaction(
                 persistence: persistence,
                 parent: self,
@@ -327,6 +335,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
     }
     
     func apply(descriptor: DatastoreDescriptor, for datastoreKey: DatastoreKey) async throws {
+        assert(!options.contains(.readOnly), "apply(descriptor:for:) called on a read-only transaction!")
         try checkIsActive()
         
         if let existingRootObject = try await rootObject(for: datastoreKey) {
@@ -872,6 +881,7 @@ extension DiskPersistence.Transaction {
         existingIndex: DiskPersistence.Datastore.Index?,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "persist(entry:...) called on a read-only transaction!")
         guard let existingIndex
         else { throw DatastoreInterfaceError.indexNotFound }
         
@@ -941,6 +951,7 @@ extension DiskPersistence.Transaction {
         cursor: some InsertionCursorProtocol,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "persistPrimaryIndexEntry(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -967,6 +978,7 @@ extension DiskPersistence.Transaction {
         existingIndex: DiskPersistence.Datastore.Index?,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "delete(...) called on a read-only transaction!")
         guard let existingIndex
         else { throw DatastoreInterfaceError.indexNotFound }
         
@@ -1030,6 +1042,7 @@ extension DiskPersistence.Transaction {
         cursor: some InstanceCursorProtocol,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "deletePrimaryIndexEntry(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1046,6 +1059,7 @@ extension DiskPersistence.Transaction {
     func resetPrimaryIndex(
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "resetPrimaryIndex(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1107,6 +1121,7 @@ extension DiskPersistence.Transaction {
         indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "persistDirectIndexEntry(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1133,6 +1148,7 @@ extension DiskPersistence.Transaction {
         indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "deleteDirectIndexEntry(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1150,6 +1166,7 @@ extension DiskPersistence.Transaction {
         indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "deleteDirectIndex(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1189,6 +1206,7 @@ extension DiskPersistence.Transaction {
         indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "persistSecondaryIndexEntry(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1213,6 +1231,7 @@ extension DiskPersistence.Transaction {
         indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "deleteSecondaryIndexEntry(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1230,6 +1249,7 @@ extension DiskPersistence.Transaction {
         indexName: IndexName,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "deleteSecondaryIndex(...) called on a read-only transaction!")
         try checkIsActive()
         
         guard let existingRootObject = try await rootObject(for: datastoreKey)
@@ -1302,6 +1322,7 @@ extension DiskPersistence.Transaction {
         event: ObservedEvent<IdentifierType, ObservationEntry>,
         datastoreKey: DatastoreKey
     ) async throws {
+        assert(!options.contains(.readOnly), "emit(event:...) called on a read-only transaction!")
         try checkIsActive()
         
         guard try await hasObservers(for: datastoreKey) else { return }
