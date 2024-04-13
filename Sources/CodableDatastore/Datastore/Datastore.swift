@@ -291,7 +291,7 @@ extension Datastore {
                         guard
                             directIndexesToBuild.contains(indexName),
                             !queriedIndexes.contains(indexName)
-                        else { return }
+                        else { continue }
                         queriedIndexes.insert(indexName)
                         
                         for updatedValue in instance[index: generatedRepresentation.index] {
@@ -318,7 +318,7 @@ extension Datastore {
                         guard
                             secondaryIndexesToBuild.contains(indexName),
                             !queriedIndexes.contains(indexName)
-                        else { return }
+                        else { continue }
                         queriedIndexes.insert(indexName)
                         
                         for updatedValue in instance[index: generatedRepresentation.index] {
