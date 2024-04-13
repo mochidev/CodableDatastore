@@ -408,6 +408,9 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         let count = try await datastore.count
         XCTAssertEqual(count, 200)
         
+        let iteratedCount = try await datastore.load(...).reduce(into: 0) { partialResult, _ in partialResult += 1 }
+        XCTAssertEqual(iteratedCount, 200)
+        
         /// Simple ranges
         values = try await datastore.load(5..<9).map { $0.value }.reduce(into: []) { $0.append($1) }
         XCTAssertEqual(values, ["6", "8"])
@@ -499,7 +502,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             "Twenty Three is Number One"
         ]
         
-        let start = ProcessInfo.processInfo.systemUptime
+        var start = ProcessInfo.processInfo.systemUptime
         for n in 1...100 {
             let time = ProcessInfo.processInfo.systemUptime
             for _ in 0..<100 {
@@ -508,6 +511,13 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let now = ProcessInfo.processInfo.systemUptime
             print("\(n*100): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
         }
+        
+        let count = try await datastore.count
+        start = ProcessInfo.processInfo.systemUptime
+        let iteratedCount = try await datastore.load(...).reduce(into: 0) { partialResult, _ in partialResult += 1 }
+        let now = ProcessInfo.processInfo.systemUptime
+        print("Scanning \(iteratedCount) instances: \((1000*(now - start)).rounded()/1000)s")
+        XCTAssertEqual(count, iteratedCount)
     }
     
     func testWritingManyEntriesInTransactions() async throws {
@@ -546,7 +556,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             "Twenty Three is Number One"
         ]
         
-        let start = ProcessInfo.processInfo.systemUptime
+        var start = ProcessInfo.processInfo.systemUptime
         for n in 1...5 {
             let time = ProcessInfo.processInfo.systemUptime
             try await persistence.perform {
@@ -557,6 +567,13 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let now = ProcessInfo.processInfo.systemUptime
             print("\(n*5000): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
         }
+        
+        let count = try await datastore.count
+        start = ProcessInfo.processInfo.systemUptime
+        let iteratedCount = try await datastore.load(...).reduce(into: 0) { partialResult, _ in partialResult += 1 }
+        let now = ProcessInfo.processInfo.systemUptime
+        print("Scanning \(iteratedCount) instances: \((1000*(now - start)).rounded()/1000)s")
+        XCTAssertEqual(count, iteratedCount)
     }
     
     func testWritingManyConsecutiveEntriesInTransactions() async throws {
@@ -595,7 +612,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             "Twenty Three is Number One"
         ]
         
-        let start = ProcessInfo.processInfo.systemUptime
+        var start = ProcessInfo.processInfo.systemUptime
         for n in 1...5 {
             let time = ProcessInfo.processInfo.systemUptime
             try await persistence.perform {
@@ -607,6 +624,13 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let now = ProcessInfo.processInfo.systemUptime
             print("\(n*5000): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
         }
+        
+        let count = try await datastore.count
+        start = ProcessInfo.processInfo.systemUptime
+        let iteratedCount = try await datastore.load(...).reduce(into: 0) { partialResult, _ in partialResult += 1 }
+        let now = ProcessInfo.processInfo.systemUptime
+        print("Scanning \(iteratedCount) instances: \((1000*(now - start)).rounded()/1000)s")
+        XCTAssertEqual(count, iteratedCount)
     }
     
     func testReplacingEntriesInTransactions() async throws {
@@ -651,7 +675,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             }
         }
         
-        let start = ProcessInfo.processInfo.systemUptime
+        var start = ProcessInfo.processInfo.systemUptime
         for n in 1...100 {
             let time = ProcessInfo.processInfo.systemUptime
             try await persistence.perform {
@@ -662,5 +686,12 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
             let now = ProcessInfo.processInfo.systemUptime
             print("\(n*100): \((100*(now - time)).rounded()/100)s -   total: \((10*(now - start)).rounded()/10)s")
         }
+        
+        let count = try await datastore.count
+        start = ProcessInfo.processInfo.systemUptime
+        let iteratedCount = try await datastore.load(...).reduce(into: 0) { partialResult, _ in partialResult += 1 }
+        let now = ProcessInfo.processInfo.systemUptime
+        print("Scanning \(iteratedCount) instances: \((1000*(now - start)).rounded()/1000)s")
+        XCTAssertEqual(count, iteratedCount)
     }
 }
