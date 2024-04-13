@@ -137,6 +137,10 @@ extension DiskPersistence {
             }
             
             if let parent {
+                /// If the transaction is read-only, stop here without applying anything to the parent.
+                guard !options.contains(.readOnly) else {
+                    return
+                }
                 try await parent.apply(
                     rootObjects: rootObjects,
                     entryMutations: entryMutations,
