@@ -694,4 +694,64 @@ final class DiskPersistenceDatastoreTests: XCTestCase {
         print("Scanning \(iteratedCount) instances: \((1000*(now - start)).rounded()/1000)s")
         XCTAssertEqual(count, iteratedCount)
     }
+    
+    func testNestedTransactions() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: Int
+                var value: String
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        try await persistence.createPersistenceIfNecessary()
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        let valueBank = [
+            "Hello, World!",
+            "My name is Dimitri",
+            "Writen using CodableDatastore",
+            "Swift is better than Objective-C, there, I said it",
+            "Twenty Three is Number One"
+        ]
+        
+        try await persistence.perform {
+            for id in 0..<10 {
+                try await datastore.persist(.init(id: id, value: valueBank.randomElement()!))
+            }
+        }
+        
+        try await persistence.perform {
+            let allInstances = datastore.load(...)
+            try await datastore.persist(.init(id: 10, value: valueBank.randomElement()!))
+            try await persistence.perform {
+                /// Resolve and close out the previous child transaction, which should not corrupt the parent.
+                let resolvedInstances = try await allInstances.reduce(into: []) { $0.append($1) }
+                XCTAssertEqual(resolvedInstances.count, 10)
+                
+                /// Allow corruption to occur if they will.
+                try await Task.sleep(for: .seconds(1))
+                
+                /// Check to make sure that we are reading the last written to root object, not the one that just got applied.
+                let lastAddedInstance = try await datastore.load(10)
+                XCTAssertNotNil(lastAddedInstance)
+            }
+        }
+    }
 }
