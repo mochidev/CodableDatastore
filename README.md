@@ -43,6 +43,212 @@ targets: [
 ]
 ```
 
+## Usage
+
+There are three basic steps to use `CodableDatastore`:
+- First, declare a _format_ for your datastore by conforming a struct to [`DatastoreFormat`](https://swiftpackageindex.com/mochidev/codabledatastore/main/documentation/codabledatastore/datastoreformat).
+- Then, instanciate the [persistence](https://swiftpackageindex.com/mochidev/codabledatastore/main/documentation/codabledatastore/diskpersistence) on disk where it will be stored.
+- Finally, [read](https://swiftpackageindex.com/mochidev/codabledatastore/main/documentation/codabledatastore/datastore/load%28_:%29-6uzkw) and [write](https://swiftpackageindex.com/mochidev/codabledatastore/main/documentation/codabledatastore/datastore/persist%28_:%29) to it as necessary.
+
+### Declaring a Format
+
+First, you must decide on the shape of your model. Each datastore can contain exactly one type, though a persistence can coordinate access across different types. Since `CodableDatastore` was designed with value types in mind, avoid using classes for your model objects.
+
+You'll also need a corresponding _format_ for your datastore, that describes how your type is identified, versioning information, and any indexes you'd like to be automatically created on your behalf.
+
+`CodableDatastore` encourages a pattern where the _format_ you declare becomes the primary namespace for your type and its related meta types:
+
+```swift
+import Foundation
+import CodableDatastore
+
+struct BookStore: DatastoreFormat {
+    // These are both required, and used by the initializer for `Datastore` below.
+    static let defaultKey: DatastoreKey = "BooksStore"
+    static let currentVersion: Version = .current
+
+    // A required description of your current and past versions you support
+    // decoding. Note that the current version should always have a sensible
+    // value, as it will get encoded to the persistence. 
+    // Either `Int`s or `String`s are supported.
+    enum Version: String {
+        case v1 = "2024-04-01"
+        case current = "2024-04-09"
+    }
+
+    // A required "pointer" to the latest representation of your type.
+    typealias Instance = Book
+    // Optional if the Instance above is Identifiable, but required otherwise.
+    // typealias Identifier = UUID
+
+    // The first version we shipped with and need to support.
+    struct BookV1: Codable, Identifiable {
+        var id: UUID
+        var title: String
+        var author: String
+    }
+
+    // The current version we use in the app.
+    struct Book: Codable, Identifiable {
+        var id: UUID
+        var title: SortableTitle
+        var authors: [AuthorID]
+        var isbn: ISBN
+    }
+
+    // A non-required helper for instanciating a datastore. Note many
+    // parameters are inferred, since `DatastoreFormat` declares a specialized
+    // `Self.Datastore` with all the generic parameters filled out.
+    // `CodableDatastore` comes with initializers for JSON and Property list
+    // stores, though completely custom coders can easily be supported by using
+    // the default initializers on `Datastore`.
+    static func datastore(for persistence: DiskPersistence<ReadWrite>) -> Self.Datastore {
+        .JSONStore(
+            persistence: persistence,
+            // This is where all the migrations for different versions are
+            // defined; Simply decode the type you know if stored for a given 
+            // version, and convert it to the modern type you use in the app.
+            // Conversions are typically only done at read time.
+            migrations: [
+                .v1: { data, decoder in try Book(decoder.decode(BookV1.self, from: data)) },
+                .current: { data, decoder in try decoder.decode(Book.self, from: data) }
+            ]
+        )
+    }
+    
+    // Declare your indexes here by declaring stored properties in one of the
+    // provided `Index` types. The keypaths refer to the main Instance for the
+    // format you declared. Both stored and computed keypaths are supported.
+    // Indexes are automatically re-computed whenever the names or types of
+    // these declarations change, though the key path itself can change silently.
+    // Note: Manual migrations of these is not currently supported but is planned.
+    let title = Index(\.title)
+    let author = ManyToManyIndex(\.authors)
+    // A one to one index where every isbn points to exactly one book.
+    // Note the index is marked with `@Direct`, which optimizes reads by isbn by
+    // trading off the additional storage space needed to store full copies of
+    // the `Book` struct in that index.
+    @Direct var isbn = OneToOneIndex(\.isbn)
+}
+
+// A convenience alias for the rest of the app to use.
+typealias Book = BookStore.Book
+
+// Declare any necessary conversions to make old stored instances continue working.
+extension Book {
+    init(_ bookV1: BookStore.BookV1) {
+        self.init(
+            id: id,
+            title: SortableTitle(title),
+            authors: [AuthorID(authors)],
+            isbn: ISBN.generate()
+        )
+    }
+}
+```
+
+### Instanciating Your Persistence
+
+Next, setup an actor or other manager to "own" your persistence and datastores in a way that makes sense for your app. Note that persistences and datastores don't need an async or throwable context to be instantiated, and provide deferred methods to do this when you can optionally show UI around these actions. Keep a reference to the persistence and datastore actors you create and either pass them around in your app individually, or keep them abstracted away in a single manager with getters and setters for common operations.
+
+```swift
+import Foundation
+import CodableDatastore
+
+actor LibraryPersistence {
+    // Keep these around so we can access them as necessary
+    let persistence: DiskPersistence<ReadWrite>
+    
+    let bookDatastore: BookStore.Datastore
+    let authorDatastore: AuthorStore.Datastore
+    let shelfDatastore: ShelfStore.Datastore
+
+    init() async throws {
+        // Initialize the persistence to Application Support, or pass in a readWriteURL
+        persistence = try DiskPersistence.defaultStore()
+        // Make sure we can write and access it
+        try await persistence.createPersistenceIfNecessary()
+        
+        // Initialize the datastores so we can refer back to them
+        bookDatastore = BookStore.datastore(for: persistence)
+        authorDatastore = AuthorStore.datastore(for: persistence)
+        shelfDatastore = ShelfStore.datastore(for: persistence)
+        
+        // Warm the datastores to re-build any indexes changed suring development.
+        // This is an excellend opportunity to show migration UI if the process takes longer than a second.
+        try await bookDatastore.warm { progress in
+            switch progress {
+            case .evaluating:
+                // Always called
+                print("Checking Books…") 
+            case .working(let current, let total):
+                // Only called if migrating. Signal some UI and log the values.
+                // `current` is 0-based.
+                print("  → Migrating \(current+1)/\(total) Books…")
+            case .complete(let total):
+                // Always called
+                print("  ✓ Finished checking \(total) Books!") 
+            }
+        }
+        try await authorDatastore.warm()
+        try await shelfDatastore.warm()
+    }
+}
+```
+
+### Access the Datastores
+
+Once you have a datastore, you can read from it in any async throwing context:
+
+```swift
+let bookByID = try await bookDatastore.load(bookID)
+let bookByISBN = try await bookDatastore.load(isbn, from: \.isbn)
+```
+
+Note that in the above examples, bookID is of type `BookStore.Identifier`, aka `Book.ID`, and `\.isbn` is the keypath on `BookStore` that points to the ISBN index, a one-to-one index. These both return optionals, and thus `nil` if the instance for the given key 
+
+A range of results can also be attained as an asynchronous sequence:
+
+```swift
+for try await book in bookDatastore.load("A"..<"B", from: \.title) {
+    print("Book that starts with A: \(book.title)")
+}
+
+guard let dimitri = authorDatastore.load("Dimitri Bouniol", from: \.fullname).first(where: { _ in true })
+else { throw NotFoundError() }
+for try await book in bookDatastore.load(dimitri.id, from: \.author) {
+    print("Book written by Dimitri: \(book.title)")
+}
+
+let allShelves = try await shelfDatastore.load(...).reduce(into: []) { $0.append($1) }
+```
+
+Writing or deleteing is equally as straight-forward:
+```swift
+let oldValue = try await bookDatastore.persist(newBook)
+let oldValue = try await bookDatastore.delete(oldBookID)
+let oldOptionalValue = try await bookDatastore.deleteIfPresent(oldBookID)
+
+// Passing an Identifiable instance also works:
+let oldValue = try await bookDatastore.delete(oldBook)
+```
+
+If you are reading and writing multiple things, you can wrap them in a transaction to ensure they all get written to the persistence together, ensuring that you either have all the data, or none of the data if an error occurs:
+```swift
+try await persistence.perform {
+    try await authorDatastore.persist(newAuthor)
+    for newBook in newBooks {
+        guard let shelf = try await shelfDatastore.load(newBook.genre, from: \.genre)
+        else { throw ShelfNotFoundError() }
+        
+        newBook.shelfID = shelf
+        try await authorDatastore.persist(newBook)
+    }
+}
+```
+
+Note that in the example above, even though the author is persisted first, if an error occurs fetching the shelf for the book, the author will _not_ be present in the datastore in future reads. Additionally, no two writes can occur simultaneously no matter the async context, as all individual operations are themselves full transactions.
+
 ## What is `CodableDatastore`?
 
 `CodableDatastore` is a collection of types that make it easy to interface with large data stores of independent types without loading the entire data store in memory.

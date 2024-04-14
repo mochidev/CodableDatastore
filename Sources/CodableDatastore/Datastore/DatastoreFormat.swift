@@ -17,7 +17,7 @@ import Foundation
 /// Conformers can create subtypes for their versioned models either in the body of their struct or in legacy extensions. Additionally, you are encouraged to make **static** properties available for things like the current version, or a configured ``Datastore`` — this allows easy access to them without mucking around declaring them in far-away places in your code base.
 ///
 /// ```swift
-/// struct BooksFormat {
+/// struct BookStore: DatastoreFormat {
 ///     static let defaultKey: DatastoreKey = "BooksStore"
 ///     static let currentVersion: Version = .current
 ///
@@ -41,29 +41,25 @@ import Foundation
 ///         var isbn: ISBN
 ///     }
 ///
-///     static func datastore(for persistence: DiskPersistence<ReadWrite>) -> Datastore {
+///     static func datastore(for persistence: DiskPersistence<ReadWrite>) -> Self.Datastore {
 ///         .JSONStore(
 ///             persistence: persistence,
 ///             migrations: [
-///                 .v1: { data, decoder in
-///                     Book(try decoder.decode(BookV1.self, from: data))
-///                 },
-///                 .current: { data, decoder in
-///                     try decoder.decode(Book.self, from: data)
-///                 }
+///                 .v1: { data, decoder in try Book(decoder.decode(BookV1.self, from: data)) },
+///                 .current: { data, decoder in try decoder.decode(Book.self, from: data) }
 ///             ]
 ///         )
 ///     }
 ///
 ///     let title = Index(\.title)
 ///     let author = ManyToManyIndex(\.authors)
-///     let isbn = OneToOneIndex(\.isbn)
+///     @Direct var isbn = OneToOneIndex(\.isbn)
 /// }
 ///
-/// typealias Book = BooksFormat.Book
+/// typealias Book = BookStore.Book
 ///
 /// extension Book {
-///     init(_ bookV1: BooksFormat.BookV1) {
+///     init(_ bookV1: BookStore.BookV1) {
 ///         self.init(
 ///             id: id,
 ///             title: SortableTitle(title),
