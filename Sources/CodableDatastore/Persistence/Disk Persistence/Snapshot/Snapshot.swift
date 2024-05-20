@@ -34,7 +34,7 @@ actor Snapshot<AccessMode: _AccessMode> {
     var cachedIteration: SnapshotIteration?
     
     /// A pointer to the last manifest updater, so updates can be serialized after the last request.
-    var lastUpdateManifestTask: Task<Any, Error>?
+    var lastUpdateManifestTask: Task<Sendable, Error>?
     
     /// The loaded datastores.
     var datastores: [DatastoreIdentifier: DiskPersistence<AccessMode>.Datastore] = [:]
@@ -174,7 +174,7 @@ extension Snapshot {
     /// - Parameter updater: An updater that takes a mutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateManifest<T>(
-        updater: @escaping (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
+        updater: @Sendable @escaping (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
     ) -> Task<T, Error> where AccessMode == ReadWrite {
         if let (manifest, iteration) = SnapshotTaskLocals.manifest {
             return Task {
@@ -242,7 +242,7 @@ extension Snapshot {
     /// - Parameter accessor: An accessor that takes an immutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func readManifest<T>(
-        accessor: @escaping (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
+        accessor: @Sendable @escaping (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
     ) -> Task<T, Error> {
         
         if let (manifest, iteration) = SnapshotTaskLocals.manifest {
@@ -285,10 +285,12 @@ extension Snapshot {
     /// - Note: Calling this method when no manifest exists on disk will create it, even if no changes occur in the block.
     /// - Parameter updater: An updater that takes a mutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `updater`.
-    func updatingManifest<T>(
-        updater: @escaping (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
+    func updatingManifest<T: Sendable>(
+        updater: @Sendable (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
     ) async throws -> T where AccessMode == ReadWrite {
-        try await updateManifest(updater: updater).value
+        try await withoutActuallyEscaping(updater) { escapingClosure in
+            try await updateManifest(updater: escapingClosure).value
+        }
     }
 
     /// Load the manifest in an updater.
@@ -298,10 +300,12 @@ extension Snapshot {
     /// - Parameter accessor: An accessor that takes an immutable reference to a manifest, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
-    func readingManifest<T>(
-        accessor: @escaping (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
+    func readingManifest<T: Sendable>(
+        accessor: @Sendable (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
     ) async throws -> T {
-        try await readManifest(accessor: accessor).value
+        try await withoutActuallyEscaping(accessor) { escapingClosure in
+            try await readManifest(accessor: escapingClosure).value
+        }
     }
 }
 

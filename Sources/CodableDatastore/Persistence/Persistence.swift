@@ -9,7 +9,7 @@
 import Foundation
 
 /// A persistence used to group multiple data stores into a common store.
-public protocol Persistence<AccessMode> {
+public protocol Persistence<AccessMode>: Sendable {
     associatedtype AccessMode: _AccessMode
     
     /// Perform a transaction on the persistence with the specified options.
@@ -20,7 +20,7 @@ public protocol Persistence<AccessMode> {
     func _withTransaction<T>(
         actionName: String?,
         options: UnsafeTransactionOptions,
-        transaction: @escaping @Sendable (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        @_inheritActorContext transaction: @Sendable (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T
 }
 
@@ -40,7 +40,7 @@ extension Persistence {
     public func perform<T>(
         actionName: String? = nil,
         options: TransactionOptions = [],
-        transaction: @escaping (_ persistence: Self, _ isDurable: Bool) async throws -> T
+        _inheritActorContext transaction: @Sendable (_ persistence: Self, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
         try await _withTransaction(
             actionName: actionName,
@@ -65,7 +65,7 @@ extension Persistence {
     public func perform<T>(
         actionName: String? = nil,
         options: TransactionOptions = [],
-        transaction: @escaping () async throws -> T
+        @_inheritActorContext transaction: @Sendable () async throws -> T
     ) async throws -> T {
         try await _withTransaction(
             actionName: actionName,

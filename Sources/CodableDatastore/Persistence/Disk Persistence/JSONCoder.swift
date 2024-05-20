@@ -9,7 +9,7 @@
 import Foundation
 
 extension JSONEncoder {
-    static var shared: JSONEncoder = {
+    static let shared: JSONEncoder = {
         let datastoreEncoder = JSONEncoder()
         datastoreEncoder.dateEncodingStrategy = .iso8601WithMilliseconds
 #if DEBUG
@@ -22,7 +22,7 @@ extension JSONEncoder {
 }
 
 extension JSONDecoder {
-    static var shared: JSONDecoder = {
+    static let shared: JSONDecoder = {
         let datastoreDecoder = JSONDecoder()
         datastoreDecoder.dateDecodingStrategy = .iso8601WithMilliseconds
         return datastoreDecoder

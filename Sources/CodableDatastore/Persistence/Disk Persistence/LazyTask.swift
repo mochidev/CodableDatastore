@@ -7,7 +7,7 @@
 //
 
 struct LazyTask<T> {
-    let factory: () async -> T
+    let factory: @Sendable () async -> T
     
     var value: T {
         get async {
@@ -16,8 +16,10 @@ struct LazyTask<T> {
     }
 }
 
+extension LazyTask: Sendable where T: Sendable {}
+
 struct LazyThrowingTask<T> {
-    let factory: () async throws -> T
+    let factory: @Sendable () async throws -> T
     
     var value: T {
         get async throws {
@@ -25,3 +27,5 @@ struct LazyThrowingTask<T> {
         }
     }
 }
+
+extension LazyThrowingTask: Sendable where T: Sendable {}

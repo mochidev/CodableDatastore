@@ -11,7 +11,7 @@ import Foundation
 /// A description of a ``Datastore``'s requirements of a persistence.
 ///
 /// A persistence is expected to save a description and retrieve it when a connected ``Datastore`` requests it. The ``Datastore`` then uses it to compute if indexes need to be invalidated or re-built.
-public struct DatastoreDescriptor: Equatable, Hashable {
+public struct DatastoreDescriptor: Equatable, Hashable, Sendable {
     /// The version that was current at time of serialization.
     ///
     /// If a ``Datastore`` cannot decode this version, the datastore is presumed inaccessible, and any reads or writes will fail.
@@ -96,7 +96,7 @@ extension DatastoreDescriptor {
     /// A description of an Index used by a ``Datastore``.
     ///
     /// This information is used to determine which indexes must be invalidated or re-built, and which can be used as is. Additionally, it informs which properties must be reported along with any writes to keep existing indexes up to date.
-    public struct IndexDescriptor: Codable, Equatable, Hashable, Comparable {
+    public struct IndexDescriptor: Codable, Equatable, Hashable, Comparable, Sendable {
         /// The version that was first used to persist an index to disk.
         ///
         /// This is used to determine if an index must be re-built purely because something about how the index changed in a way that could not be automatically determined, such as Codable conformance changing.

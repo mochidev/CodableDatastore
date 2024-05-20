@@ -9,7 +9,7 @@
 import Foundation
 
 /// A set of options that the caller of a transaction can specify.
-public struct TransactionOptions: OptionSet {
+public struct TransactionOptions: OptionSet, Sendable {
     public let rawValue: UInt64
     
     public init(rawValue: UInt64) {
@@ -29,7 +29,7 @@ public struct TransactionOptions: OptionSet {
 /// A set of options that the caller of a transaction can specify.
 ///
 /// These options are generally unsafe to use improperly, and should generally not be used.
-public struct UnsafeTransactionOptions: OptionSet {
+public struct UnsafeTransactionOptions: OptionSet, Sendable {
     public let rawValue: UInt64
     
     public init(rawValue: UInt64) {

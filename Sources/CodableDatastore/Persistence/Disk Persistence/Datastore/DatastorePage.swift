@@ -107,6 +107,27 @@ extension DiskPersistence.Datastore.Page {
         }
     }
     
+    private nonisolated func performRead(sequence: AnyReadableSequence<Byte>) async throws -> MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>> {
+        var iterator = sequence.makeAsyncIterator()
+        
+        try await iterator.check(Self.header)
+        
+        /// Pages larger than 1 GB are unsupported.
+        let transformation = try await iterator.collect(max: 1024*1024*1024) { sequence in
+            sequence.iteratorMap { iterator in
+                guard let block = try await iterator.next(DatastorePageEntryBlock.self)
+                else { throw DiskPersistenceError.invalidPageFormat }
+                return block
+            }
+        }
+        
+        if let transformation {
+            return MultiplexedAsyncSequence(base: AnyReadableSequence(transformation))
+        } else {
+            return MultiplexedAsyncSequence(base: AnyReadableSequence([]))
+        }
+    }
+    
     var blocks: MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>> {
         get async throws {
             if let blocksReaderTask {
@@ -114,26 +135,7 @@ extension DiskPersistence.Datastore.Page {
             }
             
             let readerTask = Task {
-                let sequence = try readableSequence
-                
-                var iterator = sequence.makeAsyncIterator()
-                
-                try await iterator.check(Self.header)
-                
-                /// Pages larger than 1 GB are unsupported.
-                let transformation = try await iterator.collect(max: 1024*1024*1024) { sequence in
-                    sequence.iteratorMap { iterator in
-                        guard let block = try await iterator.next(DatastorePageEntryBlock.self)
-                        else { throw DiskPersistenceError.invalidPageFormat }
-                        return block
-                    }
-                }
-                
-                if let transformation {
-                    return MultiplexedAsyncSequence(base: AnyReadableSequence(transformation))
-                } else {
-                    return MultiplexedAsyncSequence(base: AnyReadableSequence([]))
-                }
+                try await performRead(sequence: try readableSequence)
             }
             isPersisted = true
             blocksReaderTask = readerTask
@@ -145,7 +147,7 @@ extension DiskPersistence.Datastore.Page {
     
     func persistIfNeeded() async throws {
         guard !isPersisted else { return }
-        let blocks = try await blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+        let blocks = try await Array(blocks)
         let bytes = blocks.reduce(into: Self.header) { $0.append(contentsOf: $1.bytes) }
         
         let pageURL = pageURL
@@ -162,13 +164,13 @@ extension DiskPersistence.Datastore.Page {
     static var headerSize: Int { header.count }
 }
 
-actor MultiplexedAsyncSequence<Base: AsyncSequence>: AsyncSequence {
+actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence where Base.Element: Sendable, Base.AsyncIterator: Sendable, Base.AsyncIterator.Element: Sendable {
     typealias Element = Base.Element
     
     private var cachedEntries: [Task<Element?, Error>] = []
     private var baseIterator: Base.AsyncIterator
     
-    struct AsyncIterator: AsyncIteratorProtocol {
+    struct AsyncIterator: AsyncIteratorProtocol & Sendable {
         let base: MultiplexedAsyncSequence
         var index: Array.Index = 0
         
@@ -194,8 +196,7 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence>: AsyncSequence {
                 _ = try? await lastTask?.value
                 
                 /// Grab the next iteration, and save a reference back to it. This is only safe since we chain the requests behind previous ones.
-                var iteratorCopy = baseIterator
-                let nextEntry = try await iteratorCopy.next()
+                let (nextEntry, iteratorCopy) = try await nextBase(iterator: baseIterator)
                 baseIterator = iteratorCopy
                 
                 return nextEntry
@@ -205,11 +206,25 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence>: AsyncSequence {
         }
     }
     
+    nonisolated func nextBase(iterator: Base.AsyncIterator) async throws -> (Element?, Base.AsyncIterator) {
+        var iteratorCopy = iterator
+        let nextEntry = try await iteratorCopy.next()
+        return (nextEntry, iteratorCopy)
+    }
+    
     nonisolated func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(base: self)
     }
     
     init(base: Base) {
         baseIterator = base.makeAsyncIterator()
+    }
+}
+
+extension RangeReplaceableCollection {
+    init<S: AsyncSequence>(_ sequence: S) async throws where S.Element == Element {
+        self = try await sequence.reduce(into: Self.init()) { @Sendable partialResult, element in
+            partialResult.append(element)
+        }
     }
 }

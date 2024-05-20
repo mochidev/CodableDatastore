@@ -7,7 +7,7 @@
 //
 
 /// A helper type for passing around metadata about an index.
-public struct GeneratedIndexRepresentation<Instance> {
+public struct GeneratedIndexRepresentation<Instance: Sendable>: Sendable {
     /// The name the index should be serialized under.
     public var indexName: IndexName
     

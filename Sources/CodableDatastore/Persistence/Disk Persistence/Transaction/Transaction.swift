@@ -49,7 +49,7 @@ extension DiskPersistence {
         
         private func attachTask<T>(
             options: UnsafeTransactionOptions,
-            handler: @escaping () async throws -> T
+            @_inheritActorContext handler: @Sendable @escaping () async throws -> T
         ) async -> Task<T, Error> {
             let task = Task {
                 isActive = true
@@ -201,7 +201,7 @@ extension DiskPersistence {
             lastTransaction: Transaction?,
             actionName: String?,
             options: UnsafeTransactionOptions,
-            handler: @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
+            @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             if let parent = Self.unsafeCurrentTransaction {
                 let (child, task) = await parent.childTransaction(options: options, handler: handler)
@@ -228,7 +228,7 @@ extension DiskPersistence {
         
         func childTransaction<T>(
             options: UnsafeTransactionOptions,
-            handler: @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
+            @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             assert(!self.options.contains(.readOnly) || options.contains(.readOnly), "A child transaction was declared read-write, even though its parent was read-only!")
             let transaction = Transaction(
@@ -462,6 +462,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
 
 // MARK: - Cursor Lookups
 
+@Sendable
 private func primaryIndexComparator<IdentifierType: Indexable>(lhs: IdentifierType, rhs: DatastorePageEntry) throws -> SortOrder {
     guard rhs.headers.count == 2
     else { throw DiskPersistenceError.invalidEntryFormat }
@@ -473,6 +474,7 @@ private func primaryIndexComparator<IdentifierType: Indexable>(lhs: IdentifierTy
     return lhs.sortOrder(comparedTo: entryIdentifier)
 }
 
+@Sendable
 private func directIndexComparator<IndexType: Indexable, IdentifierType: Indexable>(lhs: (index: IndexType, identifier: IdentifierType), rhs: DatastorePageEntry) throws -> SortOrder {
     guard rhs.headers.count == 3
     else { throw DiskPersistenceError.invalidEntryFormat }
@@ -491,6 +493,7 @@ private func directIndexComparator<IndexType: Indexable, IdentifierType: Indexab
     return lhs.identifier.sortOrder(comparedTo: entryIdentifier)
 }
 
+@Sendable
 private func secondaryIndexComparator<IndexType: Indexable, IdentifierType: Indexable>(lhs: (index: IndexType, identifier: IdentifierType), rhs: DatastorePageEntry) throws -> SortOrder {
     guard rhs.headers.count == 1
     else { throw DiskPersistenceError.invalidEntryFormat }
@@ -635,6 +638,7 @@ extension DiskPersistence.Transaction {
 
 // MARK: - Range Lookups
 
+@Sendable
 private func primaryIndexBoundComparator<IdentifierType: Indexable>(lhs: (bound: RangeBoundExpression<IdentifierType>, order: RangeOrder), rhs: DatastorePageEntry) throws -> SortOrder {
     guard rhs.headers.count == 2
     else { throw DiskPersistenceError.invalidEntryFormat }
@@ -647,6 +651,7 @@ private func primaryIndexBoundComparator<IdentifierType: Indexable>(lhs: (bound:
     return lhs.bound.sortOrder(comparedTo: entryIdentifier, order: lhs.order)
 }
 
+@Sendable
 private func directIndexBoundComparator<IndexType: Indexable>(lhs: (bound: RangeBoundExpression<IndexType>, order: RangeOrder), rhs: DatastorePageEntry) throws -> SortOrder {
     guard rhs.headers.count == 3
     else { throw DiskPersistenceError.invalidEntryFormat }
@@ -659,6 +664,7 @@ private func directIndexBoundComparator<IndexType: Indexable>(lhs: (bound: Range
     return lhs.bound.sortOrder(comparedTo: indexedValue, order: lhs.order)
 }
 
+@Sendable
 private func secondaryIndexBoundComparator<IndexType: Indexable>(lhs: (bound: RangeBoundExpression<IndexType>, order: RangeOrder), rhs: DatastorePageEntry) throws -> SortOrder {
     guard rhs.headers.count == 1
     else { throw DiskPersistenceError.invalidEntryFormat }
@@ -673,9 +679,9 @@ private func secondaryIndexBoundComparator<IndexType: Indexable>(lhs: (bound: Ra
 
 extension DiskPersistence.Transaction {
     func primaryIndexScan<IdentifierType: Indexable>(
-        range: any IndexRangeExpression<IdentifierType>,
+        range: some IndexRangeExpression<IdentifierType> & Sendable,
         datastoreKey: DatastoreKey,
-        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+        instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws {
         try checkIsActive()
         
@@ -739,10 +745,10 @@ extension DiskPersistence.Transaction {
     }
     
     func directIndexScan<IndexType: Indexable>(
-        range: any IndexRangeExpression<IndexType>,
+        range: some IndexRangeExpression<IndexType> & Sendable,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
-        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+        instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws {
         try checkIsActive()
         
@@ -807,10 +813,10 @@ extension DiskPersistence.Transaction {
     }
     
     func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
-        range: any IndexRangeExpression<IndexType>,
+        range: some IndexRangeExpression<IndexType> & Sendable,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
-        identifierConsumer: (_ identifier: IdentifierType) async throws -> ()
+        identifierConsumer: @Sendable (_ identifier: IdentifierType) async throws -> ()
     ) async throws {
         try checkIsActive()
         
@@ -1334,7 +1340,7 @@ extension DiskPersistence.Transaction {
 
 // MARK: - Helper Types
 
-fileprivate protocol AnyDiskTransaction {}
+fileprivate protocol AnyDiskTransaction: Sendable {}
 
 fileprivate enum TransactionTaskLocals {
     @TaskLocal

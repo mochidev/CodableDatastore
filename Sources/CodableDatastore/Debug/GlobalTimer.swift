@@ -11,7 +11,7 @@ import Foundation
 actor GlobalTimer {
     var totalTime: TimeInterval = 0
     var totalSamples: Int = 0
-    static var global = GlobalTimer()
+    static let global = GlobalTimer()
     
     func submit(time: TimeInterval, sampleRate: Int = 100) {
         precondition(sampleRate > 0)

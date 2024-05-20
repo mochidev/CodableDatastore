@@ -9,7 +9,7 @@
 import Foundation
 
 extension ISO8601DateFormatter {
-    static var withMilliseconds: ISO8601DateFormatter = {
+    static let withMilliseconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.formatOptions = [

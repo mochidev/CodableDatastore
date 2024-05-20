@@ -9,7 +9,7 @@
 import Foundation
 
 /// A store for a homogenous collection of instances.
-public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
+public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode>: Sendable {
     /// A type representing the version of the datastore within the persistence.
     ///
     /// - SeeAlso: ``DatastoreFormat/Version``
@@ -29,19 +29,19 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
     let format: Format
     let key: DatastoreKey
     let version: Version
-    let encoder: (_ instance: InstanceType) async throws -> Data
-    let decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)]
+    let encoder: @Sendable (_ instance: InstanceType) async throws -> Data
+    let decoders: [Version: @Sendable (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)]
     let indexRepresentations: [AnyIndexRepresentation<InstanceType> : GeneratedIndexRepresentation<InstanceType>]
     
     var updatedDescriptor: DatastoreDescriptor?
     
-    fileprivate var warmupStatus: TaskStatus = .waiting
+    fileprivate var warmupStatus: TaskStatus<Progress> = .waiting
     fileprivate var warmupProgressHandlers: [ProgressHandler] = []
     
-    fileprivate var storeMigrationStatus: TaskStatus = .waiting
+    fileprivate var storeMigrationStatus: TaskStatus<Progress> = .waiting
     fileprivate var storeMigrationProgressHandlers: [ProgressHandler] = []
     
-    fileprivate var indexMigrationStatus: [AnyIndexRepresentation<InstanceType> : TaskStatus] = [:]
+    fileprivate var indexMigrationStatus: [AnyIndexRepresentation<InstanceType> : TaskStatus<Progress>] = [:]
     fileprivate var indexMigrationProgressHandlers: [AnyIndexRepresentation<InstanceType> : ProgressHandler] = [:]
     
     public init(
@@ -49,8 +49,8 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        encoder: @escaping (_ instance: InstanceType) async throws -> Data,
-        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
+        encoder: @Sendable @escaping (_ instance: InstanceType) async throws -> Data,
+        decoders: [Version: @Sendable (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) where AccessMode == ReadWrite {
         self.persistence = persistence
@@ -81,7 +81,7 @@ public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode> {
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        decoders: [Version: (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
+        decoders: [Version: @Sendable (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) where AccessMode == ReadOnly {
         self.persistence = persistence
@@ -124,7 +124,7 @@ extension Datastore {
         return descriptor
     }
     
-    func decoder(for version: Version) throws -> (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType) {
+    func decoder(for version: Version) throws -> @Sendable (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType) {
         guard let decoder = decoders[version] else {
             throw DatastoreError.missingDecoder(version: String(describing: version))
         }
@@ -144,14 +144,17 @@ extension Datastore {
         try await warmupIfNeeded(progressHandler: progressHandler)
     }
     
-    func warmupIfNeeded(progressHandler: ProgressHandler? = nil) async throws {
+    @discardableResult
+    func warmupIfNeeded(
+        @_inheritActorContext progressHandler: ProgressHandler? = nil
+    ) async throws -> Progress {
         switch warmupStatus {
-        case .complete: return
+        case .complete(let value): return value
         case .inProgress(let task):
             if let progressHandler {
                 warmupProgressHandlers.append(progressHandler)
             }
-            try await task.value
+            return try await task.value
         case .waiting:
             if let progressHandler {
                 warmupProgressHandlers.append(progressHandler)
@@ -165,20 +168,20 @@ extension Datastore {
                 }
             }
             warmupStatus = .inProgress(warmupTask)
-            try await warmupTask.value
+            return try await warmupTask.value
         }
     }
     
-    func registerAndMigrate(with transaction: DatastoreInterfaceProtocol) async throws {
+    func registerAndMigrate(with transaction: DatastoreInterfaceProtocol) async throws -> Progress {
         let persistedDescriptor = try await transaction.register(datastore: self)
         
         /// Only operate on read-write datastores beyond this point.
         guard let self = self as? Datastore<Format, ReadWrite>
-        else { return }
+        else { return .complete(total: 0) }
         
         /// Make sure we have a descriptor, and that there is at least one entry, otherwise stop here.
         guard let persistedDescriptor, persistedDescriptor.size > 0
-        else { return }
+        else { return .complete(total: 0) }
         
         /// Check the version to see if the current one is greater or equal to the one in the existing descriptor. If we can't decode it, stop here and throw an error — the data store is unsupported.
         let persistedVersion = try Version(persistedDescriptor.version)
@@ -344,12 +347,15 @@ extension Datastore {
             }
         }
         
+        let completeProgress = Progress.complete(total: persistedDescriptor.size)
+        
         for handler in warmupProgressHandlers {
-            handler(.complete(total: persistedDescriptor.size))
+            handler(completeProgress)
         }
         
         warmupProgressHandlers.removeAll()
-        warmupStatus = .complete
+        warmupStatus = .complete(completeProgress)
+        return completeProgress
     }
 }
 
@@ -364,7 +370,13 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - index: The index to migrate.
     ///   - minimumVersion: The minimum valid version for an index to not be migrated.
     ///   - progressHandler: A closure that will be regularly called with progress during the migration. If no migration needs to occur, it won't be called, so setup and tear down any UI within the handler.
-    public func migrate<Index: IndexRepresentation<InstanceType>>(index: KeyPath<Format, Index>, ifLessThan minimumVersion: Version, progressHandler: ProgressHandler? = nil) async throws {
+    public func migrate<Index: IndexRepresentation<InstanceType>>(
+        index: KeyPath<Format, Index>,
+        ifLessThan minimumVersion: Version,
+        progressHandler: ProgressHandler? = nil
+    ) async throws {
+        let indexRepresentation = AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])
+        
         try await persistence._withTransaction(
             actionName: "Migrate Entries",
             options: []
@@ -374,7 +386,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we didn't declare the index, we can't do anything. This is likely an error only encountered to self-implementers of ``DatastoreFormat``'s ``DatastoreFormat/generateIndexRepresentations``.
-                let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])],
+                let declaredIndex = self.indexRepresentations[indexRepresentation],
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
                 let matchingDescriptor =
                     descriptor.directIndexes[declaredIndex.indexName.rawValue] ?? descriptor.referenceIndexes[declaredIndex.indexName.rawValue],
@@ -384,9 +396,7 @@ extension Datastore where AccessMode == ReadWrite {
                 version.rawValue < minimumVersion.rawValue
             else { return }
             
-            var warmUpProgress: Progress = .complete(total: 0)
-            try await self.warmupIfNeeded { progress in
-                warmUpProgress = progress
+            let warmUpProgress = try await self.warmupIfNeeded { progress in
                 progressHandler?(progress.adding(current: 0, total: descriptor.size))
             }
             
@@ -396,7 +406,7 @@ extension Datastore where AccessMode == ReadWrite {
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key),
                 descriptor.size > 0,
                 /// If we didn't declare the index, we can't do anything. This is likely an error only encountered to self-implementers of ``DatastoreFormat``'s ``DatastoreFormat/generateIndexRepresentations``.
-                let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])],
+                let declaredIndex = self.indexRepresentations[indexRepresentation],
                 /// If we don't have an index stored, there is nothing to do here. This means we can skip checking it on the type.
                 let matchingDescriptor =
                     descriptor.directIndexes[declaredIndex.indexName.rawValue] ?? descriptor.referenceIndexes[declaredIndex.indexName.rawValue],
@@ -469,7 +479,7 @@ extension Datastore {
                 let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
                 
                 let entryVersion = try Version(persistedEntry.versionData)
-                let decoder = try await self.decoder(for: entryVersion)
+                let decoder = try self.decoder(for: entryVersion)
                 let instance = try await decoder(persistedEntry.instanceData).instance
                 
                 return instance
@@ -491,10 +501,10 @@ extension Datastore {
     ///   - awaitWarmup: Whether the sequence should await warmup or jump right into loading.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     nonisolated func _load(
-        _ identifierRange: some IndexRangeExpression<IdentifierType>,
+        _ identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
         order: RangeOrder,
         awaitWarmup: Bool
-    ) -> some TypedAsyncSequence<(id: IdentifierType, instance: InstanceType)> {
+    ) -> some TypedAsyncSequence<(id: IdentifierType, instance: InstanceType)> & Sendable {
         AsyncThrowingBackpressureStream { provider in
             if awaitWarmup {
                 try await self.warmupIfNeeded()
@@ -527,9 +537,9 @@ extension Datastore {
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     public nonisolated func load(
-        _ identifierRange: some IndexRangeExpression<IdentifierType>,
+        _ identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
         _load(identifierRange, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
@@ -545,7 +555,7 @@ extension Datastore {
     public nonisolated func load(
         _ identifierRange: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
         load(identifierRange, order: order)
     }
     
@@ -559,7 +569,7 @@ extension Datastore {
     public nonisolated func load(
         _ unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(IndexRange(), order: order, awaitWarmup: true)
             .map { $0.instance }
     }
@@ -571,13 +581,15 @@ extension Datastore {
     ///   - index: The index to load from.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     @usableFromInline
-    nonisolated func _load<Index: IndexRepresentation<InstanceType>, Range: IndexRangeExpression>(
-        _ range: Range,
+    nonisolated func _load<Index: IndexRepresentation<InstanceType> & Sendable, Bound: Indexable & Sendable>(
+        _ range: some IndexRangeExpression<Bound> & Sendable,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> where Range.Bound: Indexable {
-        AsyncThrowingBackpressureStream { provider in
-            guard let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])]
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
+        let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])]
+        
+        return AsyncThrowingBackpressureStream { provider in
+            guard let declaredIndex
             else { throw DatastoreError.missingIndex }
             
             try await self.warmupIfNeeded()
@@ -639,7 +651,7 @@ extension Datastore {
         _ value: Index.Value,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(IndexRange(only: value), order: order, from: index)
     }
     
@@ -674,10 +686,10 @@ extension Datastore {
         Value: RangedIndexable,
         Index: RetrievableIndexRepresentation<InstanceType, Value>
     >(
-        _ range: some IndexRangeExpression<Value>,
+        _ range: some IndexRangeExpression<Value> & Sendable,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(range, order: order, from: index)
     }
     
@@ -699,7 +711,7 @@ extension Datastore {
         _ range: IndexRange<Value>,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(range, order: order, from: index)
     }
     
@@ -717,7 +729,7 @@ extension Datastore {
         _ unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(IndexRange.unbounded, order: order, from: index)
     }
 }
@@ -725,12 +737,12 @@ extension Datastore {
 // MARK: - Observation
 
 extension Datastore {
-    public func observe(_ idenfifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    public func observe(_ idenfifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
         try await self.observe()
             .filter { $0.id == idenfifier }
     }
     
-    public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -783,7 +795,7 @@ extension Datastore where AccessMode == ReadWrite {
                     let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
                     
                     let existingVersion = try Version(existingEntry.versionData)
-                    let decoder = try await self.decoder(for: existingVersion)
+                    let decoder = try self.decoder(for: existingVersion)
                     let existingInstance = try await decoder(existingEntry.instanceData).instance
                     
                     return (
@@ -979,7 +991,7 @@ extension Datastore where AccessMode == ReadWrite {
             
             /// Load the instance completely so we can delete the entry within the direct and secondary indexes too.
             let existingVersion = try Version(existingEntry.versionData)
-            let decoder = try await self.decoder(for: existingVersion)
+            let decoder = try self.decoder(for: existingVersion)
             let existingInstance = try await decoder(existingEntry.instanceData).instance
             
             try await transaction.emit(
@@ -1087,7 +1099,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     }
     
     @_disfavoredOverload
-    public func observe(_ instance: InstanceType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    public func observe(_ instance: InstanceType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
         try await observe(instance.id)
     }
 }
@@ -1102,7 +1114,7 @@ extension Datastore where AccessMode == ReadWrite {
         version: Version = Format.currentVersion,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1111,7 +1123,7 @@ extension Datastore where AccessMode == ReadWrite {
             version: version,
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues { migration in
-                { data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(data, decoder) }
             },
             configuration: configuration
         )
@@ -1123,7 +1135,7 @@ extension Datastore where AccessMode == ReadWrite {
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         let encoder = PropertyListEncoder()
@@ -1137,7 +1149,7 @@ extension Datastore where AccessMode == ReadWrite {
             version: version,
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues { migration in
-                { data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(data, decoder) }
             },
             configuration: configuration
         )
@@ -1151,7 +1163,7 @@ extension Datastore where AccessMode == ReadOnly {
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1159,7 +1171,7 @@ extension Datastore where AccessMode == ReadOnly {
             key: key,
             version: version,
             decoders: migrations.mapValues { migration in
-                { data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(data, decoder) }
             },
             configuration: configuration
         )
@@ -1170,7 +1182,7 @@ extension Datastore where AccessMode == ReadOnly {
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         let decoder = PropertyListDecoder()
@@ -1180,7 +1192,7 @@ extension Datastore where AccessMode == ReadOnly {
             key: key,
             version: version,
             decoders: migrations.mapValues { migration in
-                { data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(data, decoder) }
             },
             configuration: configuration
         )
@@ -1195,8 +1207,8 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        encoder: @escaping (_ object: InstanceType) async throws -> Data,
-        decoders: [Version: (_ data: Data) async throws -> InstanceType],
+        encoder: @Sendable @escaping (_ object: InstanceType) async throws -> Data,
+        decoders: [Version : @Sendable (_ data: Data) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -1205,7 +1217,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             version: version,
             encoder: encoder,
             decoders: decoders.mapValues { decoder in
-                { data in
+                { @Sendable data in
                     let instance = try await decoder(data)
                     return (id: instance.id, instance: instance)
                 }
@@ -1221,7 +1233,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         version: Version = Format.currentVersion,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.JSONStore(
@@ -1231,7 +1243,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             encoder: encoder,
             decoder: decoder,
             migrations: migrations.mapValues { migration in
-                { data, decoder in
+                { @Sendable data, decoder in
                     let instance = try await migration(data, decoder)
                     return (id: instance.id, instance: instance)
                 }
@@ -1246,7 +1258,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.propertyListStore(
@@ -1255,7 +1267,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             version: version,
             outputFormat: outputFormat,
             migrations: migrations.mapValues { migration in
-                { data, decoder in
+                { @Sendable data, decoder in
                     let instance = try await migration(data, decoder)
                     return (id: instance.id, instance: instance)
                 }
@@ -1271,7 +1283,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        decoders: [Version: (_ data: Data) async throws -> InstanceType],
+        decoders: [Version : @Sendable (_ data: Data) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) {
         self.init(
@@ -1279,7 +1291,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             key: key,
             version: version,
             decoders: decoders.mapValues { decoder in
-                { data in
+                { @Sendable data in
                     let instance = try await decoder(data)
                     return (id: instance.id, instance: instance)
                 }
@@ -1294,7 +1306,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version: (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyJSONStore(
@@ -1303,7 +1315,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             version: version,
             decoder: decoder,
             migrations: migrations.mapValues { migration in
-                { data, decoder in
+                { @Sendable data, decoder in
                     let instance = try await migration(data, decoder)
                     return (id: instance.id, instance: instance)
                 }
@@ -1317,7 +1329,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        migrations: [Version: (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyPropertyListStore(
@@ -1325,7 +1337,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             key: key,
             version: version,
             migrations: migrations.mapValues { migration in
-                { data, decoder in
+                { @Sendable data, decoder in
                     let instance = try await migration(data, decoder)
                     return (id: instance.id, instance: instance)
                 }
@@ -1337,8 +1349,8 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
 
 // MARK: - Helper Types
 
-private enum TaskStatus {
+private enum TaskStatus<Value> {
     case waiting
-    case inProgress(Task<Void, Error>)
-    case complete
+    case inProgress(Task<Value, Error>)
+    case complete(Value)
 }

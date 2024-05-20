@@ -11,7 +11,7 @@ import Foundation
 /// A interface a ``Datastore`` uses to communicate with a ``Persistence``.
 /// 
 /// This protocol is provided so others can implement new persistences modelled after the ones provided by ``CodableDatastore``. You should never call any of these methods directly.
-public protocol DatastoreInterfaceProtocol {
+public protocol DatastoreInterfaceProtocol: Sendable {
     // MARK: Registration
     
     /// Register a ``Datastore`` with a ``Persistence`` so that it can be informed of changes made to the persistence.
@@ -137,23 +137,23 @@ public protocol DatastoreInterfaceProtocol {
     // MARK: Range Lookups
     
     func primaryIndexScan<IdentifierType: Indexable>(
-        range: any IndexRangeExpression<IdentifierType>,
+        range: some IndexRangeExpression<IdentifierType> & Sendable,
         datastoreKey: DatastoreKey,
-        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+        instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws
     
     func directIndexScan<IndexType: Indexable>(
-        range: any IndexRangeExpression<IndexType>,
+        range: some IndexRangeExpression<IndexType> & Sendable,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
-        instanceConsumer: (_ versionData: Data, _ instanceData: Data) async throws -> ()
+        instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws
     
     func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
-        range: any IndexRangeExpression<IndexType>,
+        range: some IndexRangeExpression<IndexType> & Sendable,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
-        identifierConsumer: (_ identifier: IdentifierType) async throws -> ()
+        identifierConsumer: @Sendable (_ identifier: IdentifierType) async throws -> ()
     ) async throws
     
     // MARK: Mutations
@@ -289,7 +289,7 @@ public protocol DatastoreInterfaceProtocol {
 // MARK: - Helper Types
 
 /// A strategy that handles exhaustion of a buffer’s capacity.
-public enum ObservationBufferingPolicy {
+public enum ObservationBufferingPolicy: Hashable, Sendable {
 
     /// Continue to add to the buffer, treating its capacity as infinite.
     case unbounded

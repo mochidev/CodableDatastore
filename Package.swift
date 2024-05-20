@@ -18,7 +18,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/mochidev/AsyncSequenceReader.git", .upToNextMinor(from: "0.1.2")),
+        .package(url: "https://github.com/mochidev/AsyncSequenceReader.git", .upToNextMinor(from: "0.2.1")),
         .package(url: "https://github.com/mochidev/Bytes.git", .upToNextMinor(from: "0.3.0")),
     ],
     targets: [
@@ -27,11 +27,17 @@ let package = Package(
             dependencies: [
                 "AsyncSequenceReader",
                 "Bytes"
+            ],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
         .testTarget(
             name: "CodableDatastoreTests",
-            dependencies: ["CodableDatastore"]
+            dependencies: ["CodableDatastore"],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency")
+            ]
         ),
     ]
 )

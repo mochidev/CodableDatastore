@@ -8,9 +8,9 @@
 
 import Foundation
 
-public typealias ProgressHandler = (_ progress: Progress) -> Void
+public typealias ProgressHandler = @Sendable (_ progress: Progress) -> Void
 
-public enum Progress {
+public enum Progress: Sendable {
     case evaluating
     case working(current: Int, total: Int)
     case complete(total: Int)

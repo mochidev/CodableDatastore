@@ -9,7 +9,7 @@
 import Foundation
 
 /// An alias representing the requirements for a property to be indexable, namely that they conform to both ``/Swift/Codable`` and ``/Swift/Comparable``.
-public typealias Indexable = Comparable & Hashable & Codable
+public typealias Indexable = Comparable & Hashable & Codable & Sendable
 
 /// A type-erased container for Indexable values
 public struct AnyIndexable {
@@ -43,7 +43,7 @@ extension Never: Codable {
 /// ```swift
 /// extension UUID: RangedIndexable {}
 /// ```
-public protocol RangedIndexable: Comparable & Hashable & Codable {}
+public protocol RangedIndexable: Comparable & Hashable & Codable & Sendable {}
 
 /// A marker protocol for types that can be used as a discrete index.
 ///
@@ -53,7 +53,7 @@ public protocol RangedIndexable: Comparable & Hashable & Codable {}
 /// ```swift
 /// extension Double: DiscreteIndexable {}
 /// ```
-public protocol DiscreteIndexable: Hashable & Codable {}
+public protocol DiscreteIndexable: Hashable & Codable & Sendable {}
 
 // MARK: - Swift Standard Library Conformances
 

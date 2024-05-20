@@ -7,7 +7,7 @@
 //
 
 /// Indicates how instances are stored in the presistence.
-public enum IndexStorage {
+public enum IndexStorage: Sendable {
     /// Instances are stored in the index directly, requiring no further reads to access them.
     case direct
     

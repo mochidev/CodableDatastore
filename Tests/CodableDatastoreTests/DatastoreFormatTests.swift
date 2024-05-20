@@ -14,8 +14,8 @@ final class DatastoreFormatTests: XCTestCase {
         struct NonCodable {}
         
         struct TestFormat: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = Version.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = Version.a
             
             enum Version: String, CaseIterable {
                 case a, b, c

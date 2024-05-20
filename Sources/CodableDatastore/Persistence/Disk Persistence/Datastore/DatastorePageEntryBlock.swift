@@ -12,7 +12,7 @@ import Bytes
 
 /// A block of data that represents a portion of an entry on a page.
 @usableFromInline
-enum DatastorePageEntryBlock: Hashable {
+enum DatastorePageEntryBlock: Hashable, Sendable {
     /// The tail end of an entry.
     ///
     /// This must be combined with a previous block to form an entry.

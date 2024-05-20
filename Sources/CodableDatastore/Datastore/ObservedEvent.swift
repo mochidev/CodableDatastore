@@ -44,8 +44,9 @@ public enum ObservedEvent<IdentifierType, Entry> {
 }
 
 extension ObservedEvent: Identifiable where IdentifierType: Hashable {}
+extension ObservedEvent: Sendable where IdentifierType: Sendable, Entry: Sendable {}
 
-public struct ObservationEntry {
+public struct ObservationEntry: Sendable {
     var versionData: Data
     var instanceData: Data
 }
