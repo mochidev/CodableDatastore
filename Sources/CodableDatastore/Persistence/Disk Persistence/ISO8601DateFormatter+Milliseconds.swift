@@ -42,3 +42,9 @@ extension JSONEncoder.DateEncodingStrategy {
         try container.encode(string)
     }
 }
+
+#if !canImport(Darwin)
+extension ISO8601DateFormatter: @unchecked Sendable {}
+extension JSONDecoder.DateDecodingStrategy: @unchecked Sendable {}
+extension JSONEncoder.DateEncodingStrategy: @unchecked Sendable {}
+#endif

@@ -6,7 +6,11 @@
 //  Copyright © 2023 Mochi Development, Inc. All rights reserved.
 //
 
+#if canImport(Darwin)
 import Foundation
+#else
+@preconcurrency import Foundation
+#endif
 
 public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The location of this persistence.

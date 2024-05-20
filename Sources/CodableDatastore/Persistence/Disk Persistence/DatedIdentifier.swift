@@ -104,3 +104,7 @@ private extension DateFormatter {
         return formatter
     }()
 }
+
+#if !canImport(Darwin)
+extension DateFormatter: @unchecked Sendable {}
+#endif

@@ -6,6 +6,9 @@
 //  Copyright © 2023 Mochi Development, Inc. All rights reserved.
 //
 
+#if !canImport(Darwin)
+@preconcurrency import Foundation
+#endif
 import XCTest
 @testable import CodableDatastore
 
