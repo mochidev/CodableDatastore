@@ -3,7 +3,7 @@
 //  CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-05-10.
-//  Copyright © 2023 Mochi Development, Inc. All rights reserved.
+//  Copyright © 2023-24 Mochi Development, Inc. All rights reserved.
 //
 
 #if canImport(Darwin)

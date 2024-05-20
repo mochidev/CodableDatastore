@@ -3,7 +3,7 @@
 //  CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-07-01.
-//  Copyright © 2023 Mochi Development, Inc. All rights reserved.
+//  Copyright © 2023-24 Mochi Development, Inc. All rights reserved.
 //
 
 public struct DatastoreKey: RawRepresentable, Hashable, Comparable, Sendable {
