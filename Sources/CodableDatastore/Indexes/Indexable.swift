@@ -89,5 +89,9 @@ extension Optional: RangedIndexable where Wrapped: RangedIndexable {}
 // MARK: - Foundation Conformances
 
 extension Date: RangedIndexable {}
+#if canImport(Darwin)
 extension Decimal: RangedIndexable {}
+#else
+extension Decimal: RangedIndexable, @unchecked Sendable {}
+#endif
 extension UUID: DiscreteIndexable {}

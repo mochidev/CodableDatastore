@@ -6,7 +6,11 @@
 //  Copyright © 2023 Mochi Development, Inc. All rights reserved.
 //
 
+#if canImport(Darwin)
 import Foundation
+#else
+@preconcurrency import Foundation
+#endif
 
 /// A store for a homogenous collection of instances.
 public actor Datastore<Format: DatastoreFormat, AccessMode: _AccessMode>: Sendable {

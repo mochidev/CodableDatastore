@@ -28,3 +28,8 @@ extension JSONDecoder {
         return datastoreDecoder
     }()
 }
+
+#if !canImport(Darwin)
+extension JSONEncoder: @unchecked Sendable {}
+extension JSONDecoder: @unchecked Sendable {}
+#endif
