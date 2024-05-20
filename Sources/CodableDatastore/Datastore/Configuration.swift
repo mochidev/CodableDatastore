@@ -6,7 +6,7 @@
 //  Copyright © 2023 Mochi Development, Inc. All rights reserved.
 //
 
-public struct Configuration {
+public struct Configuration: Sendable {
     /// The size of a single page of data on disk and in memory.
     ///
     /// Applications that deal with large objects may want to consider increasing this appropriately,

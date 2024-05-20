@@ -6,7 +6,7 @@
 //  Copyright © 2023 Mochi Development, Inc. All rights reserved.
 //
 
-public struct DatastoreKey: RawRepresentable, Hashable, Comparable {
+public struct DatastoreKey: RawRepresentable, Hashable, Comparable, Sendable {
     public var rawValue: String
     
     public init(rawValue: String) {

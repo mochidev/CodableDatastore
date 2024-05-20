@@ -9,7 +9,7 @@
 /// An opaque type ``Persistence``s may use to indicate a position in their storage.
 ///
 /// - Note: A cursor is only valid within the same transaction for the same persistence it was created for.
-public protocol CursorProtocol<P> {
+public protocol CursorProtocol<P>: Sendable {
     associatedtype P: Persistence
     var persistence: P { get }
     

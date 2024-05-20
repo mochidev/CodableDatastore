@@ -16,7 +16,7 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     var cachedStoreInfo: StoreInfo?
     
     /// A pointer to the last store info updater, so updates can be serialized after the last request
-    var lastUpdateStoreInfoTask: Task<Any, Error>?
+    var lastUpdateStoreInfoTask: Task<Sendable, Error>?
     
     /// The loaded Snapshots
     var snapshots: [SnapshotIdentifier: Snapshot<AccessMode>] = [:]
@@ -169,8 +169,9 @@ extension DiskPersistence {
     /// - Note: Calling this method when no store info exists on disk will create it, even if no changes occur in the block.
     /// - Parameter updater: An updater that takes a mutable reference to a store info, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateStoreInfo<T>(updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) -> Task<T, Error> where AccessMode == ReadWrite {
-        
+    func updateStoreInfo<T: Sendable>(
+        @_inheritActorContext updater: @Sendable @escaping (_ storeInfo: inout StoreInfo) async throws -> T
+    ) -> Task<T, Error> where AccessMode == ReadWrite {
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo {
             return Task {
                 var updatedStoreInfo = storeInfo
@@ -216,8 +217,9 @@ extension DiskPersistence {
     ///
     /// - Parameter accessor: An accessor that takes an immutable reference to a store info, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateStoreInfo<T>(accessor: @escaping (_ storeInfo: StoreInfo) async throws -> T) -> Task<T, Error> {
-        
+    func updateStoreInfo<T: Sendable>(
+        @_inheritActorContext accessor: @Sendable @escaping (_ storeInfo: StoreInfo) async throws -> T
+    ) -> Task<T, Error> {
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo {
             return Task { try await accessor(storeInfo) }
         }
@@ -249,8 +251,12 @@ extension DiskPersistence {
     /// - Note: Calling this method when no store info exists on disk will create it, even if no changes occur in the block.
     /// - Parameter updater: An updater that takes a mutable reference to a store info, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `updater`.
-    func withStoreInfo<T>(updater: @escaping (_ storeInfo: inout StoreInfo) async throws -> T) async throws -> T where AccessMode == ReadWrite {
-        try await updateStoreInfo(updater: updater).value
+    func withStoreInfo<T: Sendable>(
+        updater: @Sendable (_ storeInfo: inout StoreInfo) async throws -> T
+    ) async throws -> T where AccessMode == ReadWrite {
+        try await withoutActuallyEscaping(updater) { escapingClosure in
+            try await updateStoreInfo(updater: escapingClosure).value
+        }
     }
     
     /// Load the store info in an updater.
@@ -260,8 +266,12 @@ extension DiskPersistence {
     /// - Parameter accessor: An accessor that takes an immutable reference to a store info, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
-    func withStoreInfo<T>(accessor: @escaping (_ storeInfo: StoreInfo) async throws -> T) async throws -> T where AccessMode == ReadOnly {
-        try await updateStoreInfo(accessor: accessor).value
+    func withStoreInfo<T: Sendable>(
+        accessor: @Sendable (_ storeInfo: StoreInfo) async throws -> T
+    ) async throws -> T where AccessMode == ReadOnly {
+        try await withoutActuallyEscaping(accessor) { escapingClosure in
+            try await updateStoreInfo(accessor: escapingClosure).value
+        }
     }
 }
 
@@ -289,7 +299,7 @@ extension DiskPersistence {
     /// - Parameter dateUpdate: The method to which to update the date of the main store with.
     /// - Parameter updater: An updater that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateCurrentSnapshot<T>(
+    func updateCurrentSnapshot<T: Sendable>(
         dateUpdate: ModificationUpdate = .updateOnWrite,
         updater: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) -> Task<T, Error> where AccessMode == ReadWrite {
@@ -316,7 +326,7 @@ extension DiskPersistence {
     ///
     /// - Parameter accessor: An accessor that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateCurrentSnapshot<T>(
+    func updateCurrentSnapshot<T: Sendable>(
         accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) -> Task<T, Error> {
         /// Grab access to the store info to load and update it.
@@ -337,11 +347,13 @@ extension DiskPersistence {
     /// - Parameter dateUpdate: The method to which to update the date of the main store with.
     /// - Parameter updater: An updater that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`. 
-    func updatingCurrentSnapshot<T>(
+    func updatingCurrentSnapshot<T: Sendable>(
         dateUpdate: ModificationUpdate = .updateOnWrite,
-        updater: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
+        updater: @Sendable (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) async throws -> T where AccessMode == ReadWrite {
-        try await updateCurrentSnapshot(dateUpdate: dateUpdate, updater: updater).value
+        try await withoutActuallyEscaping(updater) { escapingClosure in
+            try await updateCurrentSnapshot(dateUpdate: dateUpdate, updater: escapingClosure).value
+        }
     }
     
     /// Load the current snapshot in an accessor.
@@ -353,10 +365,12 @@ extension DiskPersistence {
     /// - Parameter accessor: An accessor that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
-    func readingCurrentSnapshot<T>(
-        accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
+    func readingCurrentSnapshot<T: Sendable>(
+        accessor: @Sendable (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) async throws -> T {
-        try await updateCurrentSnapshot(accessor: accessor).value
+        try await withoutActuallyEscaping(accessor) { escapingClosure in
+            try await updateCurrentSnapshot(accessor: escapingClosure).value
+        }
     }
 }
 
@@ -449,25 +463,27 @@ extension DiskPersistence {
 // MARK: - Transactions
 
 extension DiskPersistence {
-    public func _withTransaction<T>(
+    public func _withTransaction<T: Sendable>(
         actionName: String?,
         options: UnsafeTransactionOptions,
-        transaction: @escaping (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        transaction: @Sendable (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
-        let (transaction, task) = await Transaction.makeTransaction(
-            persistence: self,
-            lastTransaction: lastTransaction,
-            actionName: actionName, options: options
-        ) { interface, isDurable in
-            try await transaction(interface, isDurable)
+        try await withoutActuallyEscaping(transaction) { escapingTransaction in
+            let (transaction, task) = await Transaction.makeTransaction(
+                persistence: self,
+                lastTransaction: lastTransaction,
+                actionName: actionName, options: options
+            ) { interface, isDurable in
+                try await escapingTransaction(interface, isDurable)
+            }
+            
+            /// Save the last non-concurrent top-level transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
+            if !options.contains(.readOnly), transaction.parent == nil {
+                lastTransaction = transaction
+            }
+            
+            return try await task.value
         }
-        
-        /// Save the last non-concurrent top-level transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
-        if !options.contains(.readOnly), transaction.parent == nil {
-            lastTransaction = transaction
-        }
-        
-        return try await task.value
     }
     
     func persist(

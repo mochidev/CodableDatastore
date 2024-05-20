@@ -11,12 +11,12 @@ import Foundation
 /// Versions supported by ``DiskPersisitence``.
 ///
 /// These are used when dealing with format changes at the library level.
-enum StoreInfoVersion: String, Codable {
+enum StoreInfoVersion: String, Codable, Sendable {
     case alpha
 }
 
 /// A struct to store information about a ``DiskPersistence`` on disk.
-struct StoreInfo: Codable, Equatable {
+struct StoreInfo: Codable, Equatable, Sendable {
     /// The version of the persistence, used when dealing with format changes at the library level.
     var version: StoreInfoVersion = .alpha
     

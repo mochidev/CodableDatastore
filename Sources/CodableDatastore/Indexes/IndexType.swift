@@ -7,7 +7,7 @@
 //
 
 /// A typed name that an index is keyed under. This is typically the path component of the key path that leads to an index.
-public struct IndexType: RawRepresentable, Hashable, Comparable {
+public struct IndexType: RawRepresentable, Hashable, Comparable, Sendable {
     public var rawValue: String
     
     public init(rawValue: String) {

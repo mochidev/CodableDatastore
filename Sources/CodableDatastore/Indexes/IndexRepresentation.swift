@@ -11,9 +11,9 @@ import Foundation
 /// A representation of an index for a given instance, with value information erased.
 /// 
 /// - Note: Although conforming to this type will construct an index, you don't be able to access this index using any of the usuall accessors. Instead, consider confirming to ``RetrievableIndexRepresentation`` or ``SingleInstanceIndexRepresentation`` as appropriate.
-public protocol IndexRepresentation<Instance>: Hashable {
+public protocol IndexRepresentation<Instance>: Hashable, Sendable {
     /// The instance the index belongs to.
-    associatedtype Instance
+    associatedtype Instance: Sendable
     
     /// The index type seriealized to the datastore to detect changes to index structure.
     var indexType: IndexType { get }
@@ -32,6 +32,7 @@ extension IndexRepresentation {
     public var key: AnyIndexRepresentation<Instance> { AnyIndexRepresentation(indexRepresentation: self) }
     
     /// Check if two ``IndexRepresentation``s are equal.
+    @usableFromInline
     func isEqual(rhs: some IndexRepresentation<Instance>) -> Bool {
         return self == rhs as? Self
     }
@@ -47,6 +48,7 @@ public protocol RetrievableIndexRepresentation<Instance, Value>: IndexRepresenta
 }
 
 extension RetrievableIndexRepresentation {
+    @inlinable
     public func valuesToIndex(for instance: Instance) -> [AnyIndexable] {
         valuesToIndex(for: instance).map { AnyIndexable($0)}
     }
@@ -72,28 +74,32 @@ public protocol MultipleInputIndexRepresentation<
 ///
 /// This type of index is typically used for most unique identifiers, and may be useful if there is an alternative unique identifier a instance may be referenced under.
 public struct OneToOneIndexRepresentation<
-    Instance,
+    Instance: Sendable,
     Value: Indexable & DiscreteIndexable
->: SingleInstanceIndexRepresentation {
+>: SingleInstanceIndexRepresentation, @unchecked Sendable {
+    @usableFromInline
     let keypath: KeyPath<Instance, Value>
     
     /// Initialize a One-value to One-instance index.
+    @inlinable
     public init(_ keypath: KeyPath<Instance, Value>) {
         self.keypath = keypath
     }
     
+    @inlinable
     public var indexType: IndexType {
         IndexType("OneToOneIndex(\(String(describing: Value.self)))")
     }
     
-    public func matches<T>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
+    public func matches<T: Sendable>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
         guard let copy = self as? OneToOneIndexRepresentation<T, Value>
         else { return nil }
         return copy
     }
     
+    @inlinable
     public func valuesToIndex(for instance: Instance) -> Set<Value> {
-        [instance[keyPath: keypath]]
+        [instance[keyPath: keypath as KeyPath<Instance, Value>]]
     }
 }
 
@@ -101,28 +107,33 @@ public struct OneToOneIndexRepresentation<
 ///
 /// This type of index is the most common, where multiple instances can share the same single value that is passed in.
 public struct OneToManyIndexRepresentation<
-    Instance,
+    Instance: Sendable,
     Value: Indexable
->: RetrievableIndexRepresentation {
+>: RetrievableIndexRepresentation, @unchecked Sendable {
+    @usableFromInline
     let keypath: KeyPath<Instance, Value>
     
     /// Initialize a One-value to Many-instance index.
+    @inlinable
     public init(_ keypath: KeyPath<Instance, Value>) {
         self.keypath = keypath
     }
     
+    @inlinable
     public var indexType: IndexType {
         IndexType("OneToManyIndex(\(String(describing: Value.self)))")
     }
     
-    public func matches<T>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
+    @inlinable
+    public func matches<T: Sendable>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
         guard let copy = self as? OneToManyIndexRepresentation<T, Value>
         else { return nil }
         return copy
     }
     
+    @inlinable
     public func valuesToIndex(for instance: Instance) -> Set<Value> {
-        [instance[keyPath: keypath]]
+        [instance[keyPath: keypath as KeyPath<Instance, Value>]]
     }
 }
 
@@ -130,29 +141,34 @@ public struct OneToManyIndexRepresentation<
 ///
 /// This type of index can be used if several alternative identifiers can reference an instance, and they all reside in a single property.
 public struct ManyToOneIndexRepresentation<
-    Instance,
+    Instance: Sendable,
     Sequence: Swift.Sequence<Value>,
     Value: Indexable & DiscreteIndexable
->: SingleInstanceIndexRepresentation & MultipleInputIndexRepresentation {
+>: SingleInstanceIndexRepresentation & MultipleInputIndexRepresentation, @unchecked Sendable {
+    @usableFromInline
     let keypath: KeyPath<Instance, Sequence>
     
     /// Initialize a Many-value to One-instance index.
+    @inlinable
     public init(_ keypath: KeyPath<Instance, Sequence>) {
         self.keypath = keypath
     }
     
+    @inlinable
     public var indexType: IndexType {
         IndexType("ManyToOneIndex(\(String(describing: Value.self)))")
     }
     
-    public func matches<T>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
+    @inlinable
+    public func matches<T: Sendable>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
         guard let copy = self as? ManyToOneIndexRepresentation<T, Sequence, Value>
         else { return nil }
         return copy
     }
     
+    @inlinable
     public func valuesToIndex(for instance: Instance) -> Set<Value> {
-        Set(instance[keyPath: keypath])
+        Set(instance[keyPath: keypath as KeyPath<Instance, Sequence>])
     }
 }
 
@@ -160,29 +176,34 @@ public struct ManyToOneIndexRepresentation<
 ///
 /// This type of index is common when building relationships between different instances, where one instance may be related to several others in some way.
 public struct ManyToManyIndexRepresentation<
-    Instance,
+    Instance: Sendable,
     Sequence: Swift.Sequence<Value>,
     Value: Indexable
->: MultipleInputIndexRepresentation {
+>: MultipleInputIndexRepresentation, @unchecked Sendable {
+    @usableFromInline
     let keypath: KeyPath<Instance, Sequence>
     
     /// Initialize a Many-value to Many-instance index.
+    @inlinable
     public init(_ keypath: KeyPath<Instance, Sequence>) {
         self.keypath = keypath
     }
     
+    @inlinable
     public var indexType: IndexType {
         IndexType("ManyToManyIndex(\(String(describing: Value.self)))")
     }
     
-    public func matches<T>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
+    @inlinable
+    public func matches<T: Sendable>(_ instance: T.Type) -> (any IndexRepresentation<T>)? {
         guard let copy = self as? ManyToManyIndexRepresentation<T, Sequence, Value>
         else { return nil }
         return copy
     }
     
+    @inlinable
     public func valuesToIndex(for instance: Instance) -> Set<Value> {
-        Set(instance[keyPath: keypath])
+        Set(instance[keyPath: keypath as KeyPath<Instance, Sequence>])
     }
 }
 
@@ -192,7 +213,7 @@ public struct ManyToManyIndexRepresentation<
 ///
 /// - Important: Do not include an index for `id` if your type is Identifiable — one is created automatically on your behalf.
 @propertyWrapper
-public struct Direct<Index: IndexRepresentation> {
+public struct Direct<Index: IndexRepresentation>: Sendable {
     /// The underlying value that the index will be based off of.
     ///
     /// This is ordinarily handled transparently when used as a property wrapper.
@@ -201,6 +222,7 @@ public struct Direct<Index: IndexRepresentation> {
     /// Initialize a ``Direct`` index with an initial ``IndexRepresentation`` value.
     ///
     /// This is ordinarily handled transparently when used as a property wrapper.
+    @inlinable
     public init(wrappedValue: Index) {
         self.wrappedValue = wrappedValue
     }
@@ -238,13 +260,16 @@ extension Encodable {
 }
 
 /// A type erased index representation to be used for keying indexes in a dictionary.
-public struct AnyIndexRepresentation<Instance>: Hashable {
+public struct AnyIndexRepresentation<Instance: Sendable>: Hashable, Sendable {
+    @usableFromInline
     var indexRepresentation: any IndexRepresentation<Instance>
     
+    @inlinable
     public static func == (lhs: AnyIndexRepresentation<Instance>, rhs: AnyIndexRepresentation<Instance>) -> Bool {
         return lhs.indexRepresentation.isEqual(rhs: rhs.indexRepresentation)
     }
     
+    @inlinable
     public func hash(into hasher: inout Hasher) {
         hasher.combine(indexRepresentation)
     }

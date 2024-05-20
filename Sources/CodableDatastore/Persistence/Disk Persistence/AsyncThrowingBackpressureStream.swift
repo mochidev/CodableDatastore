@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct AsyncThrowingBackpressureStream<Element> {
+struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
     fileprivate actor StateMachine {
         var pendingEvents: [(CheckedContinuation<Void, Error>, Result<Element?, Error>)] = []
         var eventsReadyContinuation: CheckedContinuation<Element?, Error>?
@@ -80,7 +80,7 @@ struct AsyncThrowingBackpressureStream<Element> {
     
     private var stateMachine: StateMachine
     
-    init(provider: @escaping (Continuation) async throws -> ()) {
+    init(provider: @Sendable @escaping (Continuation) async throws -> ()) {
         stateMachine = StateMachine()
         
         let continuation = Continuation(stateMachine: stateMachine)

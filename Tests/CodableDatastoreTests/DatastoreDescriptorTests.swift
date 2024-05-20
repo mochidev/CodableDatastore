@@ -56,8 +56,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         }
         
         struct SampleFormatA: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -83,8 +83,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         ])
         
         struct SampleFormatB: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -111,8 +111,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         ])
         
         struct SampleFormatC: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -141,8 +141,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         ])
         
         struct SampleFormatD: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -192,8 +192,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         }
         
         struct SampleFormatA: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -217,8 +217,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         ])
         
         struct SampleFormatB: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -243,8 +243,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         ])
         
         struct SampleFormatC: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -271,8 +271,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         ])
         
         struct SampleFormatD: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType
@@ -320,8 +320,8 @@ final class DatastoreDescriptorTests: XCTestCase {
         }
         
         struct SampleFormatA: DatastoreFormat {
-            static var defaultKey = DatastoreKey("sample")
-            static var currentVersion = SharedVersion.a
+            static let defaultKey = DatastoreKey("sample")
+            static let currentVersion = SharedVersion.a
             
             typealias Version = SharedVersion
             typealias Instance = SampleType

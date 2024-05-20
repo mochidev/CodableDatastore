@@ -291,8 +291,8 @@ extension DiskPersistence.Datastore.Index {
     func pageIndex<T>(
         for proposedEntry: T,
         in pages: [DatastoreIndexManifest.PageInfo],
-        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
-        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+        pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
+        comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> Int? {
         var slice = pages[...]
         
@@ -384,7 +384,7 @@ extension DiskPersistence.Datastore.Index {
     
     func entry<T>(
         for proposedEntry: T,
-        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+        comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> (
         cursor: DiskPersistence.InstanceCursor,
         entry: DatastorePageEntry
@@ -400,8 +400,8 @@ extension DiskPersistence.Datastore.Index {
     func entry<T>(
         for proposedEntry: T,
         in pages: [DatastoreIndexManifest.PageInfo],
-        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
-        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+        pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
+        comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> (
         cursor: DiskPersistence.InstanceCursor,
         entry: DatastorePageEntry
@@ -523,7 +523,7 @@ extension DiskPersistence.Datastore.Index {
                     page = await datastore.page(for: .init(index: self.id, page: pageID))
                 }
                 
-                let blocks = try await page.blocks.reduce(into: []) { $0.append($1) }
+                let blocks = try await Array(page.blocks)
                 guard !blocks.isEmpty else { throw DiskPersistenceError.invalidPageFormat }
                 
                 return DiskPersistence.InsertionCursor(
@@ -545,7 +545,7 @@ extension DiskPersistence.Datastore.Index {
     
     func insertionCursor<T>(
         for proposedEntry: T,
-        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+        comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> DiskPersistence.InsertionCursor {
         try await insertionCursor(
             for: proposedEntry,
@@ -558,8 +558,8 @@ extension DiskPersistence.Datastore.Index {
     func insertionCursor<T>(
         for proposedEntry: T,
         in pages: [DatastoreIndexManifest.PageInfo],
-        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
-        comparator: (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
+        pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
+        comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> DiskPersistence.InsertionCursor {
         /// Get the page the entry should reside on
         guard
@@ -682,7 +682,7 @@ extension DiskPersistence.Datastore.Index {
 extension DiskPersistence.Datastore.Index {
     func forwardScanEntries(
         after startCursor: DiskPersistence.InsertionCursor,
-        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+        entryHandler: @Sendable (_ entry: DatastorePageEntry) async throws -> Bool
     ) async throws {
         try await forwardScanEntries(
             after: startCursor,
@@ -695,8 +695,8 @@ extension DiskPersistence.Datastore.Index {
     func forwardScanEntries(
         after startCursor: DiskPersistence.InsertionCursor,
         in pages: [DatastoreIndexManifest.PageInfo],
-        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
-        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+        pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
+        entryHandler: @Sendable (_ entry: DatastorePageEntry) async throws -> Bool
     ) async throws {
         guard
             startCursor.datastore === datastore,
@@ -757,7 +757,7 @@ extension DiskPersistence.Datastore.Index {
     
     func backwardScanEntries(
         before startCursor: DiskPersistence.InsertionCursor,
-        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+        entryHandler: @Sendable (_ entry: DatastorePageEntry) async throws -> Bool
     ) async throws {
         try await backwardScanEntries(
             before: startCursor,
@@ -770,8 +770,8 @@ extension DiskPersistence.Datastore.Index {
     func backwardScanEntries(
         before startCursor: DiskPersistence.InsertionCursor,
         in pages: [DatastoreIndexManifest.PageInfo],
-        pageBuilder: (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
-        entryHandler: (_ entry: DatastorePageEntry) async throws -> Bool
+        pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
+        entryHandler: @Sendable (_ entry: DatastorePageEntry) async throws -> Bool
     ) async throws {
         guard
             startCursor.datastore === datastore,
@@ -797,7 +797,7 @@ extension DiskPersistence.Datastore.Index {
                     blockCountToInclude = blockIndex + 1
                 }
                 
-                let blocks = try await page.blocks.prefix(blockCountToInclude).reduce(into: []) { $0.append($1) }
+                let blocks = try await Array(page.blocks.prefix(blockCountToInclude))
                 
                 for block in blocks.reversed() {
                     switch block {
@@ -896,7 +896,7 @@ extension DiskPersistence.Datastore.Index {
                         let existingPage = insertAfter.page
                         
                         /// Split the existing page into two halves.
-                        let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                        let existingPageBlocks = try await Array(existingPage.blocks)
                         let firstHalf = existingPageBlocks[...insertAfter.blockIndex]
                         let remainingBlocks = existingPageBlocks[(insertAfter.blockIndex+1)...]
                         
@@ -969,7 +969,7 @@ extension DiskPersistence.Datastore.Index {
                 if attemptPageCollation {
                     /// Load the first page to see how large it is compared to the amount of space we have left on our final new page
                     let existingPage = await datastore.page(for: .init(index: id, page: pageID))
-                    let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                    let existingPageBlocks = try await Array(existingPage.blocks)
                     
                     /// Calculate how much space remains on the final new page, and insert the existing blocks if they all fit.
                     /// Note that we are guaranteed to have at least one new page by this point, since we are inserting and not replacing.
@@ -1118,7 +1118,7 @@ extension DiskPersistence.Datastore.Index {
                 /// If this is our first time reaching this point, we have some new blocks to insert.
                 if index <= lastInstanceBlock.pageIndex {
                     let existingPage = await datastore.page(for: .init(index: self.id, page: pageID))
-                    let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                    let existingPageBlocks = try await Array(existingPage.blocks)
                     
                     /// Grab the index range that we are replacing on this page
                     let startingIndex = index == firstInstanceBlock.pageIndex ? firstInstanceBlock.blockIndex : 0
@@ -1194,7 +1194,7 @@ extension DiskPersistence.Datastore.Index {
                     
                     /// Load the first page to see how large it is compared to the amount of space we have left on our final new page
                     let existingPage = await datastore.page(for: .init(index: id, page: pageID))
-                    let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                    let existingPageBlocks = try await Array(existingPage.blocks)
                     
                     /// Calculate how much space remains on the final new page, and insert the existing blocks if they all fit.
                     /// Note that we are guaranteed to have at least one new page by this point, since we are inserting and not replacing.
@@ -1314,7 +1314,7 @@ extension DiskPersistence.Datastore.Index {
                 /// If this is our first time reaching this point, we have some new blocks to insert.
                 if index <= lastInstanceBlock.pageIndex {
                     let existingPage = await datastore.page(for: .init(index: self.id, page: pageID))
-                    let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                    let existingPageBlocks = try await Array(existingPage.blocks)
                     
                     /// Grab the index range that we are replacing on this page
                     let startingIndex = index == firstInstanceBlock.pageIndex ? firstInstanceBlock.blockIndex : 0
@@ -1363,7 +1363,7 @@ extension DiskPersistence.Datastore.Index {
                     
                     /// Load the first page to see how large it is compared to the amount of space we have left on our final new page
                     let existingPage = await datastore.page(for: .init(index: id, page: pageID))
-                    let existingPageBlocks = try await existingPage.blocks.reduce(into: [DatastorePageEntryBlock]()) { $0.append($1) }
+                    let existingPageBlocks = try await Array(existingPage.blocks)
                     
                     /// Calculate how much space remains on the final new page, and insert the existing blocks if they all fit.
                     /// Note that we are guaranteed to have at least one new page by this point, since we are inserting and not replacing.

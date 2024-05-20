@@ -26,7 +26,7 @@ extension DiskPersistence {
         
         var cachedRootObject: DatastoreRootManifest?
         
-        var lastUpdateDescriptorTask: Task<Any, Error>?
+        var lastUpdateDescriptorTask: Task<Sendable, Error>?
         
         /// The root objects that are being tracked in memory.
         var trackedRootObjects: [RootObject.ID : WeakValue<RootObject>] = [:]

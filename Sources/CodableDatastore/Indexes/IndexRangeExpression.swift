@@ -21,7 +21,7 @@ public enum RangeBoundExpression<Bound: Comparable>: Equatable {
 extension RangeBoundExpression: Sendable where Bound: Sendable { }
 
 /// The order a range is declared in.
-public enum RangeOrder: Equatable {
+public enum RangeOrder: Equatable, Sendable {
     /// The range is in ascending order.
     case ascending
     
@@ -60,7 +60,7 @@ extension IndexRangeExpression {
         )
     }
     
-    func applying(_ newOrder: RangeOrder) -> some IndexRangeExpression<Bound> {
+    func applying(_ newOrder: RangeOrder) -> IndexRange<Bound> {
         IndexRange(
             lower: lowerBoundExpression,
             upper: upperBoundExpression,
@@ -74,7 +74,7 @@ extension IndexRangeExpression {
 }
 
 /// The position relative to a range.
-public enum RangePosition: Equatable {
+public enum RangePosition: Equatable, Sendable {
     /// A value appears before the range.
     case before
     
@@ -189,6 +189,8 @@ public struct IndexRange<Bound: Comparable>: IndexRangeExpression {
     }
 }
 
+extension IndexRange: Sendable where Bound: Sendable {}
+
 extension IndexRange where Bound == Never {
     static let unbounded = IndexRange()
 }
@@ -199,7 +201,7 @@ postfix operator ..>
 extension Comparable {
     /// A range excluding the lower bound.
     @inlinable
-    public static func ..> (minimum: Self, maximum: Self) -> some IndexRangeExpression<Self> {
+    public static func ..> (minimum: Self, maximum: Self) -> IndexRange<Self> {
         precondition(minimum == minimum, "Range cannot have an unordered lower bound.")
         precondition(maximum == maximum, "Range cannot have an unordered upper bound.")
         precondition(minimum <= maximum, "Range lower bound must be less than upper bound.")
@@ -211,7 +213,7 @@ extension Comparable {
     
     /// A partial range excluding the lower bound.
     @inlinable
-    public static postfix func ..> (minimum: Self) -> some IndexRangeExpression<Self> {
+    public static postfix func ..> (minimum: Self) -> IndexRange<Self> {
         precondition(minimum == minimum, "Range cannot have an unordered lower bound.")
         return IndexRange(
             lower: .excluding(minimum),

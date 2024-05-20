@@ -64,7 +64,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             pageInfos.append(.existing(pageID))
         }
         
-        let result = try await index.pageIndex(for: proposedEntry, in: pageInfos) { pageID in
+        let result = try await index.pageIndex(for: proposedEntry, in: pageInfos) { [pageLookup] pageID in
             pageLookup[pageID]!
         } comparator: { lhs, rhs in
             lhs.sortOrder(comparedTo: rhs.headers[0][0])
@@ -118,7 +118,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             pageInfos.append(.existing(pageID))
         }
         
-        let result = try await index.insertionCursor(for: RangeBoundExpression.including(proposedEntry), in: pageInfos) { pageID in
+        let result = try await index.insertionCursor(for: RangeBoundExpression.including(proposedEntry), in: pageInfos) { [pageLookup] pageID in
             pageLookup[pageID]!
         } comparator: { lhs, rhs in
             lhs.sortOrder(comparedTo: rhs.headers[0][0], order: .ascending)
