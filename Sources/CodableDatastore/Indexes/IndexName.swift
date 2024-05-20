@@ -3,7 +3,7 @@
 //  CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-07-20.
-//  Copyright © 2023 Mochi Development, Inc. All rights reserved.
+//  Copyright © 2023-24 Mochi Development, Inc. All rights reserved.
 //
 
 /// A typed name that an index is keyed under. This is typically the path component of the key path that leads to an index.
