@@ -29,7 +29,7 @@ Please check the [releases](https://github.com/mochidev/CodableDatastore/release
 dependencies: [
     .package(
         url: "https://github.com/mochidev/CodableDatastore.git", 
-        .upToNextMinor(from: "0.3.0")
+        .upToNextMinor(from: "0.3.1")
     ),
 ],
 ...
