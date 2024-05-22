@@ -67,7 +67,7 @@ public protocol MultipleInputIndexRepresentation<
     Value
 >: RetrievableIndexRepresentation {
     /// The sequence of values represented in the index.
-    associatedtype Sequence: Swift.Sequence<Value>
+    associatedtype Sequence: Swift.Sequence<Value> & Sendable
 }
 
 /// An index where every value matches at most a single instance.
@@ -76,7 +76,7 @@ public protocol MultipleInputIndexRepresentation<
 public struct OneToOneIndexRepresentation<
     Instance: Sendable,
     Value: Indexable & DiscreteIndexable
->: SingleInstanceIndexRepresentation, @unchecked Sendable {
+>: SingleInstanceIndexRepresentation {
     @usableFromInline
     let keypath: KeyPath<Instance, Value>
     
@@ -109,7 +109,7 @@ public struct OneToOneIndexRepresentation<
 public struct OneToManyIndexRepresentation<
     Instance: Sendable,
     Value: Indexable
->: RetrievableIndexRepresentation, @unchecked Sendable {
+>: RetrievableIndexRepresentation {
     @usableFromInline
     let keypath: KeyPath<Instance, Value>
     
@@ -142,9 +142,9 @@ public struct OneToManyIndexRepresentation<
 /// This type of index can be used if several alternative identifiers can reference an instance, and they all reside in a single property.
 public struct ManyToOneIndexRepresentation<
     Instance: Sendable,
-    Sequence: Swift.Sequence<Value>,
+    Sequence: Swift.Sequence<Value> & Sendable,
     Value: Indexable & DiscreteIndexable
->: SingleInstanceIndexRepresentation & MultipleInputIndexRepresentation, @unchecked Sendable {
+>: SingleInstanceIndexRepresentation & MultipleInputIndexRepresentation {
     @usableFromInline
     let keypath: KeyPath<Instance, Sequence>
     
@@ -177,9 +177,9 @@ public struct ManyToOneIndexRepresentation<
 /// This type of index is common when building relationships between different instances, where one instance may be related to several others in some way.
 public struct ManyToManyIndexRepresentation<
     Instance: Sendable,
-    Sequence: Swift.Sequence<Value>,
+    Sequence: Swift.Sequence<Value> & Sendable,
     Value: Indexable
->: MultipleInputIndexRepresentation, @unchecked Sendable {
+>: MultipleInputIndexRepresentation {
     @usableFromInline
     let keypath: KeyPath<Instance, Sequence>
     
@@ -274,3 +274,6 @@ public struct AnyIndexRepresentation<Instance: Sendable>: Hashable, Sendable {
         hasher.combine(indexRepresentation)
     }
 }
+
+/// Forced KeyPath conformance since Swift 5.10 doesn't support it out of the box.
+extension KeyPath: @unchecked Sendable where Root: Sendable, Value: Sendable {}
