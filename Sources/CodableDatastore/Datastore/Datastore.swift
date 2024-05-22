@@ -585,7 +585,10 @@ extension Datastore {
     ///   - index: The index to load from.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     @usableFromInline
-    nonisolated func _load<Index: IndexRepresentation<InstanceType> & Sendable, Bound: Indexable & Sendable>(
+    nonisolated func _load<
+        Index: IndexRepresentation<InstanceType>,
+        Bound: Indexable
+    >(
         _ range: some IndexRangeExpression<Bound> & Sendable,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
@@ -652,7 +655,7 @@ extension Datastore {
         Value: DiscreteIndexable,
         Index: RetrievableIndexRepresentation<InstanceType, Value>
     >(
-        _ value: Index.Value,
+        _ value: Value,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
@@ -667,10 +670,10 @@ extension Datastore {
     ///   - index: The index to load from.
     /// - Returns: The instance keyed to the specified indexed value, or nil if none are found.
     public nonisolated func load<
-        Value,
+        Value: DiscreteIndexable,
         Index: SingleInstanceIndexRepresentation<InstanceType, Value>
     >(
-        _ value: Index.Value,
+        _ value: Value,
         from index: KeyPath<Format, Index>
     ) async throws -> InstanceType? {
         try await _load(IndexRange(only: value), from: index).first(where: { _ in true })
