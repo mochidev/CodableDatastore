@@ -10,12 +10,30 @@ import Foundation
 
 #if swift(<5.9) || os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Windows)
 /// Make UUIDs comparable, so that they can be used transparently as an index.
-///
-/// - SeeAlso: https://github.com/apple/swift-foundation/blob/5388acf1d929865d4df97d3c50e4d08bc4c6bdf0/Sources/FoundationEssentials/UUID.swift#L135-L156
+#if compiler(>=6)
+extension UUID: @retroactive Comparable {
+    @inlinable
+    public static func < (lhs: UUID, rhs: UUID) -> Bool {
+        lhs.isLessThan(rhs: rhs)
+    }
+}
+#else
 extension UUID: Comparable {
     @inlinable
     public static func < (lhs: UUID, rhs: UUID) -> Bool {
-        var leftUUID = lhs.uuid
+        lhs.isLessThan(rhs: rhs)
+    }
+}
+#endif
+#endif
+
+extension UUID {
+    /// Make UUIDs comparable, so that they can be used transparently as an index.
+    ///
+    /// - SeeAlso: https://github.com/apple/swift-foundation/blob/5388acf1d929865d4df97d3c50e4d08bc4c6bdf0/Sources/FoundationEssentials/UUID.swift#L135-L156
+    @usableFromInline
+    func isLessThan(rhs: UUID) -> Bool {
+        var leftUUID = self.uuid
         var rightUUID = rhs.uuid
         var result: Int = 0
         var diff: Int = 0
@@ -36,4 +54,3 @@ extension UUID: Comparable {
         return result < 0
     }
 }
-#endif

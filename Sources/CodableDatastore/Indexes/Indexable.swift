@@ -77,12 +77,21 @@ extension UInt16: DiscreteIndexable, RangedIndexable {}
 extension UInt32: DiscreteIndexable, RangedIndexable {}
 extension UInt64: DiscreteIndexable, RangedIndexable {}
 
+#if compiler(>=6)
+extension Optional: @retroactive Comparable where Wrapped: Comparable {
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        if let lhs, let rhs { return lhs < rhs }
+        return lhs == nil && rhs != nil
+    }
+}
+#else
 extension Optional: Comparable where Wrapped: Comparable {
     public static func < (lhs: Self, rhs: Self) -> Bool {
         if let lhs, let rhs { return lhs < rhs }
         return lhs == nil && rhs != nil
     }
 }
+#endif
 extension Optional: DiscreteIndexable where Wrapped: DiscreteIndexable {}
 extension Optional: RangedIndexable where Wrapped: RangedIndexable {}
 
