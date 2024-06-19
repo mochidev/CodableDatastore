@@ -8,11 +8,12 @@
 
 import Foundation
 
+/// Make UUIDs comparable on platforms that shipped without it, so that they can be used transparently as an index.
 #if swift(<5.9) || os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Windows)
-/// Make UUIDs comparable, so that they can be used transparently as an index.
 #if compiler(>=6)
 extension UUID: @retroactive Comparable {
     @inlinable
+    @_disfavoredOverload
     public static func < (lhs: UUID, rhs: UUID) -> Bool {
         lhs.isLessThan(rhs: rhs)
     }
@@ -20,6 +21,7 @@ extension UUID: @retroactive Comparable {
 #else
 extension UUID: Comparable {
     @inlinable
+    @_disfavoredOverload
     public static func < (lhs: UUID, rhs: UUID) -> Bool {
         lhs.isLessThan(rhs: rhs)
     }
