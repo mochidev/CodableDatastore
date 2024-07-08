@@ -62,8 +62,10 @@ extension Double: RangedIndexable {}
 @available(macOS 13.0, iOS 16, tvOS 16, watchOS 9, *)
 extension Duration: RangedIndexable {}
 extension Float: RangedIndexable {}
+#if arch(arm64)
 @available(macOS 11.0, iOS 14, tvOS 14, watchOS 7, *)
 extension Float16: RangedIndexable {}
+#endif
 extension Int: DiscreteIndexable, RangedIndexable {}
 extension Int8: DiscreteIndexable, RangedIndexable {}
 extension Int16: DiscreteIndexable, RangedIndexable {}
