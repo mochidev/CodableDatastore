@@ -11,7 +11,7 @@ import Bytes
 
 extension DiskPersistence {
     actor Transaction: AnyDiskTransaction {
-        let persistence: DiskPersistence
+        unowned let persistence: DiskPersistence
         
         unowned let parent: Transaction?
         var childTransactions: [Transaction] = []
