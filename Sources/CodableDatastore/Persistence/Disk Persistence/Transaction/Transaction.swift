@@ -14,7 +14,7 @@ extension DiskPersistence {
         unowned let persistence: DiskPersistence
         
         unowned let parent: Transaction?
-        var childTransactions: [Transaction] = []
+        weak var lastReadWriteChildTransaction: Transaction?
         
         private(set) var task: Task<Void, Error>!
         let options: UnsafeTransactionOptions
@@ -133,7 +133,6 @@ extension DiskPersistence {
                 deletedRootObjects.removeAll()
                 deletedIndexes.removeAll()
                 deletedPages.removeAll()
-                childTransactions.removeAll()
             }
             
             if let parent {
@@ -231,7 +230,7 @@ extension DiskPersistence {
             @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             assert(!self.options.contains(.readOnly) || options.contains(.readOnly), "A child transaction was declared read-write, even though its parent was read-only!")
-            let transaction = Transaction(
+            let childTransaction = Transaction(
                 persistence: persistence,
                 parent: self,
                 actionName: nil,
@@ -239,20 +238,22 @@ extension DiskPersistence {
             )
             
             /// Get the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
-            let lastChild = childTransactions.last { !$0.options.contains(.readOnly) }
-            childTransactions.append(transaction)
+            let lastChild = lastReadWriteChildTransaction
+            if !childTransaction.options.contains(.readOnly) {
+                lastReadWriteChildTransaction = childTransaction
+            }
             
-            let task = await transaction.attachTask(options: options) {
+            let task = await childTransaction.attachTask(options: options) {
                 try self.checkIsActive()
                 
                 /// If the transaction is not read only, wait for the last transaction to properly finish before starting the next one.
                 if !options.contains(.readOnly) {
                     _ = try? await lastChild?.task.value
                 }
-                return try await handler(transaction, false)
+                return try await handler(childTransaction, false)
             }
             
-            return (transaction, task)
+            return (childTransaction, task)
         }
         
         func rootObject(for datastoreKey: DatastoreKey) async throws -> Datastore.RootObject? {
