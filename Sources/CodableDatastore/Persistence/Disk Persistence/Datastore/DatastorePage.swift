@@ -168,7 +168,7 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence wh
     typealias Element = Base.Element
     
     private var cachedEntries: [Task<Element?, Error>] = []
-    private var baseIterator: Base.AsyncIterator
+    private var baseIterator: Base.AsyncIterator?
     
     struct AsyncIterator: AsyncIteratorProtocol & Sendable {
         let base: MultiplexedAsyncSequence
@@ -206,10 +206,11 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence wh
         }
     }
     
-    nonisolated func nextBase(iterator: Base.AsyncIterator) async throws -> (Element?, Base.AsyncIterator) {
+    /// Return the next base iterator to use along with the current entry, or nil if we've reached the end, so we don't retail the open file handles in our memory caches.
+    nonisolated func nextBase(iterator: Base.AsyncIterator?) async throws -> (Element?, Base.AsyncIterator?) {
         var iteratorCopy = iterator
-        let nextEntry = try await iteratorCopy.next()
-        return (nextEntry, iteratorCopy)
+        let nextEntry = try await iteratorCopy?.next()
+        return (nextEntry, nextEntry.flatMap { _ in iteratorCopy })
     }
     
     nonisolated func makeAsyncIterator() -> AsyncIterator {
