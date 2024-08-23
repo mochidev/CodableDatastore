@@ -12,6 +12,8 @@
 import XCTest
 @testable import CodableDatastore
 
+fileprivate struct SortError: Error, Equatable {}
+
 final class DiskPersistenceDatastoreIndexTests: XCTestCase {
     var temporaryStoreURL: URL = FileManager.default.temporaryDirectory
     
@@ -26,7 +28,10 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
     func assertPageSearch(
         proposedEntry: UInt8,
         pages: [[DatastorePageEntryBlock]],
+        requiredContentLength: Int? = nil,
+        requiresCompleteEntries: Bool = false,
         expectedIndex: Int?,
+        expectedSearchFailure: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
     ) async throws {
@@ -67,13 +72,25 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             pageInfos.append(.existing(pageID))
         }
         
-        let result = try await index.pageIndex(for: proposedEntry, in: pageInfos) { [pageLookup] pageID in
-            pageLookup[pageID]!
-        } comparator: { lhs, rhs in
-            lhs.sortOrder(comparedTo: rhs.headers[0][0])
+        do {
+            let result = try await index.pageIndex(
+                for: proposedEntry,
+                in: pageInfos,
+                requiresCompleteEntries: requiresCompleteEntries
+            ) { [pageLookup] pageID in
+                pageLookup[pageID]!
+            } comparator: { lhs, rhs in
+                if let requiredContentLength, rhs.content.count != requiredContentLength {
+                    throw SortError()
+                }
+                return lhs.sortOrder(comparedTo: rhs.headers[0][0])
+            }
+            
+            XCTAssertEqual(result, expectedIndex, file: file, line: line)
+            XCTAssertFalse(expectedSearchFailure, file: file, line: line)
+        } catch is SortError {
+            XCTAssertTrue(expectedSearchFailure, "Encountered unexpected error", file: file, line: line)
         }
-        
-        XCTAssertEqual(result, expectedIndex, file: file, line: line)
     }
     
     func assertInsertionCursor(
@@ -121,7 +138,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             pageInfos.append(.existing(pageID))
         }
         
-        let result = try await index.insertionCursor(for: RangeBoundExpression.including(proposedEntry), in: pageInfos) { [pageLookup] pageID in
+        let result = try await index.insertionCursor(for: RangeBoundExpression.including(proposedEntry), in: pageInfos, requiresCompleteEntries: false) { [pageLookup] pageID in
             pageLookup[pageID]!
         } comparator: { lhs, rhs in
             lhs.sortOrder(comparedTo: rhs.headers[0][0], order: .ascending)
@@ -206,6 +223,29 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
         try await assertPageSearch(proposedEntry: 2, pages: pages, expectedIndex: 0)
         try await assertPageSearch(proposedEntry: 3, pages: pages, expectedIndex: 1)
         try await assertPageSearch(proposedEntry: 4, pages: pages, expectedIndex: 1)
+    }
+    
+    func testSplitContentBlockSearch() async throws {
+        let entry1 = DatastorePageEntry(headers: [[1]], content: Array(repeating: 1, count: 100)).blocks(remainingPageSpace: 20, maxPageSpace: 1024)
+        let entry3 = DatastorePageEntry(headers: [[3]], content: Array(repeating: 3, count: 100)).blocks(remainingPageSpace: 20, maxPageSpace: 1024)
+        
+        let pages = [
+            [entry1[0]],
+            [entry1[1], entry3[0]],
+            [entry3[1]]
+        ]
+        
+        try await assertPageSearch(proposedEntry: 0, pages: pages, requiredContentLength: 100, requiresCompleteEntries: false, expectedIndex: 0, expectedSearchFailure: true)
+        try await assertPageSearch(proposedEntry: 1, pages: pages, requiredContentLength: 100, requiresCompleteEntries: false, expectedIndex: 0, expectedSearchFailure: true)
+        try await assertPageSearch(proposedEntry: 2, pages: pages, requiredContentLength: 100, requiresCompleteEntries: false, expectedIndex: 0, expectedSearchFailure: true)
+        try await assertPageSearch(proposedEntry: 3, pages: pages, requiredContentLength: 100, requiresCompleteEntries: false, expectedIndex: 1, expectedSearchFailure: true)
+        try await assertPageSearch(proposedEntry: 4, pages: pages, requiredContentLength: 100, requiresCompleteEntries: false, expectedIndex: 1, expectedSearchFailure: true)
+        
+        try await assertPageSearch(proposedEntry: 0, pages: pages, requiredContentLength: 100, requiresCompleteEntries: true, expectedIndex: 0, expectedSearchFailure: false)
+        try await assertPageSearch(proposedEntry: 1, pages: pages, requiredContentLength: 100, requiresCompleteEntries: true, expectedIndex: 0, expectedSearchFailure: false)
+        try await assertPageSearch(proposedEntry: 2, pages: pages, requiredContentLength: 100, requiresCompleteEntries: true, expectedIndex: 0, expectedSearchFailure: false)
+        try await assertPageSearch(proposedEntry: 3, pages: pages, requiredContentLength: 100, requiresCompleteEntries: true, expectedIndex: 1, expectedSearchFailure: false)
+        try await assertPageSearch(proposedEntry: 4, pages: pages, requiredContentLength: 100, requiresCompleteEntries: true, expectedIndex: 1, expectedSearchFailure: false)
     }
     
     func testTwoPageBackwardsBleedingBlockSearch() async throws {
@@ -381,7 +421,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase {
             let exp = expectation(description: "Finished")
             Task { [pageInfos, pageLookup] in
                 for _ in 0..<1000 {
-                    _ = try await index.pageIndex(for: UInt64.random(in: 0..<1000000), in: pageInfos) { pageID in
+                    _ = try await index.pageIndex(for: UInt64.random(in: 0..<1000000), in: pageInfos, requiresCompleteEntries: false) { pageID in
                         pageLookup[pageID]!
                     } comparator: { lhs, rhs in
                         lhs.sortOrder(comparedTo: try UInt64(bigEndianBytes: rhs.headers[0]))

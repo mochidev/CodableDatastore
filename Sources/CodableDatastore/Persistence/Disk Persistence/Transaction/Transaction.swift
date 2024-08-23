@@ -529,7 +529,11 @@ extension DiskPersistence.Transaction {
         
         let index = try await rootObject.primaryIndex
         
-        let (cursor, entry) = try await index.entry(for: identifier, comparator: primaryIndexComparator)
+        let (cursor, entry) = try await index.entry(
+            for: identifier,
+            requiresCompleteEntries: false,
+            comparator: primaryIndexComparator
+        )
         guard entry.headers.count == 2
         else { throw DiskPersistenceError.invalidEntryFormat }
         
@@ -551,7 +555,11 @@ extension DiskPersistence.Transaction {
         
         let index = try await rootObject.primaryIndex
         
-        return try await index.insertionCursor(for: identifier, comparator: primaryIndexComparator)
+        return try await index.insertionCursor(
+            for: identifier,
+            requiresCompleteEntries: false,
+            comparator: primaryIndexComparator
+        )
     }
     
     func directIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
@@ -572,7 +580,11 @@ extension DiskPersistence.Transaction {
         guard let index = try await rootObject.directIndexes[indexName]
         else { throw DatastoreInterfaceError.indexNotFound }
         
-        let (cursor, entry) = try await index.entry(for: (indexValue, identifier), comparator: directIndexComparator)
+        let (cursor, entry) = try await index.entry(
+            for: (indexValue, identifier),
+            requiresCompleteEntries: false,
+            comparator: directIndexComparator
+        )
         guard entry.headers.count == 3
         else { throw DiskPersistenceError.invalidEntryFormat }
         
@@ -597,7 +609,11 @@ extension DiskPersistence.Transaction {
         guard let index = try await rootObject.directIndexes[indexName]
         else { throw DatastoreInterfaceError.indexNotFound }
         
-        return try await index.insertionCursor(for: (indexValue, identifier), comparator: directIndexComparator)
+        return try await index.insertionCursor(
+            for: (indexValue, identifier),
+            requiresCompleteEntries: false,
+            comparator: directIndexComparator
+        )
     }
     
     func secondaryIndexCursor<IndexType: Indexable, IdentifierType: Indexable>(
@@ -614,7 +630,11 @@ extension DiskPersistence.Transaction {
         guard let index = try await rootObject.secondaryIndexes[indexName]
         else { throw DatastoreInterfaceError.indexNotFound }
         
-        let (cursor, _) = try await index.entry(for: (indexValue, identifier), comparator: secondaryIndexComparator)
+        let (cursor, _) = try await index.entry(
+            for: (indexValue, identifier),
+            requiresCompleteEntries: true,
+            comparator: secondaryIndexComparator
+        )
         
         return cursor
     }
@@ -633,7 +653,11 @@ extension DiskPersistence.Transaction {
         guard let index = try await rootObject.secondaryIndexes[indexName]
         else { throw DatastoreInterfaceError.indexNotFound }
         
-        return try await index.insertionCursor(for: (indexValue, identifier), comparator: secondaryIndexComparator)
+        return try await index.insertionCursor(
+            for: (indexValue, identifier),
+            requiresCompleteEntries: true,
+            comparator: secondaryIndexComparator
+        )
     }
 }
 
@@ -698,6 +722,7 @@ extension DiskPersistence.Transaction {
             } else {
                 try await index.insertionCursor(
                     for: (range.lowerBoundExpression, .ascending),
+                    requiresCompleteEntries: false,
                     comparator: primaryIndexBoundComparator
                 )
             }
@@ -723,6 +748,7 @@ extension DiskPersistence.Transaction {
             } else {
                 try await index.insertionCursor(
                     for: (range.upperBoundExpression, .descending),
+                    requiresCompleteEntries: false,
                     comparator: primaryIndexBoundComparator
                 )
             }
@@ -766,6 +792,7 @@ extension DiskPersistence.Transaction {
             } else {
                 try await index.insertionCursor(
                     for: (range.lowerBoundExpression, .ascending),
+                    requiresCompleteEntries: false,
                     comparator: directIndexBoundComparator
                 )
             }
@@ -791,6 +818,7 @@ extension DiskPersistence.Transaction {
             } else {
                 try await index.insertionCursor(
                     for: (range.upperBoundExpression, .descending),
+                    requiresCompleteEntries: false,
                     comparator: directIndexBoundComparator
                 )
             }
@@ -834,6 +862,7 @@ extension DiskPersistence.Transaction {
             } else {
                 try await index.insertionCursor(
                     for: (range.lowerBoundExpression, .ascending),
+                    requiresCompleteEntries: false,
                     comparator: secondaryIndexBoundComparator
                 )
             }
@@ -857,6 +886,7 @@ extension DiskPersistence.Transaction {
             } else {
                 try await index.insertionCursor(
                     for: (range.upperBoundExpression, .descending),
+                    requiresCompleteEntries: false,
                     comparator: secondaryIndexBoundComparator
                 )
             }

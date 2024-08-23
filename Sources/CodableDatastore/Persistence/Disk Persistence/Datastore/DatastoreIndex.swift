@@ -289,12 +289,14 @@ extension DiskPersistence.Datastore.Index {
     /// - Parameters:
     ///   - proposedEntry: The entry to use in comparison with other persisted entries.
     ///   - pages: A collection of pages to check against.
+    ///   - requiresCompleteEntries: Set to `true` if the comparator requires a complete entry to operate with.
     ///   - pageBuilder: A closure that provides a cached Page object for the loaded page.
     ///   - comparator: A comparator to determine order and equality between the proposed entry and a persisted one.
     /// - Returns: The index within the pages collection where the entry would reside.
     func pageIndex<T>(
         for proposedEntry: T,
         in pages: [DatastoreIndexManifest.PageInfo],
+        requiresCompleteEntries: Bool,
         pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
         comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> Int? {
@@ -348,11 +350,13 @@ extension DiskPersistence.Datastore.Index {
                         
                         /// If we have some bytes, attempt to decode them into an entry.
                         if let bytesForFirstEntry {
-                            firstEntryOfPage = try? DatastorePageEntry(bytes: bytesForFirstEntry, isPartial: false)
+                            firstEntryOfPage = try? DatastorePageEntry(bytes: bytesForFirstEntry, isPartial: true)
                         }
                         
-                        /// If we have an entry, stop scanning as we can go ahead and operate on it.
-                        if firstEntryOfPage != nil { break pageIterator }
+                        /// If we have an entry, stop scanning as we can go ahead and operate on it. Also make sure that we have a complete entry if one is required by rejecting partial entries when the flag is set.
+                        if let firstEntryOfPage, !(requiresCompleteEntries && firstEntryOfPage.isPartial) {
+                            break pageIterator
+                        }
                     }
                 }
                 
@@ -388,6 +392,7 @@ extension DiskPersistence.Datastore.Index {
     
     func entry<T>(
         for proposedEntry: T,
+        requiresCompleteEntries: Bool,
         comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> (
         cursor: DiskPersistence.InstanceCursor,
@@ -396,6 +401,7 @@ extension DiskPersistence.Datastore.Index {
         try await entry(
             for: proposedEntry,
             in: try await manifest.orderedPages,
+            requiresCompleteEntries: requiresCompleteEntries,
             pageBuilder: { await datastore.page(for: .init(index: self.id, page: $0)) },
             comparator: comparator
         )
@@ -404,6 +410,7 @@ extension DiskPersistence.Datastore.Index {
     func entry<T>(
         for proposedEntry: T,
         in pages: [DatastoreIndexManifest.PageInfo],
+        requiresCompleteEntries: Bool,
         pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
         comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> (
@@ -415,6 +422,7 @@ extension DiskPersistence.Datastore.Index {
             let startingPageIndex = try await pageIndex(
                 for: proposedEntry,
                 in: pages,
+                requiresCompleteEntries: requiresCompleteEntries,
                 pageBuilder: pageBuilder,
                 comparator: comparator
             )
@@ -549,11 +557,13 @@ extension DiskPersistence.Datastore.Index {
     
     func insertionCursor<T>(
         for proposedEntry: T,
+        requiresCompleteEntries: Bool,
         comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> DiskPersistence.InsertionCursor {
         try await insertionCursor(
             for: proposedEntry,
             in: try await manifest.orderedPages,
+            requiresCompleteEntries: requiresCompleteEntries,
             pageBuilder: { await datastore.page(for: .init(index: self.id, page: $0)) },
             comparator: comparator
         )
@@ -562,6 +572,7 @@ extension DiskPersistence.Datastore.Index {
     func insertionCursor<T>(
         for proposedEntry: T,
         in pages: [DatastoreIndexManifest.PageInfo],
+        requiresCompleteEntries: Bool,
         pageBuilder: @Sendable (_ pageID: DatastorePageIdentifier) async -> DiskPersistence.Datastore.Page,
         comparator: @Sendable (_ lhs: T, _ rhs: DatastorePageEntry) throws -> SortOrder
     ) async throws -> DiskPersistence.InsertionCursor {
@@ -570,6 +581,7 @@ extension DiskPersistence.Datastore.Index {
             let startingPageIndex = try await pageIndex(
                 for: proposedEntry,
                 in: pages,
+                requiresCompleteEntries: requiresCompleteEntries,
                 pageBuilder: pageBuilder,
                 comparator: comparator
             )
