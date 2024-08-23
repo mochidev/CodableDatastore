@@ -13,6 +13,8 @@ import Bytes
 struct DatastorePageEntry: Hashable {
     var headers: [Bytes]
     var content: Bytes
+    
+    /// Whether the entry contains a complete header, but a partial content.
     var isPartial: Bool = false
 }
 
