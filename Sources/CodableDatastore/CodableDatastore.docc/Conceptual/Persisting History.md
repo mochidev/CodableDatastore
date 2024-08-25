@@ -27,7 +27,7 @@ are themselves copied from backups, making sure that they don't inadvertedly
 change.
 
 Backups utilize file-system block sharing when available, such as on APFS, and
-as such should be a relatively cheap operating to complete.
+as such should be a relatively cheap operation to complete.
 
 ### Snapshots
 

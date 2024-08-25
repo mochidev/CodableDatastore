@@ -55,7 +55,7 @@ extension DiskPersistence {
 // MARK: - Common URL Accessors
 
 extension DiskPersistence.Datastore {
-    /// The URL that points to the Snapshot directory.
+    /// The URL that points to the Datastore directory.
     nonisolated var datastoreURL: URL {
         snapshot
             .datastoresURL

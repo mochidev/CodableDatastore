@@ -24,7 +24,7 @@ actor Snapshot<AccessMode: _AccessMode> {
     
     /// A flag indicating if this is a backup snapshot.
     ///
-    /// This is used to determine where on disk the snapshot is stored.
+    /// This is used to determine which parent directory on disk the snapshot is stored.
     let isBackup: Bool
     
     /// A cached instance of the manifest as last loaded from disk.
