@@ -96,6 +96,7 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
 }
 
 // MARK: - Default Store
+
 extension DiskPersistence where AccessMode == ReadWrite {
     /// The default persistence for the read-write store of an app.
     public static func defaultStore() throws -> DiskPersistence<AccessMode> {
@@ -116,6 +117,7 @@ extension DiskPersistence where AccessMode == ReadOnly {
 }
 
 // MARK: - Common URL Accessors
+
 extension DiskPersistence {
     /// The URL that points to the Snapshots directory.
     nonisolated var snapshotsURL: URL {
@@ -134,6 +136,7 @@ extension DiskPersistence {
 }
 
 // MARK: - Store Info
+
 extension DiskPersistence {
     /// Load the store info from disk, or create a suitable starting value if such a file does not exist.
     private func loadStoreInfo() throws -> StoreInfo {
@@ -278,6 +281,7 @@ extension DiskPersistence {
 }
 
 // MARK: - Snapshot Management
+
 extension DiskPersistence {
     /// Load the default snapshot from disk, or create an empty one if such a file does not exist.
     private func loadSnapshot(from storeInfo: StoreInfo) -> Snapshot<AccessMode> {
@@ -376,7 +380,8 @@ extension DiskPersistence {
     }
 }
 
-// MARK: - Persisitence Creation
+// MARK: - Persistence Creation
+
 extension DiskPersistence where AccessMode == ReadWrite {
     /// Create directories for our persistence.
     private func createPersistenceDirectories() throws {
@@ -427,7 +432,7 @@ extension DiskPersistence {
             }
             
             if Access.self == ReadWrite.self, weakDatastore.canWrite {
-                assertionFailure("An existing datastore that can write to the persistence has already been registered for this key. Only one writer is suppored per key. This will throw an error on release builds.")
+                assertionFailure("An existing datastore that can write to the persistence has already been registered for this key. Only one writer is supported per key. This will throw an error on release builds.")
                 throw DatastoreInterfaceError.duplicateWriters
             }
         }

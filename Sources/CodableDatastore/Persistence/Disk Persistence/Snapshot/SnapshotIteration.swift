@@ -68,6 +68,9 @@ extension SnapshotIteration {
 }
 
 extension SnapshotIteration {
+    /// Internal method to check if an instance should be persisted based on iff it changed significantly from a previous iteration
+    /// - Parameter existingInstance: The previous iteration to check
+    /// - Returns: `true` if the iteration should be persisted, `false` if it represents the same data from `existingInstance`.
     func isMeaningfullyChanged(from existingInstance: Self?) -> Bool {
         guard
             dataStores == existingInstance?.dataStores

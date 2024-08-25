@@ -326,7 +326,7 @@ The four common database operations are outlined below:
 15. The `Dirty` file is removed for the snapshot.
 
 The above is performed for a single transaction, so multiple updates can take
-advantage of this and be written at the same time. Updated made without
+advantage of this and be written at the same time. Updates made without
 a transaction are performed within one automatically, though these edits may
 be coalesced if they happen between writes to disk from multiple sources.
 
