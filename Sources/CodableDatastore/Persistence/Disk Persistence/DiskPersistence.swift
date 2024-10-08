@@ -144,9 +144,7 @@ extension DiskPersistence {
             
             cachedStoreInfo = storeInfo
             return storeInfo
-        } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile {
-            return StoreInfo(modificationDate: Date())
-        } catch let error as NSError where error.domain == NSPOSIXErrorDomain && error.code == Int(POSIXError.ENOENT.rawValue) {
+        } catch URLError.fileDoesNotExist, CocoaError.fileNoSuchFile, CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
             return StoreInfo(modificationDate: Date())
         } catch {
             throw error
