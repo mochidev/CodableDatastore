@@ -12,7 +12,7 @@
 import XCTest
 @testable import CodableDatastore
 
-final class SnapshotTests: XCTestCase {
+final class SnapshotTests: XCTestCase, @unchecked Sendable {
     var temporaryStoreURL: URL = FileManager.default.temporaryDirectory
     
     override func setUp() async throws {

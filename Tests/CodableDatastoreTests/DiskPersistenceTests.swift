@@ -12,7 +12,7 @@
 import XCTest
 @testable import CodableDatastore
 
-final class DiskPersistenceTests: XCTestCase {
+final class DiskPersistenceTests: XCTestCase, @unchecked Sendable {
     var temporaryStoreURL: URL = FileManager.default.temporaryDirectory
     
     override func setUp() async throws {
