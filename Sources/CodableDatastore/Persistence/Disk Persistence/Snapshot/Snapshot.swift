@@ -112,9 +112,7 @@ extension Snapshot {
 
             cachedManifest = manifest
             return manifest
-        } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile {
-            return SnapshotManifest(id: id, modificationDate: Date())
-        } catch let error as NSError where error.domain == NSPOSIXErrorDomain && error.code == Int(POSIXError.ENOENT.rawValue) {
+        } catch URLError.fileDoesNotExist, CocoaError.fileNoSuchFile, CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
             return SnapshotManifest(id: id, modificationDate: Date())
         } catch {
             throw error
