@@ -9,8 +9,6 @@
 import Foundation
 
 extension ISO8601DateFormatter {
-    #if compiler(>=6)
-    nonisolated(unsafe)
     static let withMilliseconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -23,20 +21,6 @@ extension ISO8601DateFormatter {
         ]
         return formatter
     }()
-    #else
-    static let withMilliseconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.formatOptions = [
-            .withInternetDateTime,
-            .withDashSeparatorInDate,
-            .withColonSeparatorInTime,
-            .withTimeZone,
-            .withFractionalSeconds
-        ]
-        return formatter
-    }()
-    #endif
 }
 
 extension JSONDecoder.DateDecodingStrategy {
@@ -59,8 +43,8 @@ extension JSONEncoder.DateEncodingStrategy {
     }
 }
 
-#if !canImport(Darwin)
-extension ISO8601DateFormatter: @unchecked Sendable {}
+#if compiler(>=6)
+extension ISO8601DateFormatter: @unchecked @retroactive Sendable {}
 extension JSONDecoder.DateDecodingStrategy: @unchecked Sendable {}
 extension JSONEncoder.DateEncodingStrategy: @unchecked Sendable {}
 #endif

@@ -14,7 +14,7 @@ import XCTest
 
 fileprivate struct SortError: Error, Equatable {}
 
-final class DiskPersistenceDatastoreIndexTests: XCTestCase {
+final class DiskPersistenceDatastoreIndexTests: XCTestCase, @unchecked Sendable {
     var temporaryStoreURL: URL = FileManager.default.temporaryDirectory
     
     override func setUp() async throws {

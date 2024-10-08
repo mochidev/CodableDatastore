@@ -9,6 +9,7 @@
 import Foundation
 
 /// Make UUIDs comparable on platforms that shipped without it, so that they can be used transparently as an index.
+#if !canImport(FoundationEssentials)
 #if swift(<5.9) || os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Windows)
 #if compiler(>=6)
 extension UUID: @retroactive Comparable {
@@ -26,6 +27,7 @@ extension UUID: Comparable {
         lhs.uuid < rhs.uuid
     }
 }
+#endif
 #endif
 #endif
 
