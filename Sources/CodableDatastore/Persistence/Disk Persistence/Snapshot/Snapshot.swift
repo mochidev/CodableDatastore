@@ -32,8 +32,9 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// A cached instance of the manifest as last loaded from disk.
     var cachedManifest: SnapshotManifest?
     
-    /// A cached instance of the current iteration as last loaded from disk.
-    var cachedIteration: SnapshotIteration?
+    /// Cache for the loaded iterations as last loaded from disk. ``isExtendedIterationCacheEnabled`` controls if multiple iterations are cached or not.
+    var cachedIterations: [SnapshotIterationIdentifier : SnapshotIteration] = [:]
+    var isExtendedIterationCacheEnabled: Bool
     
     /// A transaction stream for manifest updates, so reads and writes can be serialized in request order.
     var manifestTransactionStream = TransactionStream()
@@ -44,11 +45,13 @@ actor Snapshot<AccessMode: _AccessMode> {
     init(
         id: SnapshotIdentifier,
         persistence: DiskPersistence<AccessMode>,
-        isBackup: Bool = false
+        isBackup: Bool = false,
+        isExtendedIterationCacheEnabled: Bool = false
     ) {
         self.id = id
         self.persistence = persistence
         self.isBackup = isBackup
+        self.isExtendedIterationCacheEnabled = isExtendedIterationCacheEnabled
     }
 }
 
@@ -126,14 +129,25 @@ extension Snapshot {
         }
     }
     
+    func setExtendedIterationCacheEnabled(_ isEnabled: Bool) {
+        isExtendedIterationCacheEnabled = isEnabled
+    }
+    
     /// Load an iteration from disk, or create a suitable starting value if such a file does not exist.
-    private func loadIteration(for iterationID: SnapshotIterationIdentifier) throws -> SnapshotIteration {
+    func loadIteration(for iterationID: SnapshotIterationIdentifier?) async throws -> SnapshotIteration? {
+        guard let iterationID else { return nil }
+        if let iteration = cachedIterations[iterationID] {
+            return iteration
+        }
         do {
             let data = try Data(contentsOf: iterationURL(for: iterationID))
 
             let iteration = try JSONDecoder.shared.decode(SnapshotIteration.self, from: data)
 
-            cachedIteration = iteration
+            if !isExtendedIterationCacheEnabled {
+                cachedIterations.removeAll()
+            }
+            cachedIterations[iteration.id] = iteration
             return iteration
         } catch {
             throw error
@@ -157,7 +171,7 @@ extension Snapshot {
         cachedManifest = manifest
     }
     
-    /// Write the specified iteration to the store, and cache the results in ``Snapshot/cachedIteration``.
+    /// Write the specified iteration to the store, and cache the results in ``Snapshot/cachedIterations``.
     private func write(iteration: SnapshotIteration) throws where AccessMode == ReadWrite {
         let iterationURL = iterationURL(for: iteration.id)
         /// Make sure the directories exists first.
@@ -168,7 +182,10 @@ extension Snapshot {
         try data.write(to: iterationURL, options: .atomic)
 
         /// Update the cache since we know what it should be.
-        cachedIteration = iteration
+        if !isExtendedIterationCacheEnabled {
+            cachedIterations.removeAll()
+        }
+        cachedIterations[iteration.id] = iteration
     }
 
     /// Load and update the manifest in an updater.
@@ -195,15 +212,8 @@ extension Snapshot {
         return try await manifestTransactionStream.withTransaction {
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             var manifest = try cachedManifest ?? self.loadManifest()
-            var iteration: SnapshotIteration
-            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
-                iteration = cachedIteration
-            } else if let iterationID = manifest.currentIteration {
-                iteration = try self.loadIteration(for: iterationID)
-            } else {
-                let date = Date()
-                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
-            }
+            let precedingIteration = try await self.loadIteration(for: manifest.currentIteration)
+            var iteration = precedingIteration ?? SnapshotIteration()
 
             /// Let the updater do something with the manifest, storing the variable on the Task Local stack.
             let returnValue = try await SnapshotTaskLocals.with(manifest: manifest, iteration: iteration, for: persistence) {
@@ -211,10 +221,10 @@ extension Snapshot {
             }
             
             /// Only write to the store if we changed the manifest for any reason
-            if iteration.isMeaningfullyChanged(from: cachedIteration) {
+            if iteration.isMeaningfullyChanged(from: precedingIteration) {
                 iteration.creationDate = Date()
                 iteration.id = SnapshotIterationIdentifier(date: iteration.creationDate)
-                iteration.precedingIteration = cachedIteration?.id
+                iteration.precedingIteration = precedingIteration?.id
                 
                 try write(iteration: iteration)
             }
@@ -246,15 +256,7 @@ extension Snapshot {
         return try await manifestTransactionStream.withTransaction {
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             let manifest = try cachedManifest ?? self.loadManifest()
-            var iteration: SnapshotIteration
-            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
-                iteration = cachedIteration
-            } else if let iterationID = manifest.currentIteration {
-                iteration = try self.loadIteration(for: iterationID)
-            } else {
-                let date = Date()
-                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
-            }
+            let iteration = try await self.loadIteration(for: manifest.currentIteration) ?? SnapshotIteration()
 
             /// Let the accessor do something with the manifest, storing the variable on the Task Local stack.
             return try await SnapshotTaskLocals.with(manifest: manifest, iteration: iteration, for: persistence) {
