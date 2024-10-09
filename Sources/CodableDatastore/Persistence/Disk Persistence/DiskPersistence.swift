@@ -291,7 +291,7 @@ extension DiskPersistence {
             return snapshot
         }
         
-        let snapshot = Snapshot(id: snapshotID, persistence: self)
+        let snapshot = Snapshot(id: snapshotID, persistence: self, isExtendedIterationCacheEnabled: !_transactionRetentionPolicy.isIndefinite)
         snapshots[snapshotID] = snapshot
         
         return snapshot

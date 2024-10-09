@@ -68,6 +68,12 @@ extension SnapshotIteration {
 }
 
 extension SnapshotIteration {
+    /// Initialize a snapshot iteration with a date
+    /// - Parameter date: The date to base the identifier and creation date off of.
+    init(date: Date = Date()) {
+        self.init(id: SnapshotIterationIdentifier(date: date), creationDate: date)
+    }
+    
     /// Internal method to check if an instance should be persisted based on iff it changed significantly from a previous iteration
     /// - Parameter existingInstance: The previous iteration to check
     /// - Returns: `true` if the iteration should be persisted, `false` if it represents the same data from `existingInstance`.

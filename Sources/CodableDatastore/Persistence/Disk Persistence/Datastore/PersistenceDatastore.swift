@@ -217,14 +217,16 @@ extension DiskPersistence.Datastore {
 
 extension DiskPersistence.Datastore {
     /// Load the root object from disk for the given identifier.
-    func loadRootObject(for rootIdentifier: DatastoreRootIdentifier) throws -> DatastoreRootManifest {
+    func loadRootObject(for rootIdentifier: DatastoreRootIdentifier, shouldCache: Bool = true) throws -> DatastoreRootManifest {
         let rootObjectURL = rootURL(for: rootIdentifier)
         
         let data = try Data(contentsOf: rootObjectURL)
         
         let root = try JSONDecoder.shared.decode(DatastoreRootManifest.self, from: data)
         
-        cachedRootObject = root
+        if shouldCache {
+            cachedRootObject = root
+        }
         return root
     }
     
