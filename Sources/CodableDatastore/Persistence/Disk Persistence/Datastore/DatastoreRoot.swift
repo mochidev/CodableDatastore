@@ -56,7 +56,7 @@ extension DiskPersistence.Datastore.RootObject: Hashable {
 extension DiskPersistence.Datastore.RootObject {
     /// The URL that points to the root object on disk.
     nonisolated var rootObjectURL: URL {
-        datastore.rootURL.appendingPathComponent("\(id).json", isDirectory: false)
+        datastore.rootURL(for: id)
     }
 }
 

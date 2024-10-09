@@ -95,6 +95,11 @@ extension Snapshot {
         snapshotURL.appendingPathComponent("Datastores", isDirectory: true)
     }
     
+    /// The URL for a specific datastore within the snapshot.
+    nonisolated func datastoreURL(for id: DatastoreIdentifier) -> URL {
+        datastoresURL.appendingPathComponent("\(id).datastore", isDirectory: true)
+    }
+    
     /// The URL that points to the Inbox directory.
     nonisolated var inboxURL: URL {
         snapshotURL.appendingPathComponent("Inbox", isDirectory: true)

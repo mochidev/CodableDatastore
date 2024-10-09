@@ -57,9 +57,7 @@ extension DiskPersistence {
 extension DiskPersistence.Datastore {
     /// The URL that points to the Datastore directory.
     nonisolated var datastoreURL: URL {
-        snapshot
-            .datastoresURL
-            .appendingPathComponent("\(id).datastore", isDirectory: true)
+        snapshot.datastoreURL(for: id)
     }
     
     /// The URL that points to the Root directory.
@@ -68,40 +66,62 @@ extension DiskPersistence.Datastore {
             .appendingPathComponent("Root", isDirectory: true)
     }
     
+    /// The URL for the specified root.
+    nonisolated func rootURL(for id: DatastoreRootIdentifier) -> URL {
+        rootURL.appendingPathComponent("\(id).json", isDirectory: false)
+    }
+    
     /// The URL that points to the DirectIndexes directory.
     nonisolated var directIndexesURL: URL {
-        datastoreURL
-            .appendingPathComponent("DirectIndexes", isDirectory: true)
+        datastoreURL.appendingPathComponent("DirectIndexes", isDirectory: true)
     }
     
     /// The URL that points to the SecondaryIndexes directory.
     nonisolated var secondaryIndexesURL: URL {
-        datastoreURL
-            .appendingPathComponent("SecondaryIndexes", isDirectory: true)
+        datastoreURL.appendingPathComponent("SecondaryIndexes", isDirectory: true)
     }
     
-    nonisolated func indexURL(for indexID: Index.ID) -> URL {
+    /// The root URL of a partifular index directory.
+    nonisolated func indexURL(for indexID: DatastoreRootManifest.IndexID) -> URL {
         switch indexID {
         case .primary:
-            return directIndexesURL
-                .appendingPathComponent("Primary.datastoreindex", isDirectory: true)
-        case .direct(let indexID, _):
-            return directIndexesURL
-                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
-        case .secondary(let indexID, _):
-            return secondaryIndexesURL
-                .appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
+            directIndexesURL.appendingPathComponent("Primary.datastoreindex", isDirectory: true)
+        case .direct(let indexID):
+            directIndexesURL.appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
+        case .secondary(let indexID):
+            secondaryIndexesURL.appendingPathComponent("\(indexID).datastoreindex", isDirectory: true)
         }
     }
     
-    nonisolated func manifestsURL(for indexID: Index.ID) -> URL {
-        indexURL(for: indexID)
-            .appendingPathComponent("Manifest", isDirectory: true)
+    /// The URL of an index's manifests directory.
+    nonisolated func manifestsURL(for id: DatastoreRootManifest.IndexID) -> URL {
+        indexURL(for: id).appendingPathComponent("Manifest", isDirectory: true)
     }
     
-    nonisolated func pagesURL(for indexID: Index.ID) -> URL {
-        indexURL(for: indexID)
-            .appendingPathComponent("Pages", isDirectory: true)
+    /// The URL of an index's root manifest.
+    nonisolated func manifestURL(for id: Index.ID) -> URL {
+        manifestURL(for: DatastoreRootManifest.IndexManifestID(id))
+    }
+    
+    /// The URL of an index's root manifest.
+    nonisolated func manifestURL(for id: DatastoreRootManifest.IndexManifestID) -> URL {
+        manifestsURL(for: id.indexID).appendingPathComponent("\(id.manifestID).indexmanifest", isDirectory: false)
+    }
+    
+    /// The URL of an index's pages directory..
+    nonisolated func pagesURL(for id: Index.ID) -> URL {
+        indexURL(for: id.indexID).appendingPathComponent("Pages", isDirectory: true)
+    }
+    
+    /// The URL of a particular page.
+    nonisolated func pageURL(for id: Page.ID) -> URL {
+        guard let components = try? id.page.components else { preconditionFailure("Components could not be determined for Page.") }
+        
+        return pagesURL(for: id.index)
+            .appendingPathComponent(components.year, isDirectory: true)
+            .appendingPathComponent(components.monthDay, isDirectory: true)
+            .appendingPathComponent(components.hourMinute, isDirectory: true)
+            .appendingPathComponent("\(id.page).datastorepage", isDirectory: false)
     }
 }
 
@@ -198,7 +218,7 @@ extension DiskPersistence.Datastore {
 extension DiskPersistence.Datastore {
     /// Load the root object from disk for the given identifier.
     func loadRootObject(for rootIdentifier: DatastoreRootIdentifier) throws -> DatastoreRootManifest {
-        let rootObjectURL = rootURL.appendingPathComponent("\(rootIdentifier).json", isDirectory: false)
+        let rootObjectURL = rootURL(for: rootIdentifier)
         
         let data = try Data(contentsOf: rootObjectURL)
         
@@ -218,7 +238,7 @@ extension DiskPersistence.Datastore {
             try FileManager.default.createDirectory(at: secondaryIndexesURL, withIntermediateDirectories: true)
         }
         
-        let rootObjectURL = rootURL.appendingPathComponent("\(manifest.id).json", isDirectory: false)
+        let rootObjectURL = rootURL(for: manifest.id)
         
         /// Encode the provided manifest, and write it to disk.
         let data = try JSONEncoder.shared.encode(manifest)

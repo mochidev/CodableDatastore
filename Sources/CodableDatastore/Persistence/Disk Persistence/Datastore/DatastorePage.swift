@@ -78,15 +78,7 @@ extension DiskPersistence.Datastore.Page {
 extension DiskPersistence.Datastore.Page {
     /// The URL that points to the page.
     nonisolated var pageURL: URL {
-        let baseURL = datastore.pagesURL(for: id.index)
-        
-        guard let components = try? id.page.components else { preconditionFailure("Components could not be determined for Page.") }
-        
-        return baseURL
-            .appendingPathComponent(components.year, isDirectory: true)
-            .appendingPathComponent(components.monthDay, isDirectory: true)
-            .appendingPathComponent(components.hourMinute, isDirectory: true)
-            .appendingPathComponent("\(id.page).datastorepage", isDirectory: false)
+        datastore.pageURL(for: id)
     }
 }
 

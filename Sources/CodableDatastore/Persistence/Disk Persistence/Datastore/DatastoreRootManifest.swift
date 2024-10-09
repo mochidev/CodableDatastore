@@ -83,5 +83,21 @@ extension DatastoreRootManifest {
                 self = .secondary(index: index, manifest: manifest)
             }
         }
+        
+        var indexID: DatastoreRootManifest.IndexID {
+            switch self {
+            case .primary(_):           .primary
+            case .direct(let id, _):    .direct(index: id)
+            case .secondary(let id, _): .secondary(index: id)
+            }
+        }
+        
+        var manifestID: DatastoreIndexManifestIdentifier {
+            switch self {
+            case .primary(let id):      id
+            case .direct(_, let id):    id
+            case .secondary(_, let id): id
+            }
+        }
     }
 }

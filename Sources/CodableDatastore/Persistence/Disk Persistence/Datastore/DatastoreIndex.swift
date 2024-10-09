@@ -67,20 +67,35 @@ extension DiskPersistence.Datastore.Index {
         case direct(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)
         case secondary(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)
         
+        var indexID: DatastoreRootManifest.IndexID {
+            switch self {
+            case .primary(_):           .primary
+            case .direct(let id, _):    .direct(index: id)
+            case .secondary(let id, _): .secondary(index: id)
+            }
+        }
+        
         var manifestID: DatastoreIndexManifestIdentifier {
             switch self {
-            case .primary(let id),
-                 .direct(_, let id),
-                 .secondary(_, let id):
-                return id
+            case .primary(let id):      id
+            case .direct(_, let id):    id
+            case .secondary(_, let id): id
             }
         }
         
         func with(manifestID: DatastoreIndexManifestIdentifier) -> Self {
             switch self {
-            case .primary: return .primary(manifest: manifestID)
-            case .direct(let indexID, _): return .direct(index: indexID, manifest: manifestID)
-            case .secondary(let indexID, _): return .secondary(index: indexID, manifest: manifestID)
+            case .primary:                      .primary(manifest: manifestID)
+            case .direct(let indexID, _):       .direct(index: indexID, manifest: manifestID)
+            case .secondary(let indexID, _):    .secondary(index: indexID, manifest: manifestID)
+            }
+        }
+        
+        init(_ id: DatastoreRootManifest.IndexManifestID) {
+            switch id {
+            case .primary(let manifest):                self = .primary(manifest: manifest)
+            case .direct(let index, let manifest):      self = .direct(index: index, manifest: manifest)
+            case .secondary(let index, let manifest):   self = .secondary(index: index, manifest: manifest)
             }
         }
     }
@@ -91,9 +106,7 @@ extension DiskPersistence.Datastore.Index {
 extension DiskPersistence.Datastore.Index {
     /// The URL that points to the manifest.
     nonisolated var manifestURL: URL {
-        datastore
-            .manifestsURL(for: id)
-            .appendingPathComponent("\(id.manifestID).indexmanifest", isDirectory: false)
+        datastore.manifestURL(for: id)
     }
 }
 
@@ -129,7 +142,7 @@ extension DiskPersistence.Datastore.Index {
         }
         
         /// Make sure the directories exists first.
-        try FileManager.default.createDirectory(at: datastore.manifestsURL(for: id), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: datastore.manifestsURL(for: id.indexID), withIntermediateDirectories: true)
         
         /// Encode the provided manifest, and write it to disk.
         let data = Data(manifest.bytes)
