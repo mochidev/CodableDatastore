@@ -83,4 +83,24 @@ extension SnapshotIteration {
         else { return true }
         return false
     }
+    
+    func datastoresToPrune(for mode: SnapshotPruneMode) -> Set<DatastoreIdentifier> {
+        switch mode {
+        case .pruneRemoved: removedDatastores
+        case .pruneAdded:   addedDatastores
+        }
+    }
+    
+    func datastoreRootsToPrune(
+        for mode: SnapshotPruneMode,
+        options: SnapshotPruneOptions
+    ) -> Set<DatastoreRootIdentifier> {
+        switch (mode, options) {
+        case (.pruneRemoved, .pruneAndDelete):  removedDatastoreRoots
+        case (.pruneAdded, .pruneAndDelete):    addedDatastoreRoots
+        /// Flip the results when we aren't deleting, but only when removing from the bottom end.
+        case (.pruneRemoved, .pruneOnly):       addedDatastoreRoots
+        case (.pruneAdded, .pruneOnly):         []
+        }
+    }
 }

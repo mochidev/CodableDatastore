@@ -152,6 +152,63 @@ extension Snapshot {
         }
     }
     
+    func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode, shouldDelete: Bool) async throws {
+        /// Collect the datastores and related roots we'll be deleting.
+        /// - For datastores, only collect the ones we'll be deleting since the ones we are keeping won't be making references to other deletable assets.
+        /// - For the datastore roots, we'll be deleting the entries that are being removed (relative to the direction we are removing from, so the removed ones from the oldest edge, and the added ones from the newest edge, as determined by the caller), while we'll be checking for more assets to remove from entries that have just been added, but only when removing from the oldest edge. We only do this for the oldest edge because entries that have been "removed" from the newest edge are actually being _restored_ and not replaced, which maintains symmetry in a non-obvious way.
+        let datastoresToPruneAndDelete = iteration.datastoresToPrune(for: mode)
+        var datastoreRootsToPruneAndDelete = iteration.datastoreRootsToPrune(for: mode, options: .pruneAndDelete)
+        var datastoreRootsToPrune = iteration.datastoreRootsToPrune(for: mode, options: .pruneOnly)
+        
+        let fileManager = FileManager()
+        
+        /// Start by deleting and pruning roots as needed.
+        if !datastoreRootsToPruneAndDelete.isEmpty || !datastoreRootsToPrune.isEmpty {
+            for (_, datastoreInfo) in iteration.dataStores {
+                /// Skip any roots for datastores being deleted, since we'll just unlink the whole directory in that case.
+                guard !datastoresToPruneAndDelete.contains(datastoreInfo.id) else { continue }
+                
+                let datastore = datastores[datastoreInfo.id] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreInfo.id, snapshot: self)
+                
+                /// Delete the root entries we know to be removed.
+                for datastoreRoot in datastoreRootsToPruneAndDelete {
+                    // TODO: Clean this up by also storing the datastore ID in with the root ID…
+                    do {
+                        try await datastore.pruneRootObject(with: datastoreRoot, mode: mode, shouldDelete: true)
+                        datastoreRootsToPruneAndDelete.remove(datastoreRoot)
+                    } catch {
+                        /// This datastore did not contain the specified root, skip it for now.
+                    }
+                }
+                
+                /// Prune the root entries that were just added, as they themselves refer to other deleted assets.
+                for datastoreRoot in datastoreRootsToPrune {
+                    // TODO: Clean this up by also storing the datastore ID in with the root ID…
+                    do {
+                        try await datastore.pruneRootObject(with: datastoreRoot, mode: mode, shouldDelete: false)
+                        datastoreRootsToPrune.remove(datastoreRoot)
+                    } catch {
+                        /// This datastore did not contain the specified root, skip it for now.
+                    }
+                }
+            }
+        }
+        
+        /// Delete any datastores in their entirety.
+        for datastoreID in datastoresToPruneAndDelete {
+            try? fileManager.removeItem(at: datastoreURL(for: datastoreID))
+        }
+        
+        /// If we are deleting the instance itself, do so at the very end as everything else would have been cleaned up.
+        if shouldDelete {
+            cachedIterations.removeValue(forKey: iteration.id)
+            
+            let iterationURL = iterationURL(for: iteration.id)
+            try? fileManager.removeItem(at: iterationURL)
+            try? fileManager.removeDirectoryIfEmpty(url: iterationURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+        }
+    }
+    
     /// Write the specified manifest to the store, and cache the results in ``Snapshot/cachedManifest``.
     private func write(manifest: SnapshotManifest) throws where AccessMode == ReadWrite {
         /// Make sure the directories exists first.
@@ -317,6 +374,16 @@ extension Snapshot {
 private enum SnapshotTaskLocals {
     @TaskLocal
     static var manifest: (SnapshotManifest, SnapshotIteration)?
+}
+
+enum SnapshotPruneMode {
+    case pruneRemoved
+    case pruneAdded
+}
+
+enum SnapshotPruneOptions {
+    case pruneAndDelete
+    case pruneOnly
 }
 
 // MARK: - Datastore Management
