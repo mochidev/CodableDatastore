@@ -101,3 +101,25 @@ extension DatastoreRootManifest {
         }
     }
 }
+
+extension DatastoreRootManifest {
+    func indexesToPrune(for mode: SnapshotPruneMode) -> Set<IndexID> {
+        switch mode {
+        case .pruneRemoved: removedIndexes
+        case .pruneAdded:   addedIndexes
+        }
+    }
+    
+    func indexManifestsToPrune(
+        for mode: SnapshotPruneMode,
+        options: SnapshotPruneOptions
+    ) -> Set<IndexManifestID> {
+        switch (mode, options) {
+        case (.pruneRemoved, .pruneAndDelete):  removedIndexManifests
+        case (.pruneAdded, .pruneAndDelete):    addedIndexManifests
+        /// Flip the results when we aren't deleting, but only when removing from the bottom end.
+        case (.pruneRemoved, .pruneOnly):       addedIndexManifests
+        case (.pruneAdded, .pruneOnly):         []
+        }
+    }
+}

@@ -86,6 +86,15 @@ extension DatastoreIndexManifest {
     }
 }
 
+extension DatastoreIndexManifest {
+    func pagesToPrune(for mode: SnapshotPruneMode) -> Set<DatastorePageIdentifier> {
+        switch mode {
+        case .pruneRemoved: Set(removedPageIDs)
+        case .pruneAdded:   Set(addedPageIDs)
+        }
+    }
+}
+
 // MARK: - Decoding
 
 extension DatastoreIndexManifest {

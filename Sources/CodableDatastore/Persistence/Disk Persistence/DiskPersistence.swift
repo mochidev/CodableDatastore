@@ -29,6 +29,11 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     
     var lastTransaction: Transaction?
     
+    var _transactionRetentionPolicy: SnapshotRetentionPolicy = .indefinite
+    
+    var nextSnapshotIterationCandidateToEnforce: (snapshot: Snapshot<ReadWrite>, iteration: SnapshotIteration)?
+    var snapshotIterationPruningTask: Task<Void, Never>?
+    
     /// Shared caches across all snapshots and datastores.
     var rollingRootObjectCacheIndex = 0
     var rollingRootObjectCache: [Datastore.RootObject] = []
@@ -57,6 +62,10 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// Use this initializer when you want to access a persistence that is owned by another primary process, which is commonly the case with extensions of apps. This gives you a safe read-only view of the persistence store with no risk of losing data should the main app be active at the same time.
     public init(readOnlyURL: URL) where AccessMode == ReadOnly {
         storeURL = readOnlyURL
+    }
+    
+    deinit {
+        snapshotIterationPruningTask?.cancel()
     }
     
     /// The default URL to use for disk persistences.
@@ -517,7 +526,7 @@ extension DiskPersistence {
         else { throw DiskPersistenceError.cannotWrite }
         
         /// If we are read-write, apply the updated root objects to the snapshot.
-        try await self.updatingCurrentSnapshot { snapshot in
+        let (currentSnapshot, persistedIteration) = try await self.updatingCurrentSnapshot { snapshot in
             try await snapshot.updatingManifest { manifest, iteration in
                 iteration.actionName = actionName
                 iteration.addedDatastoreRoots = addedDatastoreRoots
@@ -529,8 +538,159 @@ extension DiskPersistence {
                         root: root.id
                     )
                 }
+                return (snapshot, iteration)
             }
         }
+        
+        enforceRetentionPolicy(snapshot: currentSnapshot, fromIteration: persistedIteration)
+    }
+}
+
+// MARK: - Retention Policy
+
+extension DiskPersistence where AccessMode == ReadWrite {
+    /// The current transaction retention policy for snapshot iterations written to disk.
+    public var transactionRetentionPolicy: SnapshotRetentionPolicy {
+        get async {
+            _transactionRetentionPolicy
+        }
+    }
+    
+    /// Update the transaction retention policy for snapshot iterations written to disk.
+    ///
+    /// - Parameter policy: The new policy to enforce on write.
+    ///
+    /// - SeeAlso: ``SnapshotRetentionPolicy``.
+    public func setTransactionRetentionPolicy(_ policy: SnapshotRetentionPolicy) async {
+        _transactionRetentionPolicy = policy
+        for (_, snapshot) in snapshots {
+            await snapshot.setExtendedIterationCacheEnabled(!_transactionRetentionPolicy.isIndefinite)
+        }
+    }
+    
+    /// Enforce the retention policy on the persistence immediately.
+    ///
+    /// - Note: Transaction retention policies are enforced after ever write transaction, so calling this method directly is often unecessary. However, it can be useful if the user requires disk resources immediately.
+    public func enforceRetentionPolicy() async {
+        // TODO: Don't create any snapshots if they don't exist yet
+        let info = try? await self.readingCurrentSnapshot { snapshot in
+            try await snapshot.readingManifest { manifest, iteration in
+                (snapshot: snapshot, iteration: iteration)
+            }
+        }
+        
+        if let (snapshot, iteration) = info {
+            enforceRetentionPolicy(snapshot: snapshot, fromIteration: iteration)
+        }
+        
+        await finishTransactionCleanup()
+    }
+}
+
+extension DiskPersistence {
+    /// Internal method to envorce the retention policy after a transaction is written.
+    private func enforceRetentionPolicy(snapshot: Snapshot<ReadWrite>, fromIteration iteration: SnapshotIteration) {
+        nextSnapshotIterationCandidateToEnforce = (snapshot, iteration)
+        
+        if let snapshotIterationPruningTask {
+            /// Update the next snapshot iteration we should be checking, and cancel the existing task so we can move on to checking this iteration.
+            snapshotIterationPruningTask.cancel()
+            return
+        }
+        
+        /// Update the next snapshot iteration we should be checking, and enqueue a task since we know one isn't currently running.
+        checkNextSnapshotIterationCandidateForPruning()
+    }
+    
+    /// Private method to check the next candidate for pruning.
+    ///
+    /// First, this method walks down the linked list defining the iteration chain, from newest to oldest, and collects the iterations that should be pruned. Then, it iterates that list in reverse (from oldest to newest) actually removing the iterations as they are encountered.
+    /// - Note: This method should only ever be called when it is known that no `snapshotIterationPruningTask` is ongoing (it is nil), or when one just finishes.
+    @discardableResult
+    private func checkNextSnapshotIterationCandidateForPruning() -> Task<Void, Never>? {
+        let transactionRetentionPolicy = _transactionRetentionPolicy
+        let iterationCandidate = nextSnapshotIterationCandidateToEnforce
+        
+        snapshotIterationPruningTask = nil
+        nextSnapshotIterationCandidateToEnforce = nil
+        
+        guard let (snapshot, iteration) = iterationCandidate, !transactionRetentionPolicy.isIndefinite
+        else { return nil }
+        
+        snapshotIterationPruningTask = Task.detached(priority: .background) {
+            await snapshot.setExtendedIterationCacheEnabled(true)
+            do {
+                var iterations: [SnapshotIteration] = []
+                var distance = 1
+                var mainlineSuccessorIteration = iteration
+                var currentIteration = iteration
+                
+                /// First, walk the preceding iteration chain to the oldest iteration we can open, collecting the ones that should be pruned.
+                while let precedingIterationID = currentIteration.precedingIteration, let precedingIteration = try? await snapshot.loadIteration(for: precedingIterationID) {
+                    try Task.checkCancellation()
+                    
+                    if !iterations.isEmpty || transactionRetentionPolicy.shouldIterationBePruned(iteration: precedingIteration, distance: distance) {
+                        iterations.append(precedingIteration)
+                    } else {
+                        mainlineSuccessorIteration = precedingIteration
+                    }
+                    currentIteration = precedingIteration
+                    
+                    distance += 1
+                    await Task.yield()
+                }
+                
+                /// Prune iterations from oldest to newest.
+                for (index, iteration) in iterations.enumerated().reversed() {
+                    let mainlineSuccessorIteration = index > 0 ? iterations[index-1] : mainlineSuccessorIteration
+                    
+                    var iterationsToPrune: [SnapshotIteration] = []
+                    var successorCandidatesToCheck = iteration.successiveIterations
+                    successorCandidatesToCheck.removeAll { $0 == mainlineSuccessorIteration.id }
+                    
+                    /// Walk the successor candidates all the way back up so newer iterations are pruned before the ones that reference them. We pull items off from the end, and add new ones to the beginning to make sure they stay in graph order.
+                    while let successorCandidateID = successorCandidatesToCheck.popLast() {
+                        try Task.checkCancellation()
+                        guard let successorIteration = try? await snapshot.loadIteration(for: successorCandidateID)
+                        else { continue }
+                        
+                        iterationsToPrune.append(successorIteration)
+                        successorCandidatesToCheck.insert(contentsOf: successorIteration.successiveIterations, at: 0)
+                        await Task.yield()
+                    }
+                    
+                    /// First, remove the branch of iterations based on the one we are removing, but representing a history that was previously reverted.
+                    /// Prune the iterations in atomic tasks so they don't get cancelled mid-way, and instead check for cancellation in between iterations.
+                    for iteration in iterationsToPrune.reversed() {
+                        try Task.checkCancellation()
+                        try await Task { try await snapshot.pruneIteration(iteration, mode: .pruneAdded, shouldDelete: true) }.value
+                        await Task.yield()
+                    }
+                    
+                    /// Finally, prune the iteration itself.
+                    try Task.checkCancellation()
+                    try await Task { try await snapshot.pruneIteration(iteration, mode: .pruneRemoved, shouldDelete: true) }.value
+                    await Task.yield()
+                }
+                
+                try Task.checkCancellation()
+                try await Task { try await snapshot.pruneIteration(mainlineSuccessorIteration, mode: .pruneRemoved, shouldDelete: false) }.value
+                await Task.yield()
+            } catch {
+                print("Pruning stopped: \(error)")
+            }
+            
+            await self.checkNextSnapshotIterationCandidateForPruning()?.value
+        }
+        
+        return snapshotIterationPruningTask
+    }
+    
+    /// Await any cleanup since the last complete write transaction to the persistence.
+    ///
+    /// - Note: An application is not required to await cleanup, as it'll be eventually completed on future runs. It is however useful in cases when disk resources must be cleared before progressing to another step.
+    public func finishTransactionCleanup() async {
+        await snapshotIterationPruningTask?.value
     }
 }
 

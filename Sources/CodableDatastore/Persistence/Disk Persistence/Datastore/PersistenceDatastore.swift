@@ -156,6 +156,109 @@ extension DiskPersistence.Datastore {
         }
     }
     
+    func pruneRootObject(with identifier: RootObject.ID, mode: SnapshotPruneMode, shouldDelete: Bool) async throws {
+        let fileManager = FileManager()
+        let rootObject = try loadRootObject(for: identifier, shouldCache: false)
+        
+        /// Collect the indexes and related manifests we'll be deleting.
+        /// - For indexes, only collect the ones we'll be deleting since the ones we are keeping won't be making references to other deletable assets.
+        /// - For the manifests, we'll be deleting the entries that are being removed (relative to the direction we are removing from, so the removed ones from the oldest edge, and the added ones from the newest edge, as determined by the caller), while we'll be checking for pages to remove from entries that have just been added, but only when removing from the oldest edge. We only do this for the oldest edge because pages that have been "removed" from the newest edge are actually being _restored_ and not replaced, which maintains symmetry in a non-obvious way.
+        let indexesToPruneAndDelete = rootObject.indexesToPrune(for: mode)
+        let indexManifestsToPruneAndDelete = rootObject.indexManifestsToPrune(for: mode, options: .pruneAndDelete)
+        let indexManifestsToPrune = rootObject.indexManifestsToPrune(for: mode, options: .pruneOnly)
+        
+        /// Delete the index manifests and pages we know to be removed.
+        for indexManifestID in indexManifestsToPruneAndDelete {
+            let indexID = Index.ID(indexManifestID)
+            defer {
+                trackedIndexes.removeValue(forKey: indexID)
+                loadedIndexes.remove(indexID)
+            }
+            /// Skip any manifests for indexes being deleted, since we'll just unlink the whole directory in that case.
+            guard !indexesToPruneAndDelete.contains(indexID.indexID) else { continue }
+            
+            let manifestURL = manifestURL(for: indexID)
+            let manifest: DatastoreIndexManifest?
+            do {
+                manifest = try await DatastoreIndexManifest(contentsOf: manifestURL, id: indexID.manifestID)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                manifest = nil
+            } catch {
+                print("Uncaught Manifest Error: \(error)")
+                throw error
+            }
+            
+            guard let manifest else { continue }
+            
+            /// Only delete the pages we know to be removed
+            let pagesToPruneAndDelete = manifest.pagesToPrune(for: mode)
+            for pageID in pagesToPruneAndDelete {
+                let indexedPageID = Page.ID(index: indexID, page: pageID)
+                defer {
+                    trackedPages.removeValue(forKey: indexedPageID.withoutManifest)
+                    loadedPages.remove(indexedPageID.withoutManifest)
+                }
+                
+                let pageURL = pageURL(for: indexedPageID)
+                
+                try? fileManager.removeItem(at: pageURL)
+                try? fileManager.removeDirectoryIfEmpty(url: pageURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+            }
+            
+            try? fileManager.removeItem(at: manifestURL)
+        }
+        
+        /// Prune the index manifests that were just added, as they themselves refer to other deleted pages.
+        for indexManifestID in indexManifestsToPrune {
+            let indexID = Index.ID(indexManifestID)
+            /// Skip any manifests for indexes being deleted, since we'll just unlink the whole directory in that case.
+            guard !indexesToPruneAndDelete.contains(indexID.indexID) else { continue }
+            
+            let manifestURL = manifestURL(for: indexID)
+            let manifest: DatastoreIndexManifest?
+            do {
+                manifest = try await DatastoreIndexManifest(contentsOf: manifestURL, id: indexID.manifestID)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                manifest = nil
+            } catch {
+                print("Uncaught Manifest Error: \(error)")
+                throw error
+            }
+            
+            guard let manifest else { continue }
+            
+            /// Only delete the pages we know to be removed
+            let pagesToPruneAndDelete = manifest.pagesToPrune(for: mode)
+            for pageID in pagesToPruneAndDelete {
+                let indexedPageID = Page.ID(index: indexID, page: pageID)
+                defer {
+                    trackedPages.removeValue(forKey: indexedPageID.withoutManifest)
+                    loadedPages.remove(indexedPageID.withoutManifest)
+                }
+                
+                let pageURL = pageURL(for: indexedPageID)
+                
+                try? fileManager.removeItem(at: pageURL)
+                try? fileManager.removeDirectoryIfEmpty(url: pageURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+            }
+        }
+        
+        /// Delete any indexes in their entirety.
+        for indexID in indexesToPruneAndDelete {
+            try? fileManager.removeItem(at: indexURL(for: indexID))
+        }
+        
+        /// If we are deleting the root object itself, do so at the very end as everything else would have been cleaned up.
+        if shouldDelete {
+            trackedRootObjects.removeValue(forKey: identifier)
+            loadedRootObjects.remove(identifier)
+            
+            let rootURL = rootURL(for: rootObject.id)
+            try? fileManager.removeItem(at: rootURL)
+            try? fileManager.removeDirectoryIfEmpty(url: rootURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+        }
+    }
+    
     func index(for identifier: Index.ID) -> Index {
         if let index = trackedIndexes[identifier]?.value {
             return index
