@@ -98,6 +98,17 @@ extension DiskPersistence.Datastore.Index {
             case .secondary(let index, let manifest):   self = .secondary(index: index, manifest: manifest)
             }
         }
+        
+        init(_ id: DatastoreRootManifest.IndexManifestID) {
+            switch id {
+            case .primary(let manifest):
+                self = .primary(manifest: manifest)
+            case .direct(let index, let manifest):
+                self = .direct(index: index, manifest: manifest)
+            case .secondary(let index, let manifest):
+                self = .secondary(index: index, manifest: manifest)
+            }
+        }
     }
 }
 
