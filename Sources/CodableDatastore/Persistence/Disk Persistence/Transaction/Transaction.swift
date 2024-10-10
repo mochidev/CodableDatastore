@@ -950,7 +950,7 @@ extension DiskPersistence.Transaction {
         )
         createdIndexes.insert(newIndex)
         if createdIndexes.contains(existingIndex) {
-            createdIndexes.insert(existingIndex)
+            createdIndexes.remove(existingIndex)
         } else {
             deletedIndexes.insert(existingIndex)
         }
@@ -1044,7 +1044,7 @@ extension DiskPersistence.Transaction {
         )
         createdIndexes.insert(newIndex)
         if createdIndexes.contains(existingIndex) {
-            createdIndexes.insert(existingIndex)
+            createdIndexes.remove(existingIndex)
         } else {
             deletedIndexes.insert(existingIndex)
         }
@@ -1120,7 +1120,7 @@ extension DiskPersistence.Transaction {
         )
         createdIndexes.insert(newIndex)
         if createdIndexes.contains(existingIndex) {
-            createdIndexes.insert(existingIndex)
+            createdIndexes.remove(existingIndex)
         } else {
             deletedIndexes.insert(existingIndex)
         }
