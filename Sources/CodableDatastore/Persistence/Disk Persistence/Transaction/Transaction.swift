@@ -358,9 +358,7 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
                 rootObject: rootManifest
             )
             createdRootObjects.insert(newRootObject)
-            if createdRootObjects.contains(existingRootObject) {
-                createdRootObjects.remove(existingRootObject)
-            } else {
+            if createdRootObjects.remove(existingRootObject) == nil {
                 deletedRootObjects.insert(existingRootObject)
             }
             await datastore.adopt(rootObject: newRootObject)
@@ -925,14 +923,12 @@ extension DiskPersistence.Transaction {
         let datastore = existingRootObject.datastore
         
         /// Depending on the cursor type, insert or replace the entry in the index, capturing the new manifesr, added and removed pages, and change in the number of entries.
-        let ((indexManifest, newPages, removedPages), newEntryCount) = try await {
-            switch try cursor(for: someCursor) {
-            case .insertion(let cursor):
-                return (try await existingIndex.manifest(inserting: entry, at: cursor), 1)
-            case .instance(let cursor):
-                return (try await existingIndex.manifest(replacing: entry, at: cursor), 0)
-            }
-        }()
+        let ((indexManifest, newPages, removedPages), newEntryCount) = switch try cursor(for: someCursor) {
+        case .insertion(let cursor):
+            (try await existingIndex.manifest(inserting: entry, at: cursor), 1)
+        case .instance(let cursor):
+            (try await existingIndex.manifest(replacing: entry, at: cursor), 0)
+        }
         
         /// No change occured, bail early
         guard existingIndex.id.manifestID != indexManifest.id else { return }
@@ -949,9 +945,7 @@ extension DiskPersistence.Transaction {
             manifest: indexManifest
         )
         createdIndexes.insert(newIndex)
-        if createdIndexes.contains(existingIndex) {
-            createdIndexes.remove(existingIndex)
-        } else {
+        if createdIndexes.remove(existingIndex) == nil {
             deletedIndexes.insert(existingIndex)
         }
         await datastore.adopt(index: newIndex)
@@ -972,9 +966,7 @@ extension DiskPersistence.Transaction {
             rootObject: rootManifest
         )
         createdRootObjects.insert(newRootObject)
-        if createdRootObjects.contains(existingRootObject) {
-            createdRootObjects.remove(existingRootObject)
-        } else {
+        if createdRootObjects.remove(existingRootObject) == nil {
             deletedRootObjects.insert(existingRootObject)
         }
         await datastore.adopt(rootObject: newRootObject)
@@ -1043,9 +1035,7 @@ extension DiskPersistence.Transaction {
             manifest: indexManifest
         )
         createdIndexes.insert(newIndex)
-        if createdIndexes.contains(existingIndex) {
-            createdIndexes.remove(existingIndex)
-        } else {
+        if createdIndexes.remove(existingIndex) == nil {
             deletedIndexes.insert(existingIndex)
         }
         await datastore.adopt(index: newIndex)
@@ -1066,9 +1056,7 @@ extension DiskPersistence.Transaction {
             rootObject: rootManifest
         )
         createdRootObjects.insert(newRootObject)
-        if createdRootObjects.contains(existingRootObject) {
-            createdRootObjects.remove(existingRootObject)
-        } else {
+        if createdRootObjects.remove(existingRootObject) == nil {
             deletedRootObjects.insert(existingRootObject)
         }
         await datastore.adopt(rootObject: newRootObject)
@@ -1119,9 +1107,7 @@ extension DiskPersistence.Transaction {
             manifest: indexManifest
         )
         createdIndexes.insert(newIndex)
-        if createdIndexes.contains(existingIndex) {
-            createdIndexes.remove(existingIndex)
-        } else {
+        if createdIndexes.remove(existingIndex) == nil {
             deletedIndexes.insert(existingIndex)
         }
         await datastore.adopt(index: newIndex)
@@ -1140,9 +1126,7 @@ extension DiskPersistence.Transaction {
             rootObject: rootManifest
         )
         createdRootObjects.insert(newRootObject)
-        if createdRootObjects.contains(existingRootObject) {
-            createdRootObjects.remove(existingRootObject)
-        } else {
+        if createdRootObjects.remove(existingRootObject) == nil {
             deletedRootObjects.insert(existingRootObject)
         }
         await datastore.adopt(rootObject: newRootObject)
@@ -1227,9 +1211,7 @@ extension DiskPersistence.Transaction {
             rootObject: rootManifest
         )
         createdRootObjects.insert(newRootObject)
-        if createdRootObjects.contains(existingRootObject) {
-            createdRootObjects.remove(existingRootObject)
-        } else {
+        if createdRootObjects.remove(existingRootObject) == nil {
             deletedRootObjects.insert(existingRootObject)
         }
         await datastore.adopt(rootObject: newRootObject)
@@ -1310,9 +1292,7 @@ extension DiskPersistence.Transaction {
             rootObject: rootManifest
         )
         createdRootObjects.insert(newRootObject)
-        if createdRootObjects.contains(existingRootObject) {
-            createdRootObjects.remove(existingRootObject)
-        } else {
+        if createdRootObjects.remove(existingRootObject) == nil {
             deletedRootObjects.insert(existingRootObject)
         }
         await datastore.adopt(rootObject: newRootObject)
