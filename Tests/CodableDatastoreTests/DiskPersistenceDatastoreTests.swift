@@ -23,6 +23,163 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         try? FileManager.default.removeItem(at: temporaryStoreURL)
     }
     
+    func testCreatingEmptyPersistence() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+                var index: Int
+                var bucket: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let index = OneToOneIndex(\.index)
+            @Direct var bucket = Index(\.bucket)
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        _ = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        try await persistence.createPersistenceIfNecessary()
+        
+        let snapshotContents = try FileManager().contentsOfDirectory(at: temporaryStoreURL.appendingPathComponent("Snapshots", isDirectory: true), includingPropertiesForKeys: nil)
+        XCTAssertEqual(snapshotContents.count, 0)
+    }
+    
+    func testCreatingEmptyDatastoreIndexesAfterRead() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+                var index: Int
+                var bucket: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let index = OneToOneIndex(\.index)
+            @Direct var bucket = Index(\.bucket)
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 0)
+        
+        // TODO: Add code to verify that the Datastores directory is empty. This is true as of 2024-10-10, but has only been validated manually.
+    }
+    
+    func testCreatingEmptyDatastoreIndexesAfterSingleWrite() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+                var index: Int
+                var bucket: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let index = OneToOneIndex(\.index)
+            @Direct var bucket = Index(\.bucket)
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        try await datastore.persist(.init(id: "0", value: "0", index: 0, bucket: 0))
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 1)
+        
+        // TODO: Add code to verify that the Index directories have a single manifest each. This is true as of 2024-10-10, but has only been validated manually.
+    }
+    
+    func testCreatingUnreferencedDatastoreIndexesAfterUpdate() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+                var index: Int
+                var bucket: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let index = OneToOneIndex(\.index)
+            @Direct var bucket = Index(\.bucket)
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        try await datastore.persist(.init(id: "0", value: "0", index: 0, bucket: 0))
+        try await datastore.persist(.init(id: "0", value: "0", index: 0, bucket: 0))
+        
+        let count = try await datastore.count
+        XCTAssertEqual(count, 1)
+        
+        // TODO: Add code to verify that the Index directories have exactly two index manifests each. This is true as of 2024-10-10, but has only been validated manually.
+    }
+    
     func testWritingEntry() async throws {
         struct TestFormat: DatastoreFormat {
             enum Version: Int, CaseIterable {
