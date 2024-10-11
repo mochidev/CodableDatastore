@@ -162,7 +162,36 @@ extension Snapshot {
         
         let fileManager = FileManager()
         
-        /// Start by deleting and pruning roots as needed.
+        /// Start by deleting and pruning roots as needed. We attempt to do this twice, as older versions of the persistence (prior to 0.4) didn't record the datastore ID along with the root id, which would therefor require extra work.
+        /// First, delete the root entries we know to be removed.
+        for datastoreRoot in datastoreRootsToPruneAndDelete {
+            guard let datastoreID = datastoreRoot.datastoreID else { continue }
+            let datastore = datastores[datastoreID] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreID, snapshot: self)
+            do {
+                try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: true)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                /// This datastore root is already gone.
+            } catch {
+                print("Could not delete datastore root \(datastoreRoot): \(error)")
+                throw error
+            }
+            datastoreRootsToPruneAndDelete.remove(datastoreRoot)
+        }
+        /// Prune the root entries that were just added, as they themselves refer to other deleted assets.
+        for datastoreRoot in datastoreRootsToPrune {
+            guard let datastoreID = datastoreRoot.datastoreID else { continue }
+            let datastore = datastores[datastoreID] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreID, snapshot: self)
+            do {
+                try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: false)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                /// This datastore root is already gone.
+            } catch {
+                print("Could not prune datastore root \(datastoreRoot): \(error)")
+                throw error
+            }
+            datastoreRootsToPrune.remove(datastoreRoot)
+        }
+        /// If any regerences remain, funnel into this code path for very old persistences.
         if !datastoreRootsToPruneAndDelete.isEmpty || !datastoreRootsToPrune.isEmpty {
             for (_, datastoreInfo) in iteration.dataStores {
                 /// Skip any roots for datastores being deleted, since we'll just unlink the whole directory in that case.
@@ -172,23 +201,27 @@ extension Snapshot {
                 
                 /// Delete the root entries we know to be removed.
                 for datastoreRoot in datastoreRootsToPruneAndDelete {
-                    // TODO: Clean this up by also storing the datastore ID in with the root ID…
                     do {
-                        try await datastore.pruneRootObject(with: datastoreRoot, mode: mode, shouldDelete: true)
+                        try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: true)
                         datastoreRootsToPruneAndDelete.remove(datastoreRoot)
-                    } catch {
+                    } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
                         /// This datastore did not contain the specified root, skip it for now.
+                    } catch {
+                        print("Could not delete datastore root \(datastoreRoot): \(error).")
+                        throw error
                     }
                 }
                 
                 /// Prune the root entries that were just added, as they themselves refer to other deleted assets.
                 for datastoreRoot in datastoreRootsToPrune {
-                    // TODO: Clean this up by also storing the datastore ID in with the root ID…
                     do {
-                        try await datastore.pruneRootObject(with: datastoreRoot, mode: mode, shouldDelete: false)
+                        try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: false)
                         datastoreRootsToPrune.remove(datastoreRoot)
-                    } catch {
+                    } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
                         /// This datastore did not contain the specified root, skip it for now.
+                    } catch {
+                        print("Could not prune datastore root \(datastoreRoot): \(error).")
+                        throw error
                     }
                 }
             }

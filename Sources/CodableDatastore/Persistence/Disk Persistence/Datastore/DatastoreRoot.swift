@@ -10,11 +10,37 @@ import Foundation
 
 typealias DatastoreRootIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Datastore.RootObject>
 
+struct DatastoreRootReference: Codable, Hashable {
+    var datastoreID: DatastoreIdentifier?
+    var datastoreRootID: DatastoreRootIdentifier
+    
+    init(datastoreID: DatastoreIdentifier, datastoreRootID: DatastoreRootIdentifier) {
+        self.datastoreID = datastoreID
+        self.datastoreRootID = datastoreRootID
+    }
+    
+    init(from decoder: any Decoder) throws {
+        /// Attempt to decode a full object, otherwise fall back to a single value as it was prior to version 0.4 (2024-10-11)
+        do {
+            let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
+            self.datastoreID = try container.decodeIfPresent(DatastoreIdentifier.self, forKey: .datastoreID)
+            self.datastoreRootID = try container.decode(DatastoreRootIdentifier.self, forKey: .datastoreRootID)
+        } catch {
+            self.datastoreID = nil
+            self.datastoreRootID = try decoder.singleValueContainer().decode(DatastoreRootIdentifier.self)
+        }
+    }
+}
+
 extension DiskPersistence.Datastore {
     actor RootObject: Identifiable {
         let datastore: DiskPersistence<AccessMode>.Datastore
         
         let id: DatastoreRootIdentifier
+        
+        nonisolated var referenceID: DatastoreRootReference {
+            DatastoreRootReference(datastoreID: datastore.id, datastoreRootID: id)
+        }
         
         var _rootObject: DatastoreRootManifest?
         
