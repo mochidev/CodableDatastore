@@ -172,8 +172,8 @@ extension DiskPersistence {
                 try await root.persistIfNeeded()
             }
             
-            let addedDatastoreRoots = Set(createdRootObjects.map(\.id))
-            let removedDatastoreRoots = Set(deletedRootObjects.map(\.id))
+            let addedDatastoreRoots = Set(createdRootObjects.map(\.referenceID))
+            let removedDatastoreRoots = Set(deletedRootObjects.map(\.referenceID))
             
             try await persistence.persist(
                 actionName: actionName,

@@ -48,10 +48,10 @@ struct SnapshotIteration: Codable, Equatable, Identifiable {
     var removedDatastores: Set<DatastoreIdentifier> = []
     
     /// The datastore roots that have been added in this iteration of the snapshot.
-    var addedDatastoreRoots: Set<DatastoreRootIdentifier> = []
+    var addedDatastoreRoots: Set<DatastoreRootReference> = []
     
     /// The datastore roots that have been replaced in this iteration of the snapshot.
-    var removedDatastoreRoots: Set<DatastoreRootIdentifier> = []
+    var removedDatastoreRoots: Set<DatastoreRootReference> = []
 }
 
 extension SnapshotIteration {
