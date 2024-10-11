@@ -100,7 +100,7 @@ extension SnapshotIteration {
     func datastoreRootsToPrune(
         for mode: SnapshotPruneMode,
         options: SnapshotPruneOptions
-    ) -> Set<DatastoreRootIdentifier> {
+    ) -> Set<DatastoreRootReference> {
         switch (mode, options) {
         case (.pruneRemoved, .pruneAndDelete):  removedDatastoreRoots
         case (.pruneAdded, .pruneAndDelete):    addedDatastoreRoots
