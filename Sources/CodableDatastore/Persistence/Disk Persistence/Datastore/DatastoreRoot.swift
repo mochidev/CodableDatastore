@@ -10,11 +10,45 @@ import Foundation
 
 typealias DatastoreRootIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Datastore.RootObject>
 
+/// A reference to a particular root within a datastore.
+///
+/// Prior to version 0.4 (2024-10-11), only the root ID was stored in the snapshot iteration manifest's root file, which meant one would need to guess which datastore it belonged to. This type thus tries to decode both a single ``DatastoreRootIdentifier`` and a pair of ``DatastoreIdentifier`` and ``DatastoreRootIdentifier``s.
+struct DatastoreRootReference: Codable, Hashable {
+    /// The datastore ID the reference points to.
+    ///
+    /// This may be nil when decoding from disk as a result of older iterations — when initializing a reference directly, it must not be nil.
+    var datastoreID: DatastoreIdentifier?
+    
+    /// The datastore root ID the reference points to.
+    var datastoreRootID: DatastoreRootIdentifier
+    
+    init(datastoreID: DatastoreIdentifier, datastoreRootID: DatastoreRootIdentifier) {
+        self.datastoreID = datastoreID
+        self.datastoreRootID = datastoreRootID
+    }
+    
+    init(from decoder: any Decoder) throws {
+        /// Attempt to decode a full object, otherwise fall back to a single value as it was prior to version 0.4 (2024-10-11).
+        do {
+            let container: KeyedDecodingContainer<CodingKeys> = try decoder.container(keyedBy: CodingKeys.self)
+            self.datastoreID = try container.decodeIfPresent(DatastoreIdentifier.self, forKey: .datastoreID)
+            self.datastoreRootID = try container.decode(DatastoreRootIdentifier.self, forKey: .datastoreRootID)
+        } catch {
+            self.datastoreID = nil
+            self.datastoreRootID = try decoder.singleValueContainer().decode(DatastoreRootIdentifier.self)
+        }
+    }
+}
+
 extension DiskPersistence.Datastore {
     actor RootObject: Identifiable {
         let datastore: DiskPersistence<AccessMode>.Datastore
         
         let id: DatastoreRootIdentifier
+        
+        nonisolated var referenceID: DatastoreRootReference {
+            DatastoreRootReference(datastoreID: datastore.id, datastoreRootID: id)
+        }
         
         var _rootObject: DatastoreRootManifest?
         
