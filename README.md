@@ -29,7 +29,7 @@ Please check the [releases](https://github.com/mochidev/CodableDatastore/release
 dependencies: [
     .package(
         url: "https://github.com/mochidev/CodableDatastore.git", 
-        .upToNextMinor(from: "0.3.4")
+        .upToNextMinor(from: "0.4.0")
     ),
 ],
 ...
@@ -261,8 +261,7 @@ Note that in the example above, even though the author is persisted first, if an
 
 As this project matures towards release, the project will focus on the functionality and work listed below:
 - Force migration methods
-- Composite indexes (via macros?)
-- Cleaning up old resources on disk
+- Composite indexes
 - Ranged deletes
 - Controls for the edit history
 - Helper types to use with SwiftUI/Observability/Combine that can make data available on the main actor and filter and stay up to date
@@ -271,7 +270,7 @@ As this project matures towards release, the project will focus on the functiona
 - An example app
 - A memory persistence useful for testing apps with
 - A pre-configured data store tuned to storing pure Data, useful for types like Images
-- Cleaning up memory leaks
+- Cleaning up memory and file descriptor leaks
 
 The above list will be kept up to date during development and will likely see additions during that process.
 

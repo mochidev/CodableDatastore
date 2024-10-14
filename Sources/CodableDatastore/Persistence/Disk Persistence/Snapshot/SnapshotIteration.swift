@@ -48,10 +48,10 @@ struct SnapshotIteration: Codable, Equatable, Identifiable {
     var removedDatastores: Set<DatastoreIdentifier> = []
     
     /// The datastore roots that have been added in this iteration of the snapshot.
-    var addedDatastoreRoots: Set<DatastoreRootIdentifier> = []
+    var addedDatastoreRoots: Set<DatastoreRootReference> = []
     
     /// The datastore roots that have been replaced in this iteration of the snapshot.
-    var removedDatastoreRoots: Set<DatastoreRootIdentifier> = []
+    var removedDatastoreRoots: Set<DatastoreRootReference> = []
 }
 
 extension SnapshotIteration {
@@ -68,6 +68,12 @@ extension SnapshotIteration {
 }
 
 extension SnapshotIteration {
+    /// Initialize a snapshot iteration with a date
+    /// - Parameter date: The date to base the identifier and creation date off of.
+    init(date: Date = Date()) {
+        self.init(id: SnapshotIterationIdentifier(date: date), creationDate: date)
+    }
+    
     /// Internal method to check if an instance should be persisted based on iff it changed significantly from a previous iteration
     /// - Parameter existingInstance: The previous iteration to check
     /// - Returns: `true` if the iteration should be persisted, `false` if it represents the same data from `existingInstance`.
@@ -76,5 +82,25 @@ extension SnapshotIteration {
             dataStores == existingInstance?.dataStores
         else { return true }
         return false
+    }
+    
+    func datastoresToPrune(for mode: SnapshotPruneMode) -> Set<DatastoreIdentifier> {
+        switch mode {
+        case .pruneRemoved: removedDatastores
+        case .pruneAdded:   addedDatastores
+        }
+    }
+    
+    func datastoreRootsToPrune(
+        for mode: SnapshotPruneMode,
+        options: SnapshotPruneOptions
+    ) -> Set<DatastoreRootReference> {
+        switch (mode, options) {
+        case (.pruneRemoved, .pruneAndDelete):  removedDatastoreRoots
+        case (.pruneAdded, .pruneAndDelete):    addedDatastoreRoots
+        /// Flip the results when we aren't deleting, but only when removing from the bottom end.
+        case (.pruneRemoved, .pruneOnly):       addedDatastoreRoots
+        case (.pruneAdded, .pruneOnly):         []
+        }
     }
 }
