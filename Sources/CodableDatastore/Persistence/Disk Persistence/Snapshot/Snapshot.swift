@@ -156,6 +156,10 @@ extension Snapshot {
             if !isExtendedIterationCacheEnabled {
                 cachedIterations.removeAll()
             }
+            /// Make sure not to grow the cache unecessarily
+            if cachedIterations.count >= 256, let firstKey = cachedIterations.keys.first {
+                cachedIterations.removeValue(forKey: firstKey)
+            }
             cachedIterations[iteration.id] = iteration
             return iteration
         } catch {
