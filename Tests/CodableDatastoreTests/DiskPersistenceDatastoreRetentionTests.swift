@@ -70,8 +70,6 @@ final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Senda
                 ))
             }
             
-            try await Task.sleep(for: .seconds(5))
-            
             try await datastore.persist(.init(
                 id: "0",
                 value: "Twenty Three is Number One",
@@ -240,6 +238,70 @@ final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Senda
             }
             
             XCTAssertEqual(entries, max)
+        }
+    }
+    
+    func testDelayedEnforcement() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: String
+                var index: Int
+                var bucket: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            let index = OneToOneIndex(\.index)
+            @Direct var bucket = Index(\.bucket)
+        }
+        
+        let max = 1000
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormat.self,
+                migrations: [
+                    .zero: { data, decoder in
+                        try decoder.decode(TestFormat.Instance.self, from: data)
+                    }
+                ]
+            )
+            
+            try await persistence.createPersistenceIfNecessary()
+            
+            for index in 0..<max {
+                try await datastore.persist(.init(
+                    id: "\((index * 7) % max)",
+                    value: "Twenty Three is Number One",
+                    index: index,
+                    bucket: index % 7
+                ))
+            }
+            
+            try await datastore.persist(.init(
+                id: "0",
+                value: "Twenty Three is Number One",
+                index: 0,
+                bucket: 1
+            ))
+            
+            let count = try await datastore.count
+            XCTAssertEqual(count, max)
+            
+            await persistence.setTransactionRetentionPolicy(.transactionCount(0))
+            await persistence.enforceRetentionPolicy()
+            
+            let count2 = try await datastore.count
+            XCTAssertEqual(count2, max)
         }
     }
 }
