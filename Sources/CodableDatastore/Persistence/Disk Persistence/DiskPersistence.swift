@@ -620,7 +620,7 @@ extension DiskPersistence {
         snapshotIterationPruningTask = Task.detached(priority: .background) {
             await snapshot.setExtendedIterationCacheEnabled(true)
             do {
-                var iterations: [SnapshotIteration] = []
+                var iterations: [SnapshotIteration.ID] = []
                 var distance = 1
                 var mainlineSuccessorIteration = iteration
                 var currentIteration = iteration
@@ -630,7 +630,7 @@ extension DiskPersistence {
                     try Task.checkCancellation()
                     
                     if !iterations.isEmpty || transactionRetentionPolicy.shouldIterationBePruned(iteration: precedingIteration, distance: distance) {
-                        iterations.append(precedingIteration)
+                        iterations.append(precedingIteration.id)
                     } else {
                         mainlineSuccessorIteration = precedingIteration
                     }
@@ -641,12 +641,13 @@ extension DiskPersistence {
                 }
                 
                 /// Prune iterations from oldest to newest.
-                for (index, iteration) in iterations.enumerated().reversed() {
-                    let mainlineSuccessorIteration = index > 0 ? iterations[index-1] : mainlineSuccessorIteration
+                while let iterationID = iterations.popLast(), let iteration = try await snapshot.loadIteration(for: iterationID) {
+                    let index = iterations.count /// The current index, since we just removed the last element
+                    let mainlineSuccessorIterationID = index > 0 ? iterations[index-1] : mainlineSuccessorIteration.id
                     
                     var iterationsToPrune: [SnapshotIteration] = []
                     var successorCandidatesToCheck = iteration.successiveIterations
-                    successorCandidatesToCheck.removeAll { $0 == mainlineSuccessorIteration.id }
+                    successorCandidatesToCheck.removeAll { $0 == mainlineSuccessorIterationID }
                     
                     /// Walk the successor candidates all the way back up so newer iterations are pruned before the ones that reference them. We pull items off from the end, and add new ones to the beginning to make sure they stay in graph order.
                     while let successorCandidateID = successorCandidatesToCheck.popLast() {
