@@ -637,8 +637,15 @@ extension DiskPersistence {
                     currentIteration = precedingIteration
                     
                     distance += 1
+                    
+                    if distance % 1000 == 0 {
+                        print("Found \(iterations.count) iterations to prune. Keeping \(distance - iterations.count) iterations.")
+                    }
+                    
                     await Task.yield()
                 }
+                
+                print("Will prune \(iterations.count) iterations. Keeping \(distance - iterations.count) iterations.")
                 
                 /// Prune iterations from oldest to newest.
                 while let iterationID = iterations.popLast(), let iteration = try await snapshot.loadIteration(for: iterationID) {
@@ -662,22 +669,18 @@ extension DiskPersistence {
                     
                     /// First, remove the branch of iterations based on the one we are removing, but representing a history that was previously reverted.
                     /// Prune the iterations in atomic tasks so they don't get cancelled mid-way, and instead check for cancellation in between iterations.
-                    for iteration in iterationsToPrune.reversed() {
-                        try Task.checkCancellation()
-                        try await Task { try await snapshot.pruneIteration(iteration, mode: .pruneAdded, shouldDelete: true) }.value
-                        await Task.yield()
+                    while let iteration = iterationsToPrune.popLast() {
+                        try await snapshot.pruneIteration(iteration, mode: .pruneAdded, shouldDelete: true)
                     }
                     
                     /// Finally, prune the iteration itself.
-                    try Task.checkCancellation()
-                    try await Task { try await snapshot.pruneIteration(iteration, mode: .pruneRemoved, shouldDelete: true) }.value
-                    await Task.yield()
+                    try await snapshot.pruneIteration(iteration, mode: .pruneRemoved, shouldDelete: true)
                 }
                 
-                try Task.checkCancellation()
-                try await Task { try await snapshot.pruneIteration(mainlineSuccessorIteration, mode: .pruneRemoved, shouldDelete: false) }.value
-                await Task.yield()
+                try await snapshot.pruneIteration(mainlineSuccessorIteration, mode: .pruneRemoved, shouldDelete: false)
+                try await snapshot.drainPrunedIterations()
             } catch {
+                try? await snapshot.drainPrunedIterations()
                 print("Pruning stopped: \(error)")
             }
             

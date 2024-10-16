@@ -40,6 +40,9 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// The loaded datastores.
     var datastores: [DatastoreIdentifier: DiskPersistence<AccessMode>.Datastore] = [:]
     
+    private var pruningWatermark = 0
+    private var lastPruningTask: Task<Void, Error>?
+    
     init(
         id: SnapshotIdentifier,
         persistence: DiskPersistence<AccessMode>,
@@ -157,14 +160,40 @@ extension Snapshot {
     }
     
     func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode, shouldDelete: Bool) async throws {
+        let pruneTask = Task {
+            try await pruneIteration(iteration, mode: mode)
+            return iteration
+        }
+        lastPruningTask = Task { [lastPruningTask] in
+            try await lastPruningTask?.value
+            let iteration = try await pruneTask.value
+            if shouldDelete {
+                deleteIteration(iteration)
+            }
+        }
+        pruningWatermark += 1
+        
+        /// If we've enqueued at least 64 tasks, pause before returning control so we can drain the pool, checking for cancellation in the process.
+        if pruningWatermark >= 64 {
+            try Task.checkCancellation()
+            pruningWatermark = 0
+            try await lastPruningTask?.value
+            await Task.yield()
+        }
+    }
+    
+    func drainPrunedIterations() async throws {
+        pruningWatermark = 0
+        try await lastPruningTask?.value
+    }
+    
+    private func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode) async throws {
         /// Collect the datastores and related roots we'll be deleting.
         /// - For datastores, only collect the ones we'll be deleting since the ones we are keeping won't be making references to other deletable assets.
         /// - For the datastore roots, we'll be deleting the entries that are being removed (relative to the direction we are removing from, so the removed ones from the oldest edge, and the added ones from the newest edge, as determined by the caller), while we'll be checking for more assets to remove from entries that have just been added, but only when removing from the oldest edge. We only do this for the oldest edge because entries that have been "removed" from the newest edge are actually being _restored_ and not replaced, which maintains symmetry in a non-obvious way.
         let datastoresToPruneAndDelete = iteration.datastoresToPrune(for: mode)
         var datastoreRootsToPruneAndDelete = iteration.datastoreRootsToPrune(for: mode, options: .pruneAndDelete)
         var datastoreRootsToPrune = iteration.datastoreRootsToPrune(for: mode, options: .pruneOnly)
-        
-        let fileManager = FileManager()
         
         /// Start by deleting and pruning roots as needed. We attempt to do this twice, as older versions of the persistence (prior to 0.4) didn't record the datastore ID along with the root id, which would therefor require extra work.
         /// First, delete the root entries we know to be removed.
@@ -233,17 +262,17 @@ extension Snapshot {
         
         /// Delete any datastores in their entirety.
         for datastoreID in datastoresToPruneAndDelete {
-            try? fileManager.removeItem(at: datastoreURL(for: datastoreID))
+            try? FileManager.default.removeItem(at: datastoreURL(for: datastoreID))
         }
+    }
+    
+    /// Delete the iteration. Note that an iteration should be pruned first to delete related files that are specific to the iteration itself.
+    private func deleteIteration(_ iteration: SnapshotIteration) {
+        cachedIterations.removeValue(forKey: iteration.id)
         
-        /// If we are deleting the instance itself, do so at the very end as everything else would have been cleaned up.
-        if shouldDelete {
-            cachedIterations.removeValue(forKey: iteration.id)
-            
-            let iterationURL = iterationURL(for: iteration.id)
-            try? fileManager.removeItem(at: iterationURL)
-            try? fileManager.removeDirectoryIfEmpty(url: iterationURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
-        }
+        let iterationURL = iterationURL(for: iteration.id)
+        try? FileManager.default.removeItem(at: iterationURL)
+        try? FileManager.default.removeDirectoryIfEmpty(url: iterationURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
     }
     
     /// Write the specified manifest to the store, and cache the results in ``Snapshot/cachedManifest``.
