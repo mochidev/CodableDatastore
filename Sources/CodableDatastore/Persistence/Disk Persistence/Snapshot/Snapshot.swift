@@ -30,8 +30,9 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// A cached instance of the manifest as last loaded from disk.
     var cachedManifest: SnapshotManifest?
     
-    /// A cached instance of the current iteration as last loaded from disk.
-    var cachedIteration: SnapshotIteration?
+    /// Cache for the loaded iterations as last loaded from disk. ``isExtendedIterationCacheEnabled`` controls if multiple iterations are cached or not.
+    var cachedIterations: [SnapshotIterationIdentifier : SnapshotIteration] = [:]
+    var isExtendedIterationCacheEnabled: Bool
     
     /// A pointer to the last manifest updater, so updates can be serialized after the last request.
     var lastUpdateManifestTask: Task<Sendable, Error>?
@@ -39,14 +40,19 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// The loaded datastores.
     var datastores: [DatastoreIdentifier: DiskPersistence<AccessMode>.Datastore] = [:]
     
+    private var pruningWatermark = 0
+    private var lastPruningTask: Task<Void, Error>?
+    
     init(
         id: SnapshotIdentifier,
         persistence: DiskPersistence<AccessMode>,
-        isBackup: Bool = false
+        isBackup: Bool = false,
+        isExtendedIterationCacheEnabled: Bool = false
     ) {
         self.id = id
         self.persistence = persistence
         self.isBackup = isBackup
+        self.isExtendedIterationCacheEnabled = isExtendedIterationCacheEnabled
     }
 }
 
@@ -124,18 +130,149 @@ extension Snapshot {
         }
     }
     
+    func setExtendedIterationCacheEnabled(_ isEnabled: Bool) {
+        isExtendedIterationCacheEnabled = isEnabled
+    }
+    
     /// Load an iteration from disk, or create a suitable starting value if such a file does not exist.
-    private func loadIteration(for iterationID: SnapshotIterationIdentifier) throws -> SnapshotIteration {
+    func loadIteration(for iterationID: SnapshotIterationIdentifier?) async throws -> SnapshotIteration? {
+        guard let iterationID else { return nil }
+        if let iteration = cachedIterations[iterationID] {
+            return iteration
+        }
         do {
             let data = try Data(contentsOf: iterationURL(for: iterationID))
-
+            
             let iteration = try JSONDecoder.shared.decode(SnapshotIteration.self, from: data)
-
-            cachedIteration = iteration
+            
+            if !isExtendedIterationCacheEnabled {
+                cachedIterations.removeAll()
+            }
+            /// Make sure not to grow the cache unecessarily
+            if cachedIterations.count >= 256, let firstKey = cachedIterations.keys.first {
+                cachedIterations.removeValue(forKey: firstKey)
+            }
+            cachedIterations[iteration.id] = iteration
             return iteration
         } catch {
             throw error
         }
+    }
+    
+    func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode, shouldDelete: Bool) async throws {
+        let pruneTask = Task {
+            try await pruneIteration(iteration, mode: mode)
+            return iteration
+        }
+        lastPruningTask = Task { [lastPruningTask] in
+            try await lastPruningTask?.value
+            let iteration = try await pruneTask.value
+            if shouldDelete {
+                deleteIteration(iteration)
+            }
+        }
+        pruningWatermark += 1
+        
+        /// If we've enqueued at least 64 tasks, pause before returning control so we can drain the pool, checking for cancellation in the process.
+        if pruningWatermark >= 64 {
+            try Task.checkCancellation()
+            pruningWatermark = 0
+            try await lastPruningTask?.value
+            await Task.yield()
+        }
+    }
+    
+    func drainPrunedIterations() async throws {
+        pruningWatermark = 0
+        try await lastPruningTask?.value
+    }
+    
+    private func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode) async throws {
+        /// Collect the datastores and related roots we'll be deleting.
+        /// - For datastores, only collect the ones we'll be deleting since the ones we are keeping won't be making references to other deletable assets.
+        /// - For the datastore roots, we'll be deleting the entries that are being removed (relative to the direction we are removing from, so the removed ones from the oldest edge, and the added ones from the newest edge, as determined by the caller), while we'll be checking for more assets to remove from entries that have just been added, but only when removing from the oldest edge. We only do this for the oldest edge because entries that have been "removed" from the newest edge are actually being _restored_ and not replaced, which maintains symmetry in a non-obvious way.
+        let datastoresToPruneAndDelete = iteration.datastoresToPrune(for: mode)
+        var datastoreRootsToPruneAndDelete = iteration.datastoreRootsToPrune(for: mode, options: .pruneAndDelete)
+        var datastoreRootsToPrune = iteration.datastoreRootsToPrune(for: mode, options: .pruneOnly)
+        
+        /// Start by deleting and pruning roots as needed. We attempt to do this twice, as older versions of the persistence (prior to 0.4) didn't record the datastore ID along with the root id, which would therefor require extra work.
+        /// First, delete the root entries we know to be removed.
+        for datastoreRoot in datastoreRootsToPruneAndDelete {
+            guard let datastoreID = datastoreRoot.datastoreID else { continue }
+            let datastore = datastores[datastoreID] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreID, snapshot: self)
+            do {
+                try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: true)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                /// This datastore root is already gone.
+            } catch {
+                print("Could not delete datastore root \(datastoreRoot): \(error)")
+                throw error
+            }
+            datastoreRootsToPruneAndDelete.remove(datastoreRoot)
+        }
+        /// Prune the root entries that were just added, as they themselves refer to other deleted assets.
+        for datastoreRoot in datastoreRootsToPrune {
+            guard let datastoreID = datastoreRoot.datastoreID else { continue }
+            let datastore = datastores[datastoreID] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreID, snapshot: self)
+            do {
+                try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: false)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                /// This datastore root is already gone.
+            } catch {
+                print("Could not prune datastore root \(datastoreRoot): \(error)")
+                throw error
+            }
+            datastoreRootsToPrune.remove(datastoreRoot)
+        }
+        /// If any regerences remain, funnel into this code path for very old persistences.
+        if !datastoreRootsToPruneAndDelete.isEmpty || !datastoreRootsToPrune.isEmpty {
+            for (_, datastoreInfo) in iteration.dataStores {
+                /// Skip any roots for datastores being deleted, since we'll just unlink the whole directory in that case.
+                guard !datastoresToPruneAndDelete.contains(datastoreInfo.id) else { continue }
+                
+                let datastore = datastores[datastoreInfo.id] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreInfo.id, snapshot: self)
+                
+                /// Delete the root entries we know to be removed.
+                for datastoreRoot in datastoreRootsToPruneAndDelete {
+                    do {
+                        try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: true)
+                        datastoreRootsToPruneAndDelete.remove(datastoreRoot)
+                    } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                        /// This datastore did not contain the specified root, skip it for now.
+                    } catch {
+                        print("Could not delete datastore root \(datastoreRoot): \(error).")
+                        throw error
+                    }
+                }
+                
+                /// Prune the root entries that were just added, as they themselves refer to other deleted assets.
+                for datastoreRoot in datastoreRootsToPrune {
+                    do {
+                        try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: false)
+                        datastoreRootsToPrune.remove(datastoreRoot)
+                    } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                        /// This datastore did not contain the specified root, skip it for now.
+                    } catch {
+                        print("Could not prune datastore root \(datastoreRoot): \(error).")
+                        throw error
+                    }
+                }
+            }
+        }
+        
+        /// Delete any datastores in their entirety.
+        for datastoreID in datastoresToPruneAndDelete {
+            try? FileManager.default.removeItem(at: datastoreURL(for: datastoreID))
+        }
+    }
+    
+    /// Delete the iteration. Note that an iteration should be pruned first to delete related files that are specific to the iteration itself.
+    private func deleteIteration(_ iteration: SnapshotIteration) {
+        cachedIterations.removeValue(forKey: iteration.id)
+        
+        let iterationURL = iterationURL(for: iteration.id)
+        try? FileManager.default.removeItem(at: iterationURL)
+        try? FileManager.default.removeDirectoryIfEmpty(url: iterationURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
     }
     
     /// Write the specified manifest to the store, and cache the results in ``Snapshot/cachedManifest``.
@@ -155,7 +292,7 @@ extension Snapshot {
         cachedManifest = manifest
     }
     
-    /// Write the specified iteration to the store, and cache the results in ``Snapshot/cachedIteration``.
+    /// Write the specified iteration to the store, and cache the results in ``Snapshot/cachedIterations``.
     private func write(iteration: SnapshotIteration) throws where AccessMode == ReadWrite {
         let iterationURL = iterationURL(for: iteration.id)
         /// Make sure the directories exists first.
@@ -166,7 +303,10 @@ extension Snapshot {
         try data.write(to: iterationURL, options: .atomic)
 
         /// Update the cache since we know what it should be.
-        cachedIteration = iteration
+        if !isExtendedIterationCacheEnabled {
+            cachedIterations.removeAll()
+        }
+        cachedIterations[iteration.id] = iteration
     }
 
     /// Load and update the manifest in an updater, returning the task for the updater.
@@ -200,15 +340,8 @@ extension Snapshot {
 
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             var manifest = try cachedManifest ?? self.loadManifest()
-            var iteration: SnapshotIteration
-            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
-                iteration = cachedIteration
-            } else if let iterationID = manifest.currentIteration {
-                iteration = try self.loadIteration(for: iterationID)
-            } else {
-                let date = Date()
-                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
-            }
+            let precedingIteration = try await self.loadIteration(for: manifest.currentIteration)
+            var iteration = precedingIteration ?? SnapshotIteration()
 
             /// Let the updater do something with the manifest, storing the variable on the Task Local stack.
             let returnValue = try await SnapshotTaskLocals.$manifest.withValue((manifest, iteration)) {
@@ -216,10 +349,10 @@ extension Snapshot {
             }
             
             /// Only write to the store if we changed the manifest for any reason
-            if iteration.isMeaningfullyChanged(from: cachedIteration) {
+            if iteration.isMeaningfullyChanged(from: precedingIteration) {
                 iteration.creationDate = Date()
                 iteration.id = SnapshotIterationIdentifier(date: iteration.creationDate)
-                iteration.precedingIteration = cachedIteration?.id
+                iteration.precedingIteration = precedingIteration?.id
                 
                 try write(iteration: iteration)
             }
@@ -260,15 +393,7 @@ extension Snapshot {
 
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             let manifest = try cachedManifest ?? self.loadManifest()
-            var iteration: SnapshotIteration
-            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
-                iteration = cachedIteration
-            } else if let iterationID = manifest.currentIteration {
-                iteration = try self.loadIteration(for: iterationID)
-            } else {
-                let date = Date()
-                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
-            }
+            let iteration = try await self.loadIteration(for: manifest.currentIteration) ?? SnapshotIteration()
 
             /// Let the accessor do something with the manifest, storing the variable on the Task Local stack.
             return try await SnapshotTaskLocals.$manifest.withValue((manifest, iteration)) {
@@ -315,6 +440,16 @@ extension Snapshot {
 private enum SnapshotTaskLocals {
     @TaskLocal
     static var manifest: (SnapshotManifest, SnapshotIteration)?
+}
+
+enum SnapshotPruneMode {
+    case pruneRemoved
+    case pruneAdded
+}
+
+enum SnapshotPruneOptions {
+    case pruneAndDelete
+    case pruneOnly
 }
 
 // MARK: - Datastore Management
