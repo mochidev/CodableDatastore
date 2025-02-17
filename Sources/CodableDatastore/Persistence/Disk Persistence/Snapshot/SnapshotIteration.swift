@@ -30,6 +30,11 @@ struct SnapshotIteration: Codable, Equatable, Identifiable {
     /// The iteration this one replaces.
     var precedingIteration: SnapshotIterationIdentifier?
     
+    /// The snapshot the preceding iteration belongs to.
+    ///
+    /// When set, the specified snapshot should be referenced to load the ``precedingIteration`` from. When `nil`, the current snapshot should be used.
+    var precedingSnapshot: SnapshotIdentifier?
+    
     /// The iterations that replace this one.
     ///
     /// If changes branched at this point in time, there may be more than one iteration to choose from. In this case, the first entry will be the oldest successor, while the last entry will be the most recent.
