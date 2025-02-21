@@ -36,19 +36,19 @@ public enum DiskPersistenceError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .notFileURL:
-            return "The persistence store cannot be saved to the specified URL."
+            "The persistence store cannot be saved to the specified URL."
         case .missingBundleID:
-            return "The persistence store cannot be saved to the default URL as it is not running in the context of an app."
+            "The persistence store cannot be saved to the default URL as it is not running in the context of an app."
         case .missingAppSupportDirectory:
-            return "The persistence store cannot be saved to the default URL as an Application Support directory could built for this system."
+            "The persistence store cannot be saved to the default URL as an Application Support directory could built for this system."
         case .invalidIndexManifestFormat:
-            return "The index manifest was in a format that could not be understood."
+            "The index manifest was in a format that could not be understood."
         case .invalidPageFormat:
-            return "The page was in a format that could not be understood."
+            "The page was in a format that could not be understood."
         case .invalidEntryFormat:
-            return "The entry was in a format that could not be understood."
+            "The entry was in a format that could not be understood."
         case .cannotWrite:
-            return "The persistence is read only and cannot be written to."
+            "The persistence is read only and cannot be written to."
         }
     }
 }
