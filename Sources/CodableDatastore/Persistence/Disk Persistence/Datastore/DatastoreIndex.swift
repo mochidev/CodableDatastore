@@ -1498,3 +1498,77 @@ extension DiskPersistence.Datastore.Index {
         return (manifest: manifest, removedPages: removedPages)
     }
 }
+
+// MARK: - Snapshotting
+
+extension DiskPersistence.Datastore.Index {
+    @discardableResult
+    func copy(
+        into newDatastore: DiskPersistence<ReadWrite>.Datastore,
+        rootObjectManifest: inout DatastoreRootManifest,
+        targetPageSize: Int
+    ) async throws -> DiskPersistence<ReadWrite>.Datastore.Index {
+        let actualPageSize = min(max(targetPageSize, Configuration.minimumPageSize), Configuration.maximumPageSize) - DiskPersistence.Datastore.Page.headerSize
+        
+        var newIndexManifest = DatastoreIndexManifest(
+            id: self.id.manifestID,
+            orderedPages: []
+        )
+        
+        let stream = AsyncThrowingBackpressureStream { continuation in
+            try await self.forwardScanEntries(after: self.firstInsertionCursor) { entry in
+                try await continuation.yield(entry)
+                return true
+            }
+        }
+        
+        var currentPageBlocks: [DatastorePageEntryBlock] = []
+        var remainingSpace = actualPageSize
+        
+        var count = 0
+        
+        for try await entry in stream {
+            count += 1
+            let blocks = entry.blocks(remainingPageSpace: remainingSpace, maxPageSpace: actualPageSize)
+            
+            for block in blocks {
+                let encodedSize = block.encodedSize
+                if encodedSize > remainingSpace {
+                    let newPage = DiskPersistence<ReadWrite>.Datastore.Page(
+                        datastore: newDatastore,
+                        id: .init(index: id, page: .init()),
+                        blocks: currentPageBlocks
+                    )
+                    newIndexManifest.orderedPages.append(.added(newPage.id.page))
+                    try await newPage.persistIfNeeded()
+                    
+                    currentPageBlocks.removeAll(keepingCapacity: true)
+                    remainingSpace = actualPageSize
+                }
+                
+                remainingSpace -= encodedSize
+                currentPageBlocks.append(block)
+            }
+        }
+        
+        if !currentPageBlocks.isEmpty {
+            let newPage = DiskPersistence<ReadWrite>.Datastore.Page(
+                datastore: newDatastore,
+                id: .init(index: id, page: .init()),
+                blocks: currentPageBlocks
+            )
+            newIndexManifest.orderedPages.append(.added(newPage.id.page))
+            try await newPage.persistIfNeeded()
+        }
+        
+        rootObjectManifest.addedIndexes.insert(.init(id))
+        rootObjectManifest.addedIndexManifests.insert(.init(id))
+        let newIndex = DiskPersistence<ReadWrite>.Datastore.Index(
+            datastore: newDatastore,
+            id: id,
+            manifest: newIndexManifest
+        )
+        try await newIndex.persistIfNeeded()
+        return newIndex
+    }
+}

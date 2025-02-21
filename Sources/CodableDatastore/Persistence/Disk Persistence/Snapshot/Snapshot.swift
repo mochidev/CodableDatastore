@@ -340,3 +340,59 @@ extension Snapshot {
         return (datastore, datastoreInfo.root)
     }
 }
+
+// MARK: - Snapshotting
+
+extension Snapshot {
+    @discardableResult
+    func copy(
+        into persistence: DiskPersistence<ReadWrite>,
+        actionName: String? = nil,
+        newSnapshotIdentifier: SnapshotIdentifier? = nil,
+        targetPageSize: Int
+    ) async throws -> Snapshot<ReadWrite> {
+        try await readingManifest { manifest, iteration in
+            /// Create a new snapshot and iteration to load data into
+            let newSnapshot = Snapshot<ReadWrite>(id: newSnapshotIdentifier ?? SnapshotIdentifier(), persistence: persistence)
+            
+            let creationDate = (try? newSnapshot.id.components)?.date ?? Date()
+            var newIteration = SnapshotIteration(
+                id: SnapshotIterationIdentifier(rawValue: newSnapshot.id.rawValue),
+                creationDate: creationDate,
+                precedingIteration: iteration.id,
+                precedingSnapshot: id,
+                successiveIterations: [],
+                actionName: actionName,
+                dataStores: [:],
+                addedDatastores: [],
+                removedDatastores: [],
+                addedDatastoreRoots: [],
+                removedDatastoreRoots: []
+            )
+            
+            /// Iterate through each datastore and copy the data over
+            for (_, datastoreInfo) in iteration.dataStores {
+                let (datastore, _) = await loadDatastore(for: datastoreInfo.key, from: iteration)
+                try await datastore.copy(
+                    rootIdentifier: datastoreInfo.root,
+                    datastoreKey: datastoreInfo.key,
+                    into: newSnapshot,
+                    iteration: &newIteration,
+                    targetPageSize: targetPageSize
+                )
+            }
+            
+            /// Create a new manifest with our written data.
+            let newManifest = SnapshotManifest(
+                id: newSnapshot.id,
+                modificationDate: creationDate,
+                currentIteration: newIteration.id
+            )
+            
+            /// Write the iteration and manifest records so the persistence is complete.
+            try await newSnapshot.write(iteration: newIteration)
+            try await newSnapshot.write(manifest: newManifest)
+            return newSnapshot
+        }
+    }
+}

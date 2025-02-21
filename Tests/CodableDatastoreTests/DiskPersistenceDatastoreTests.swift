@@ -914,4 +914,73 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             }
         }
     }
+    
+    func testTakingSnapshots() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: UUID = UUID()
+                var value: String
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            try await persistence.createPersistenceIfNecessary()
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormat.self,
+                migrations: [
+                    .zero: { data, decoder in
+                        try decoder.decode(TestFormat.Instance.self, from: data)
+                    }
+                ]
+            )
+            
+            let valueBank = [
+                "Hello, World!",
+                "My name is Dimitri",
+                "Writen using CodableDatastore",
+                "Swift is better than Objective-C, there, I said it",
+                "Twenty Three is Number One"
+            ]
+            
+            for _ in 1...100 {
+                try await datastore.persist(.init(value: valueBank.randomElement()!))
+            }
+            
+            let count = try await datastore.count
+            let iteratedCount = try await datastore.load(...).reduce(into: 0) { partialResult, _ in partialResult += 1 }
+            XCTAssertEqual(count, iteratedCount)
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            try await persistence._takeSnapshot()
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormat.self,
+                migrations: [
+                    .zero: { data, decoder in
+                        try decoder.decode(TestFormat.Instance.self, from: data)
+                    }
+                ]
+            )
+            
+            try await datastore.persist(.init(value: "hello"))
+            
+            let count = try await datastore.count
+            let iteratedCount = try await datastore.load(...).reduce(into: 0) { partialResult, _ in partialResult += 1 }
+            XCTAssertEqual(count, iteratedCount)
+            XCTAssertEqual(count, 101)
+        }
+    }
 }
