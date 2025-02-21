@@ -273,7 +273,7 @@ extension DiskPersistence {
     @_disfavoredOverload
     func withStoreInfo<T: Sendable>(
         accessor: @Sendable (_ storeInfo: StoreInfo) async throws -> T
-    ) async throws -> T where AccessMode == ReadOnly {
+    ) async throws -> T {
         try await withoutActuallyEscaping(accessor) { escapingClosure in
             try await updateStoreInfo(accessor: escapingClosure).value
         }

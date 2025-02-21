@@ -320,7 +320,10 @@ private enum SnapshotTaskLocals {
 // MARK: - Datastore Management
 extension Snapshot {
     /// Load the datastore for the given key.
-    func loadDatastore(for key: DatastoreKey, from iteration: SnapshotIteration) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
+    func loadDatastore(
+        for key: DatastoreKey,
+        from iteration: SnapshotIteration
+    ) -> (DiskPersistence<AccessMode>.Datastore, DatastoreRootIdentifier?) {
         let datastoreInfo = if let info = iteration.dataStores[key] {
             (id: info.id, root: info.root)
         } else {
