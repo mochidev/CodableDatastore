@@ -73,7 +73,7 @@ extension DatastoreRootManifest {
         case direct(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)
         case secondary(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)
         
-        init<AccessMode>(_ id: DiskPersistence<AccessMode>.Datastore.Index.ID) {
+        init(_ id: PersistenceDatastoreIndexID) {
             switch id {
             case .primary(let manifest):
                 self = .primary(manifest: manifest)
