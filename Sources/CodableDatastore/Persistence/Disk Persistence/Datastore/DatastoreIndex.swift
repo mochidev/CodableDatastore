@@ -867,13 +867,13 @@ extension DiskPersistence.Datastore.Index {
     func manifest(
         inserting entry: DatastorePageEntry,
         at insertionCursor: DiskPersistence.InsertionCursor,
-        targetPageSize: Int = 4*1024
+        targetPageSize: Int = Configuration.defaultPageSize
     ) async throws -> (
         manifest: DatastoreIndexManifest,
         createdPages: Set<DiskPersistence.Datastore.Page>,
         removedPages: Set<DiskPersistence.Datastore.Page>
     ) {
-        let actualPageSize = max(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
+        let actualPageSize = min(max(targetPageSize, Configuration.minimumPageSize), Configuration.maximumPageSize) - DiskPersistence.Datastore.Page.headerSize
         
         guard
             insertionCursor.datastore === datastore,
@@ -1092,7 +1092,7 @@ extension DiskPersistence.Datastore.Index {
     func manifest(
         replacing entry: DatastorePageEntry,
         at instanceCursor: DiskPersistence.InstanceCursor,
-        targetPageSize: Int = 4*1024
+        targetPageSize: Int = Configuration.defaultPageSize
     ) async throws -> (
         manifest: DatastoreIndexManifest,
         createdPages: Set<DiskPersistence.Datastore.Page>,
@@ -1107,7 +1107,7 @@ extension DiskPersistence.Datastore.Index {
             firstInstanceBlock.pageIndex != lastInstanceBlock.pageIndex || firstInstanceBlock.blockIndex <= lastInstanceBlock.blockIndex
         else { throw DatastoreInterfaceError.staleCursor }
         
-        let actualPageSize = max(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
+        let actualPageSize = min(max(targetPageSize, Configuration.minimumPageSize), Configuration.maximumPageSize) - DiskPersistence.Datastore.Page.headerSize
         
         var manifest = try await manifest
         
@@ -1289,7 +1289,7 @@ extension DiskPersistence.Datastore.Index {
     
     func manifest(
         deletingEntryAt instanceCursor: DiskPersistence.InstanceCursor,
-        targetPageSize: Int = 4*1024
+        targetPageSize: Int = Configuration.defaultPageSize
     ) async throws -> (
         manifest: DatastoreIndexManifest,
         createdPages: Set<DiskPersistence.Datastore.Page>,
@@ -1304,7 +1304,7 @@ extension DiskPersistence.Datastore.Index {
             firstInstanceBlock.pageIndex != lastInstanceBlock.pageIndex || firstInstanceBlock.blockIndex <= lastInstanceBlock.blockIndex
         else { throw DatastoreInterfaceError.staleCursor }
         
-        let actualPageSize = max(targetPageSize, 4*1024) - DiskPersistence.Datastore.Page.headerSize
+        let actualPageSize = min(max(targetPageSize, Configuration.minimumPageSize), Configuration.maximumPageSize) - DiskPersistence.Datastore.Page.headerSize
         
         var manifest = try await manifest
         

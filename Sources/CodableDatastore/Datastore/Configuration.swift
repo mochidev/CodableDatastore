@@ -21,5 +21,8 @@ public struct Configuration: Sendable {
     ) {
         self.pageSize = pageSize
     }
-
+    
+    static let minimumPageSize = 4*1024
+    static let defaultPageSize = 4*1024
+    static let maximumPageSize = 1024*1024*1024
 }
