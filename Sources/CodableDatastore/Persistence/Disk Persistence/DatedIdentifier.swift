@@ -72,6 +72,21 @@ struct DatedIdentifierComponents {
         "\(hour)-\(minute)"
     }
     
+    var date: Date? {
+        DateComponents(
+            calendar: Calendar(identifier: .gregorian),
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: Int(year),
+            month: Int(month),
+            day: Int(day),
+            hour: Int(hour),
+            minute: Int(minute),
+            second: Int(second),
+            nanosecond: Int(millisecond).map { $0*1_000_000 }
+        )
+        .date
+    }
+    
     static let size = 40
 }
 

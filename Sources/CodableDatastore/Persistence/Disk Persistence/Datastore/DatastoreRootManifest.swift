@@ -66,6 +66,14 @@ extension DatastoreRootManifest {
         case primary
         case direct(index: DatastoreIndexIdentifier)
         case secondary(index: DatastoreIndexIdentifier)
+        
+        init(_ id: PersistenceDatastoreIndexID) {
+            switch id {
+            case .primary:                  self = .primary
+            case .direct(let index, _):     self = .direct(index: index)
+            case .secondary(let index, _):  self = .secondary(index: index)
+            }
+        }
     }
     
     enum IndexManifestID: Codable, Hashable {

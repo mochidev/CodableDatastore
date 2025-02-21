@@ -284,8 +284,16 @@ extension DiskPersistence {
 
 extension DiskPersistence {
     /// Load the default snapshot from disk, or create an empty one if such a file does not exist.
-    private func loadSnapshot(from storeInfo: StoreInfo) -> Snapshot<AccessMode> {
-        let snapshotID = storeInfo.currentSnapshot ?? SnapshotIdentifier()
+    ///
+    /// - Parameters:
+    ///   - storeInfo: The store infor to load from.
+    ///   - newSnapshotIdentifier: A new snapshot identifier to use if the store doesn't have one yet. If nil, a new one will be created automatically.
+    /// - Returns: A snapshot to start using.
+    private func loadSnapshot(
+        from storeInfo: StoreInfo,
+        newSnapshotIdentifier: SnapshotIdentifier? = nil
+    ) -> Snapshot<AccessMode> {
+        let snapshotID = storeInfo.currentSnapshot ?? newSnapshotIdentifier ?? SnapshotIdentifier()
         
         if let snapshot = snapshots[snapshotID] {
             return snapshot
@@ -377,6 +385,69 @@ extension DiskPersistence {
         try await withoutActuallyEscaping(accessor) { escapingClosure in
             try await updateCurrentSnapshot(accessor: escapingClosure).value
         }
+    }
+    
+    /// Create a new snapshot from the current snapshot the persistence is pointing to.
+    ///
+    /// This method is temporarily publc — once all the components are public, you should use them directly before the next minor version.
+    public func _takeSnapshot() async throws where AccessMode == ReadWrite {
+        try await _takeSnapshot(newSnapshotIdentifier: nil)
+    }
+    
+    func _takeSnapshot(
+        newSnapshotIdentifier: SnapshotIdentifier?
+    ) async throws where AccessMode == ReadWrite { // TODO: return new snapshot iteration
+        let readSnapshot = try await currentSnapshot
+        let newSnapshot = try await createSnapshot(from: readSnapshot, newSnapshotIdentifier: newSnapshotIdentifier)
+        try await setCurrentSnapshot(snapshot: newSnapshot)
+    }
+    
+    /// Load the current snapshot the persistence is reading and writing to.
+    var currentSnapshot: Snapshot<AccessMode> {
+        // TODO: This should return a readonly snapshot, but we need to be able to make a read-only copy from the persistence first.
+        get async throws {
+            try await withStoreInfo { await loadSnapshot(from: $0) }
+        }
+    }
+    
+    func setCurrentSnapshot(
+        snapshot: Snapshot<ReadWrite>,
+        dateUpdate: ModificationUpdate = .updateOnWrite
+    ) async throws where AccessMode == ReadWrite {
+        try await withStoreInfo { storeInfo in
+            guard snapshot.persistence === self
+            else { throw DiskPersistenceError.wrongPersistence }
+            
+            /// Update the store info with snapshot and modification date to use
+            storeInfo.currentSnapshot = snapshot.id
+            storeInfo.modificationDate = dateUpdate.modificationDate(for: storeInfo.modificationDate)
+        }
+    }
+    
+    func loadSnapshot(id: SnapshotIdentifier) async throws -> Snapshot<ReadOnly> {
+        preconditionFailure("Unimplemented")
+    }
+    
+//    var allSnapshots: AsyncStream<Snapshot<ReadOnly>> {
+//        /// Crawl the `Snapshots` directory, and collect all the .snapshot folders. Return the manifest structure.
+//        preconditionFailure("Unimplemented")
+//    }
+    
+    func createSnapshot(
+        from snapshot: Snapshot<ReadWrite>, // TODO: Shouldn't need to be readwrite
+        actionName: String? = nil,
+        newSnapshotIdentifier: SnapshotIdentifier? = nil
+    ) async throws -> Snapshot<ReadWrite> where AccessMode == ReadWrite {
+        let newSnapshot = try await snapshot.copy(
+            into: self,
+            actionName: actionName,
+            newSnapshotIdentifier: newSnapshotIdentifier,
+            targetPageSize: Configuration.defaultPageSize
+        )
+        
+        /// Save a reference to this new snapshot, and return it.
+        snapshots[newSnapshot.id] = newSnapshot
+        return newSnapshot
     }
 }
 

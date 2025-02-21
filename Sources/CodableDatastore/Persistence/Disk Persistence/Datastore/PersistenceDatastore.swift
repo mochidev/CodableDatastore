@@ -279,3 +279,80 @@ extension DiskPersistence.Datastore {
     
     var hasObservers: Bool { !observers.isEmpty }
 }
+
+// MARK: - Snapshotting
+
+extension DiskPersistence.Datastore {
+    @discardableResult
+    func copy(
+        rootIdentifier: DatastoreRootIdentifier?,
+        datastoreKey: DatastoreKey,
+        into newSnapshot: Snapshot<ReadWrite>,
+        iteration: inout SnapshotIteration,
+        targetPageSize: Int
+    ) async throws -> DiskPersistence<ReadWrite>.Datastore {
+        let newDatastore = DiskPersistence<ReadWrite>.Datastore(id: id, snapshot: newSnapshot)
+        
+        /// Copy the datastore over.
+        iteration.dataStores[datastoreKey] = SnapshotIteration.DatastoreInfo(key: datastoreKey, id: id, root: rootIdentifier)
+        
+        /// Record the addition of a new datastore since it lives in a new location on disk.
+        iteration.addedDatastores.insert(id)
+        
+        /// Stop here if there are no roots for the datastore — there is nothing else to migrate.
+        guard let datastoreRootIdentifier = rootIdentifier
+        else { return newDatastore }
+        
+        /// Record the addition of a new datastore since it lives in a new location on disk.
+        iteration.addedDatastoreRoots.insert(DatastoreRootReference(
+            datastoreID: id,
+            datastoreRootID: datastoreRootIdentifier
+        ))
+        
+        let rootObject = rootObject(for: datastoreRootIdentifier)
+        let rootObjectManifest = try await rootObject.manifest
+        var newRootObjectManifest = DatastoreRootManifest(
+            id: rootObjectManifest.id,
+            modificationDate: rootObjectManifest.modificationDate,
+            descriptor: rootObjectManifest.descriptor,
+            primaryIndexManifest: rootObjectManifest.primaryIndexManifest,
+            directIndexManifests: rootObjectManifest.directIndexManifests,
+            secondaryIndexManifests: rootObjectManifest.secondaryIndexManifests,
+            addedIndexes: [],
+            removedIndexes: [],
+            addedIndexManifests: [],
+            removedIndexManifests: []
+        )
+        
+        try await rootObject.primaryIndex.copy(
+            into: newDatastore,
+            rootObjectManifest: &newRootObjectManifest,
+            targetPageSize: targetPageSize
+        )
+        
+        for index in try await rootObject.directIndexes.values {
+            try await index.copy(
+                into: newDatastore,
+                rootObjectManifest: &newRootObjectManifest,
+                targetPageSize: targetPageSize
+            )
+        }
+        
+        for index in try await rootObject.secondaryIndexes.values {
+            try await index.copy(
+                into: newDatastore,
+                rootObjectManifest: &newRootObjectManifest,
+                targetPageSize: targetPageSize
+            )
+        }
+        
+        let newRootObject = DiskPersistence<ReadWrite>.Datastore.RootObject(
+            datastore: newDatastore,
+            id: datastoreRootIdentifier,
+            rootObject: newRootObjectManifest
+        )
+        try await newRootObject.persistIfNeeded()
+        
+        return newDatastore
+    }
+}

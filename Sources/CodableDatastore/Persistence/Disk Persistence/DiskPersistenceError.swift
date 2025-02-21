@@ -33,6 +33,9 @@ public enum DiskPersistenceError: LocalizedError, Equatable {
     /// The persistence is read only and cannot be written to.
     case cannotWrite
     
+    /// The persistence of another object is not in common with the persistence being used.
+    case wrongPersistence
+    
     public var errorDescription: String? {
         switch self {
         case .notFileURL:
@@ -49,6 +52,8 @@ public enum DiskPersistenceError: LocalizedError, Equatable {
             "The entry was in a format that could not be understood."
         case .cannotWrite:
             "The persistence is read only and cannot be written to."
+        case .wrongPersistence:
+            "The persistence of another object is not in common with the persistence being used."
         }
     }
 }
