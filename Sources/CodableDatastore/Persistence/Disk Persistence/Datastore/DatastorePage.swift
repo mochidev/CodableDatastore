@@ -105,7 +105,7 @@ extension DiskPersistence.Datastore.Page {
         try await iterator.check(Self.header)
         
         /// Pages larger than 1 GB are unsupported.
-        let transformation = try await iterator.collect(max: 1024*1024*1024) { sequence in
+        let transformation = try await iterator.collect(max: Configuration.maximumPageSize) { sequence in
             sequence.iteratorMap { iterator in
                 guard let block = try await iterator.next(DatastorePageEntryBlock.self)
                 else { throw DiskPersistenceError.invalidPageFormat }
