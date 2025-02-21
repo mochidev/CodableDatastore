@@ -19,7 +19,7 @@ extension DiskPersistence.Datastore {
     actor Index: Identifiable {
         let datastore: DiskPersistence<AccessMode>.Datastore
         
-        let id: ID
+        let id: PersistenceDatastoreIndexID
         
         var _manifest: DatastoreIndexManifest?
         var manifestTask: Task<DatastoreIndexManifest, Error>?
@@ -30,7 +30,7 @@ extension DiskPersistence.Datastore {
         
         init(
             datastore: DiskPersistence<AccessMode>.Datastore,
-            id: ID,
+            id: PersistenceDatastoreIndexID,
             manifest: DatastoreIndexManifest? = nil
         ) {
             self.datastore = datastore
@@ -50,7 +50,7 @@ extension DiskPersistence.Datastore {
 // MARK: Hashable
 
 extension DiskPersistence.Datastore.Index: Hashable {
-    static func == (lhs: DiskPersistence<AccessMode>.Datastore.Index, rhs: DiskPersistence<AccessMode>.Datastore.Index) -> Bool {
+    static func == (lhs: DiskPersistence.Datastore.Index, rhs: DiskPersistence.Datastore.Index) -> Bool {
         lhs === rhs
     }
     
@@ -61,8 +61,10 @@ extension DiskPersistence.Datastore.Index: Hashable {
 
 // MARK: - Helper Types
 
-extension DiskPersistence.Datastore.Index {
-    enum ID: Hashable {
+typealias PersistenceDatastoreIndexID = DiskPersistence<ReadOnly>.Datastore.IndexID
+
+extension DiskPersistence<ReadOnly>.Datastore {
+    enum IndexID: Hashable {
         case primary(manifest: DatastoreIndexManifestIdentifier)
         case direct(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)
         case secondary(index: DatastoreIndexIdentifier, manifest: DatastoreIndexManifestIdentifier)

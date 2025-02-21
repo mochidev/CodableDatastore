@@ -16,7 +16,7 @@ extension DiskPersistence.Datastore {
     actor Page: Identifiable {
         let datastore: DiskPersistence<AccessMode>.Datastore
         
-        let id: ID
+        let id: PersistenceDatastorePageID
         
         var blocksReaderTask: Task<MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>>, Error>?
         
@@ -24,7 +24,7 @@ extension DiskPersistence.Datastore {
         
         init(
             datastore: DiskPersistence<AccessMode>.Datastore,
-            id: ID,
+            id: PersistenceDatastorePageID,
             blocks: [DatastorePageEntryBlock]? = nil
         ) {
             self.datastore = datastore
@@ -59,9 +59,11 @@ extension DiskPersistence.Datastore.Page: Hashable {
 
 // MARK: - Helper Types
 
-extension DiskPersistence.Datastore.Page {
-    struct ID: Hashable {
-        let index: DiskPersistence.Datastore.Index.ID
+typealias PersistenceDatastorePageID = DiskPersistence<ReadOnly>.Datastore.PageID
+
+extension DiskPersistence<ReadOnly>.Datastore {
+    struct PageID: Hashable {
+        let index: PersistenceDatastoreIndexID
         let page: DatastorePageIdentifier
         
         var withoutManifest: Self {
