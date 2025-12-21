@@ -216,7 +216,7 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence wh
     }
 }
 
-extension RangeReplaceableCollection {
+extension RangeReplaceableCollection where Self: Sendable {
     init<S: AsyncSequence>(_ sequence: S) async throws where S.Element == Element {
         self = try await sequence.reduce(into: Self.init()) { @Sendable partialResult, element in
             partialResult.append(element)
