@@ -7,7 +7,7 @@
 //
 
 /// An AccessMode marker type.
-public protocol _AccessMode {}
+public protocol _AccessMode: Sendable {}
 
 /// A marker type that indicates read-only access.
 public enum ReadOnly: _AccessMode {}
