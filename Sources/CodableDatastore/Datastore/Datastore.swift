@@ -194,7 +194,7 @@ extension Datastore {
         
         /// Notify progress handlers we are evaluating for possible migrations.
         for handler in warmupProgressHandlers {
-            handler(.evaluating)
+            await handler(.evaluating)
         }
         
         /// Grab an up-to-date descriptor and check the indexes against it
@@ -272,7 +272,7 @@ extension Datastore {
                 
                 /// Notify progress handlers we are starting an entry.
                 for handler in warmupProgressHandlers {
-                    handler(.working(current: index, total: persistedDescriptor.size))
+                    await handler(.working(current: index, total: persistedDescriptor.size))
                 }
                 
                 let instanceData = try await encoder(instance)
@@ -354,7 +354,7 @@ extension Datastore {
         let completeProgress = Progress.complete(total: persistedDescriptor.size)
         
         for handler in warmupProgressHandlers {
-            handler(completeProgress)
+            await handler(completeProgress)
         }
         
         warmupProgressHandlers.removeAll()
@@ -401,7 +401,7 @@ extension Datastore where AccessMode == ReadWrite {
             else { return }
             
             let warmUpProgress = try await self.warmupIfNeeded { progress in
-                progressHandler?(progress.adding(current: 0, total: descriptor.size))
+                await progressHandler?(progress.adding(current: 0, total: descriptor.size))
             }
             
             /// Make sure we still need to do the work, as the warm up may have made changes anyways due to incompatible types.
@@ -419,12 +419,12 @@ extension Datastore where AccessMode == ReadWrite {
                 /// Make sure the stored version is smaller than the one we require, otherwise stop early.
                 version.rawValue < minimumVersion.rawValue
             else {
-                progressHandler?(warmUpProgress.adding(current: descriptor.size, total: descriptor.size))
+                await progressHandler?(warmUpProgress.adding(current: descriptor.size, total: descriptor.size))
                 return
             }
             
             try await self.migrate(index: index) { migrateProgress in
-                progressHandler?(warmUpProgress.adding(migrateProgress))
+                await progressHandler?(warmUpProgress.adding(migrateProgress))
             }
         }
     }
