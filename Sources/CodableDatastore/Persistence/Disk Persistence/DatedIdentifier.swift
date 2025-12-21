@@ -120,6 +120,6 @@ private extension DateFormatter {
     }()
 }
 
-#if !canImport(Darwin)
+#if !canImport(Darwin) && compiler(<6.2)
 extension DateFormatter: @unchecked Sendable {}
 #endif
