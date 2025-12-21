@@ -24,6 +24,17 @@ public struct AnyIndexable {
 
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 /// Matching implementation from https://github.com/apple/swift/pull/64899/files
+#if compiler(>=6)
+extension Never: @retroactive Codable {
+    public init(from decoder: any Decoder) throws {
+        let context = DecodingError.Context(
+            codingPath: decoder.codingPath,
+            debugDescription: "Unable to decode an instance of Never.")
+        throw DecodingError.typeMismatch(Never.self, context)
+    }
+    public func encode(to encoder: any Encoder) throws {}
+}
+#else
 extension Never: Codable {
     public init(from decoder: any Decoder) throws {
         let context = DecodingError.Context(
@@ -33,6 +44,7 @@ extension Never: Codable {
     }
     public func encode(to encoder: any Encoder) throws {}
 }
+#endif
 #endif
 
 /// A marker protocol for types that can be used as a ranged index.
