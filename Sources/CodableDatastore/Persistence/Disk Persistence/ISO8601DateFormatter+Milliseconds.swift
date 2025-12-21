@@ -43,7 +43,7 @@ extension JSONEncoder.DateEncodingStrategy {
     }
 }
 
-#if compiler(>=6)
+#if compiler(>=6) && compiler(<6.2)
 extension ISO8601DateFormatter: @unchecked @retroactive Sendable {}
 extension JSONDecoder.DateDecodingStrategy: @unchecked Sendable {}
 extension JSONEncoder.DateEncodingStrategy: @unchecked Sendable {}
