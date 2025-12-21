@@ -112,7 +112,7 @@ extension Optional: RangedIndexable where Wrapped: RangedIndexable {}
 // MARK: - Foundation Conformances
 
 extension Date: RangedIndexable {}
-#if canImport(Darwin)
+#if canImport(Darwin) || compiler(>=6.2)
 extension Decimal: RangedIndexable {}
 #else
 extension Decimal: RangedIndexable, @unchecked Sendable {}

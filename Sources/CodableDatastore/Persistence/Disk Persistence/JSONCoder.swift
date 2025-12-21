@@ -29,7 +29,7 @@ extension JSONDecoder {
     }()
 }
 
-#if !canImport(Darwin)
+#if !canImport(Darwin) && compiler(<6.2)
 extension JSONEncoder: @unchecked Sendable {}
 extension JSONDecoder: @unchecked Sendable {}
 #endif
