@@ -249,7 +249,7 @@ extension DiskPersistence {
                 persistence: persistence,
                 transactionIndex: transactionIndex,
                 parent: self,
-                actionName: nil,
+                actionName: actionName,
                 options: options
             )
             
