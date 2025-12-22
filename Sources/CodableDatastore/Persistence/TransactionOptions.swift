@@ -9,7 +9,7 @@
 import Foundation
 
 /// A set of options that the caller of a transaction can specify.
-public struct TransactionOptions: OptionSet, Sendable {
+public struct TransactionOptions: OptionSet, Sendable, CustomDebugStringConvertible {
     public let rawValue: UInt64
     
     public init(rawValue: UInt64) {
@@ -24,12 +24,20 @@ public struct TransactionOptions: OptionSet, Sendable {
     
     /// The transaction is idempotent and does not modify any other kind of state, and can be retried when it encounters an inconsistency. This allows a transaction to concurrently operate with other writes, which may be necessary in a disptributed environment.
     public static let idempotent = Self(rawValue: 1 << 2)
+    
+    public var debugDescription: String {
+        var tokens: [String] = []
+        if contains(.readOnly) { tokens.append(".readOnly") }
+        if contains(.collateWrites) { tokens.append(".collateWrites") }
+        if contains(.idempotent) { tokens.append(".idempotent") }
+        return "TransactionOptions([\(tokens.joined(separator: ", "))])"
+    }
 }
 
 /// A set of options that the caller of a transaction can specify.
 ///
 /// These options are generally unsafe to use improperly, and should generally not be used.
-public struct UnsafeTransactionOptions: OptionSet, Sendable {
+public struct UnsafeTransactionOptions: OptionSet, Sendable, CustomDebugStringConvertible {
     public let rawValue: UInt64
     
     public init(rawValue: UInt64) {
@@ -54,4 +62,14 @@ public struct UnsafeTransactionOptions: OptionSet, Sendable {
     
     /// The transaction should persist to storage even if it is a child transaction. Note that this must be the _first_ non-readonly child transaction of a parent transaction to succeed.
     public static let enforceDurability = Self(rawValue: 1 << 17)
+    
+    public var debugDescription: String {
+        var tokens: [String] = []
+        if contains(.readOnly) { tokens.append(".readOnly") }
+        if contains(.collateWrites) { tokens.append(".collateWrites") }
+        if contains(.idempotent) { tokens.append(".idempotent") }
+        if contains(.skipObservations) { tokens.append(".skipObservations") }
+        if contains(.enforceDurability) { tokens.append(".enforceDurability") }
+        return "UnsafeTransactionOptions([\(tokens.joined(separator: ", "))])"
+    }
 }

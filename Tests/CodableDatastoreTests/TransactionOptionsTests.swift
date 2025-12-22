@@ -19,6 +19,15 @@ final class TransactionOptionsTests: XCTestCase {
         XCTAssertEqual(options.rawValue, expectedRawValue, file: file, line: line)
     }
     
+    func assertTransactionOptions(
+        _ options: TransactionOptions,
+        haveDebugString expectedString: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(options.debugDescription, expectedString, file: file, line: line)
+    }
+    
     func testTransactionOptions() {
         assertTransactionOptions(options: [], expectedRawValue: 0)
         
@@ -39,6 +48,21 @@ final class TransactionOptionsTests: XCTestCase {
         assertTransactionOptions(options: TransactionOptions(rawValue: 10), expectedRawValue: 2)
         assertTransactionOptions(options: TransactionOptions(rawValue: 11), expectedRawValue: 3)
     }
+    
+    func testDebugStrings() {
+        assertTransactionOptions([], haveDebugString: "TransactionOptions([])")
+        
+        assertTransactionOptions(.readOnly, haveDebugString: "TransactionOptions([.readOnly])")
+        assertTransactionOptions(.idempotent, haveDebugString: "TransactionOptions([.idempotent])")
+        assertTransactionOptions(.collateWrites, haveDebugString: "TransactionOptions([.collateWrites])")
+        
+        assertTransactionOptions([.idempotent, .readOnly], haveDebugString: "TransactionOptions([.readOnly, .idempotent])")
+        assertTransactionOptions([.readOnly, .idempotent], haveDebugString: "TransactionOptions([.readOnly, .idempotent])")
+        assertTransactionOptions([.readOnly, .collateWrites], haveDebugString: "TransactionOptions([.readOnly, .collateWrites])")
+        assertTransactionOptions([.idempotent, .collateWrites], haveDebugString: "TransactionOptions([.collateWrites, .idempotent])")
+        
+        assertTransactionOptions([.readOnly, .idempotent, .collateWrites], haveDebugString: "TransactionOptions([.readOnly, .collateWrites, .idempotent])")
+    }
 }
 
 final class UnsafeTransactionOptionsTests: XCTestCase {
@@ -49,6 +73,15 @@ final class UnsafeTransactionOptionsTests: XCTestCase {
         line: UInt = #line
     ) {
         XCTAssertEqual(options.rawValue, expectedRawValue, file: file, line: line)
+    }
+    
+    func assertUnsafeTransactionOptions(
+        _ options: UnsafeTransactionOptions,
+        haveDebugString expectedString: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(options.debugDescription, expectedString, file: file, line: line)
     }
     
     func testUnsafeTransactionOptions() {
@@ -86,5 +119,47 @@ final class UnsafeTransactionOptionsTests: XCTestCase {
         assertUnsafeTransactionOptions(options: UnsafeTransactionOptions(TransactionOptions([.collateWrites, .idempotent])), expectedRawValue: 6)
         
         assertUnsafeTransactionOptions(options: UnsafeTransactionOptions(TransactionOptions([.readOnly, .collateWrites, .idempotent])), expectedRawValue: 7)
+    }
+    
+    func testDebugStrings() {
+        assertUnsafeTransactionOptions([], haveDebugString: "UnsafeTransactionOptions([])")
+        
+        assertUnsafeTransactionOptions(.readOnly, haveDebugString: "UnsafeTransactionOptions([.readOnly])")
+        assertUnsafeTransactionOptions(.idempotent, haveDebugString: "UnsafeTransactionOptions([.idempotent])")
+        assertUnsafeTransactionOptions(.collateWrites, haveDebugString: "UnsafeTransactionOptions([.collateWrites])")
+        assertUnsafeTransactionOptions(.skipObservations, haveDebugString: "UnsafeTransactionOptions([.skipObservations])")
+        assertUnsafeTransactionOptions(.enforceDurability, haveDebugString: "UnsafeTransactionOptions([.enforceDurability])")
+        
+        assertUnsafeTransactionOptions([.idempotent, .readOnly], haveDebugString: "UnsafeTransactionOptions([.readOnly, .idempotent])")
+        assertUnsafeTransactionOptions([.readOnly, .idempotent], haveDebugString: "UnsafeTransactionOptions([.readOnly, .idempotent])")
+        
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites])")
+        assertUnsafeTransactionOptions([.readOnly, .skipObservations], haveDebugString: "UnsafeTransactionOptions([.readOnly, .skipObservations])")
+        assertUnsafeTransactionOptions([.readOnly, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .enforceDurability])")
+        assertUnsafeTransactionOptions([.collateWrites, .idempotent], haveDebugString: "UnsafeTransactionOptions([.collateWrites, .idempotent])")
+        assertUnsafeTransactionOptions([.collateWrites, .skipObservations], haveDebugString: "UnsafeTransactionOptions([.collateWrites, .skipObservations])")
+        assertUnsafeTransactionOptions([.collateWrites, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.collateWrites, .enforceDurability])")
+        assertUnsafeTransactionOptions([.idempotent, .skipObservations], haveDebugString: "UnsafeTransactionOptions([.idempotent, .skipObservations])")
+        assertUnsafeTransactionOptions([.idempotent, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.idempotent, .enforceDurability])")
+        assertUnsafeTransactionOptions([.skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.skipObservations, .enforceDurability])")
+        
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent])")
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites, .skipObservations], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites, .skipObservations])")
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites, .enforceDurability])")
+        assertUnsafeTransactionOptions([.readOnly, .idempotent, .skipObservations], haveDebugString: "UnsafeTransactionOptions([.readOnly, .idempotent, .skipObservations])")
+        assertUnsafeTransactionOptions([.readOnly, .idempotent, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .idempotent, .enforceDurability])")
+        assertUnsafeTransactionOptions([.readOnly, .skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .skipObservations, .enforceDurability])")
+        assertUnsafeTransactionOptions([.collateWrites, .idempotent, .skipObservations], haveDebugString: "UnsafeTransactionOptions([.collateWrites, .idempotent, .skipObservations])")
+        assertUnsafeTransactionOptions([.collateWrites, .idempotent, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.collateWrites, .idempotent, .enforceDurability])")
+        assertUnsafeTransactionOptions([.collateWrites, .skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.collateWrites, .skipObservations, .enforceDurability])")
+        assertUnsafeTransactionOptions([.idempotent, .skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.idempotent, .skipObservations, .enforceDurability])")
+        
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent, .skipObservations], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent, .skipObservations])")
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent, .enforceDurability])")
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites, .skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites, .skipObservations, .enforceDurability])")
+        assertUnsafeTransactionOptions([.readOnly, .idempotent, .skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .idempotent, .skipObservations, .enforceDurability])")
+        assertUnsafeTransactionOptions([.collateWrites, .idempotent, .skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.collateWrites, .idempotent, .skipObservations, .enforceDurability])")
+        
+        assertUnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent, .skipObservations, .enforceDurability], haveDebugString: "UnsafeTransactionOptions([.readOnly, .collateWrites, .idempotent, .skipObservations, .enforceDurability])")
     }
 }
