@@ -460,7 +460,7 @@ extension Datastore {
             try await warmupIfNeeded()
             
             return try await persistence._withTransaction(
-                actionName: nil,
+                actionName: "Check Count",
                 options: [.idempotent, .readOnly]
             ) { transaction, _ in
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key)
