@@ -39,6 +39,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     var rollingPageCacheIndex = 0
     var rollingPageCache: [Datastore.Page] = []
     
+    var transactionCounter = 0
+    
     /// Initialize a ``DiskPersistence`` with a read-write URL.
     ///
     /// Use this initializer when creating a persistence from the main process that will access it, such as your app. To access the same persistence from another process, use ``init(readOnlyURL:)`` instead.
@@ -541,16 +543,26 @@ extension DiskPersistence {
 // MARK: - Transactions
 
 extension DiskPersistence {
+    func nextTransactionCounter() -> Int {
+        let transactionIndex = transactionCounter
+        transactionCounter += 1
+        return transactionIndex
+    }
+    
     public func _withTransaction<T: Sendable>(
         actionName: String?,
         options: UnsafeTransactionOptions,
         transaction: @Sendable (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
         try await withoutActuallyEscaping(transaction) { escapingTransaction in
+            let currentCounter = nextTransactionCounter()
+//            print("[CDS] Starting transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
             let (transaction, task) = await Transaction.makeTransaction(
                 persistence: self,
+                transactionIndex: currentCounter,
                 lastTransaction: lastTransaction,
-                actionName: actionName, options: options
+                actionName: actionName,
+                options: options
             ) { interface, isDurable in
                 try await escapingTransaction(interface, isDurable)
             }
@@ -560,11 +572,14 @@ extension DiskPersistence {
                 lastTransaction = transaction
             }
             
-            return try await task.value
+            let result = try await task.value
+//            print("[CDS] Finished transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
+            return result
         }
     }
     
     func persist(
+        transactionIndex: Int,
         actionName: String?,
         roots: [DatastoreKey : Datastore.RootObject],
         addedDatastoreRoots: Set<DatastoreRootReference>,
@@ -582,6 +597,8 @@ extension DiskPersistence {
         
         /// If nothing changed, don't bother writing anything.
         if !containsEdits { return }
+        
+//        print("[CDS] Persisting \(transactionIndex) “\(actionName ?? "")” - \(roots.keys), added \(addedDatastoreRoots), removed \(removedDatastoreRoots)")
         
         /// If we are read-only, make sure no edits have been made
         guard let self = self as? DiskPersistence<ReadWrite>
