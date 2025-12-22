@@ -8,8 +8,29 @@
 
 import Foundation
 
-extension ISO8601DateFormatter {
-    static let withMilliseconds: ISO8601DateFormatter = {
+private struct GlobalDateFormatter: Sendable {
+    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
+    static let cachedFormatter = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+    
+    static let parse: @Sendable (_ value: String) -> Date? = {
+        if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+            return { try? cachedFormatter.parse($0) }
+        } else {
+            return { ISO8601DateFormatter.withMilliseconds.date(from: $0) }
+        }
+    }()
+    
+    static let format: @Sendable (_ value: Date) -> String = {
+        if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
+            return { cachedFormatter.format($0) }
+        } else {
+            return { ISO8601DateFormatter.withMilliseconds.string(from: $0) }
+        }
+    }()
+}
+
+private extension ISO8601DateFormatter {
+    nonisolated(unsafe) static let withMilliseconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.formatOptions = [
@@ -27,7 +48,7 @@ extension JSONDecoder.DateDecodingStrategy {
     static let iso8601WithMilliseconds: Self = custom { decoder in
         let container = try decoder.singleValueContainer()
         let string = try container.decode(String.self)
-        guard let date = ISO8601DateFormatter.withMilliseconds.date(from: string) else {
+        guard let date = GlobalDateFormatter.parse(string) else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(string)")
         }
         return date
@@ -37,7 +58,7 @@ extension JSONDecoder.DateDecodingStrategy {
 
 extension JSONEncoder.DateEncodingStrategy {
     static let iso8601WithMilliseconds: Self = custom { date, encoder in
-        let string = ISO8601DateFormatter.withMilliseconds.string(from: date)
+        let string = GlobalDateFormatter.format(date)
         var container = encoder.singleValueContainer()
         try container.encode(string)
     }
