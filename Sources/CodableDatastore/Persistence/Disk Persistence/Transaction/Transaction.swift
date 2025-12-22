@@ -17,8 +17,9 @@ extension DiskPersistence {
         weak var lastReadWriteChildTransaction: Transaction?
         
         private(set) var task: Task<Void, Error>!
-        let options: UnsafeTransactionOptions
+        let transactionIndex: Int
         let actionName: String?
+        let options: UnsafeTransactionOptions
         
         var rootObjects: [DatastoreKey : Datastore.RootObject] = [:]
         
@@ -37,6 +38,7 @@ extension DiskPersistence {
         
         private init(
             persistence: DiskPersistence,
+            transactionIndex: Int,
             parent: Transaction?,
             actionName: String?,
             options: UnsafeTransactionOptions
@@ -45,6 +47,7 @@ extension DiskPersistence {
             self.parent = parent
             self.actionName = actionName
             self.options = options
+            self.transactionIndex = transactionIndex
         }
         
         private func attachTask<T>(
@@ -147,6 +150,7 @@ extension DiskPersistence {
                     assert(deletedPages.isEmpty, "Pages were deleted in a read-only transaction!")
                     return
                 }
+//                print("[CDS] Offloading persist to parent \(transactionIndex) - \(options)")
                 try await parent.apply(
                     rootObjects: rootObjects,
                     entryMutations: entryMutations,
@@ -176,6 +180,7 @@ extension DiskPersistence {
             let removedDatastoreRoots = Set(deletedRootObjects.map(\.referenceID))
             
             try await persistence.persist(
+                transactionIndex: transactionIndex,
                 actionName: actionName,
                 roots: rootObjects,
                 addedDatastoreRoots: addedDatastoreRoots,
@@ -197,18 +202,26 @@ extension DiskPersistence {
         
         static func makeTransaction<T>(
             persistence: DiskPersistence,
+            transactionIndex: Int,
             lastTransaction: Transaction?,
             actionName: String?,
             options: UnsafeTransactionOptions,
             @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             if let parent = Self.unsafeCurrentTransaction {
-                let (child, task) = await parent.childTransaction(options: options, handler: handler)
+//                print("[CDS] Found parent, making child \(transactionIndex)")
+                let (child, task) = await parent.childTransaction(
+                    transactionIndex: transactionIndex,
+                    actionName: actionName,
+                    options: options,
+                    handler: handler
+                )
                 return (child, task)
             }
             
             let transaction = Transaction(
                 persistence: persistence,
+                transactionIndex: transactionIndex,
                 parent: nil,
                 actionName: actionName,
                 options: options
@@ -226,12 +239,15 @@ extension DiskPersistence {
         }
         
         func childTransaction<T>(
+            transactionIndex: Int,
+            actionName: String?,
             options: UnsafeTransactionOptions,
             @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             assert(!self.options.contains(.readOnly) || options.contains(.readOnly), "A child transaction was declared read-write, even though its parent was read-only!")
             let childTransaction = Transaction(
                 persistence: persistence,
+                transactionIndex: transactionIndex,
                 parent: self,
                 actionName: nil,
                 options: options
