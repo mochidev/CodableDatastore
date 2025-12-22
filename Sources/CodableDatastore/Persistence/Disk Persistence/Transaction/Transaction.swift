@@ -138,18 +138,20 @@ extension DiskPersistence {
                 deletedPages.removeAll()
             }
             
+            /// If the transaction is read-only, stop here without applying anything to the parent.
+            guard !options.contains(.readOnly) else {
+                assert(entryMutations.isEmpty, "Entries were mutated in a read-only transaction!")
+                assert(createdRootObjects.isEmpty, "Root objects were created in a read-only transaction!")
+                assert(createdIndexes.isEmpty, "Indexes were created in a read-only transaction!")
+                assert(createdPages.isEmpty, "Pages were created in a read-only transaction!")
+                assert(deletedRootObjects.isEmpty, "Root objects were deleted in a read-only transaction!")
+                assert(deletedIndexes.isEmpty, "Indexes were deleted in a read-only transaction!")
+                assert(deletedPages.isEmpty, "Pages were deleted in a read-only transaction!")
+                return
+            }
+            
+            /// If the transaction has a parent, offload responsibility to it to persist the changes along with other children.
             if let parent {
-                /// If the transaction is read-only, stop here without applying anything to the parent.
-                guard !options.contains(.readOnly) else {
-                    assert(entryMutations.isEmpty, "Entries were mutated in a read-only transaction!")
-                    assert(createdRootObjects.isEmpty, "Root objects were created in a read-only transaction!")
-                    assert(createdIndexes.isEmpty, "Indexes were created in a read-only transaction!")
-                    assert(createdPages.isEmpty, "Pages were created in a read-only transaction!")
-                    assert(deletedRootObjects.isEmpty, "Root objects were deleted in a read-only transaction!")
-                    assert(deletedIndexes.isEmpty, "Indexes were deleted in a read-only transaction!")
-                    assert(deletedPages.isEmpty, "Pages were deleted in a read-only transaction!")
-                    return
-                }
 //                print("[CDS] Offloading persist to parent \(transactionIndex) - \(options)")
                 try await parent.apply(
                     rootObjects: rootObjects,
