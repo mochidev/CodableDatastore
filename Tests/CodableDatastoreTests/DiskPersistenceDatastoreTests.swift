@@ -915,6 +915,162 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         }
     }
     
+    func testReadOnlyTransactionDoesNotOverrideWrittenTransactions() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: Int
+                var value: String
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        try await persistence.createPersistenceIfNecessary()
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        let valueBank = [
+            "Hello, World!",
+            "My name is Dimitri",
+            "Writen using CodableDatastore",
+            "Swift is better than Objective-C, there, I said it",
+            "Twenty Three is Number One"
+        ]
+        
+        try await persistence.perform {
+            for id in 0..<10 {
+                try await datastore.persist(.init(id: id, value: valueBank.randomElement()!))
+            }
+        }
+        
+        var totalCount = try await datastore.count
+        XCTAssertEqual(totalCount, 10)
+        
+        let (startReadingTask, startReadingContinuation) = await Task.makeUnresolved()
+        let (didStartReadingTask, didStartReadingContinuation) = await Task.makeUnresolved()
+        
+        let readTask = Task {
+            let allEntries = datastore.load(...)
+            
+            didStartReadingContinuation.resume()
+            await startReadingTask.value
+            
+            var count = 0
+            for try await _ in allEntries {
+                count += 1
+            }
+        }
+        
+        await didStartReadingTask.value
+        
+        try await persistence.perform {
+            for id in 10..<20 {
+                try await datastore.persist(.init(id: id, value: valueBank.randomElement()!))
+            }
+        }
+        totalCount = try await datastore.count
+        XCTAssertEqual(totalCount, 20)
+        
+        startReadingContinuation.resume()
+        try await readTask.value
+        
+        totalCount = try await datastore.count
+        XCTAssertEqual(totalCount, 20)
+    }
+    
+    func testNestedReadOnlyTransactionDoesNotOverrideWrittenTransactions() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: Int
+                var value: String
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+        try await persistence.createPersistenceIfNecessary()
+        
+        let datastore = Datastore.JSONStore(
+            persistence: persistence,
+            format: TestFormat.self,
+            migrations: [
+                .zero: { data, decoder in
+                    try decoder.decode(TestFormat.Instance.self, from: data)
+                }
+            ]
+        )
+        
+        let valueBank = [
+            "Hello, World!",
+            "My name is Dimitri",
+            "Writen using CodableDatastore",
+            "Swift is better than Objective-C, there, I said it",
+            "Twenty Three is Number One"
+        ]
+        
+        try await persistence.perform {
+            for id in 0..<10 {
+                try await datastore.persist(.init(id: id, value: valueBank.randomElement()!))
+            }
+        }
+        
+        var totalCount = try await datastore.count
+        XCTAssertEqual(totalCount, 10)
+        
+        let (startReadingTask, startReadingContinuation) = await Task.makeUnresolved()
+        let (didStartReadingTask, didStartReadingContinuation) = await Task.makeUnresolved()
+        
+        let readTask = Task {
+            try await persistence.perform(options: .readOnly) {
+                let allEntries = datastore.load(...)
+                
+                didStartReadingContinuation.resume()
+                await startReadingTask.value
+                
+                var count = 0
+                for try await _ in allEntries {
+                    count += 1
+                }
+            }
+        }
+        
+        await didStartReadingTask.value
+        
+        try await persistence.perform {
+            for id in 10..<20 {
+                try await datastore.persist(.init(id: id, value: valueBank.randomElement()!))
+            }
+        }
+        totalCount = try await datastore.count
+        XCTAssertEqual(totalCount, 20)
+        
+        startReadingContinuation.resume()
+        try await readTask.value
+        
+        totalCount = try await datastore.count
+        XCTAssertEqual(totalCount, 20)
+    }
+    
     func testTakingSnapshots() async throws {
         struct TestFormat: DatastoreFormat {
             enum Version: Int, CaseIterable {
