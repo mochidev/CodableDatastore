@@ -68,6 +68,7 @@ extension IndexRangeExpression {
         )
     }
     
+    @usableFromInline
     static var unbounded: IndexRange<Bound> {
         IndexRange()
     }
