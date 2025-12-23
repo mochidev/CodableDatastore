@@ -165,7 +165,7 @@ extension Datastore {
             }
             let warmupTask = Task {
                 try await persistence._withTransaction(
-                    actionName: "Migrate Entries",
+                    actionName: "Migrate \(key) Instances",
                     options: []
                 ) { transaction, _ in
                     try await self.registerAndMigrate(with: transaction)
@@ -382,7 +382,7 @@ extension Datastore where AccessMode == ReadWrite {
         let indexRepresentation = AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])
         
         try await persistence._withTransaction(
-            actionName: "Migrate Entries",
+            actionName: "Migrate \(key) Instances",
             options: []
         ) { transaction, _ in
             guard
@@ -460,7 +460,7 @@ extension Datastore {
             try await warmupIfNeeded()
             
             return try await persistence._withTransaction(
-                actionName: "Check Count",
+                actionName: "Check \(key) Count",
                 options: [.idempotent, .readOnly]
             ) { transaction, _ in
                 let descriptor = try await transaction.datastoreDescriptor(for: self.key)
@@ -476,7 +476,7 @@ extension Datastore {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
-            actionName: nil,
+            actionName: "Load \(key) ID",
             options: [.idempotent, .readOnly]
         ) { transaction, _ in
             do {
@@ -515,7 +515,7 @@ extension Datastore {
             }
             
             try await self.persistence._withTransaction(
-                actionName: nil,
+                actionName: "Load \(self.key) ID Range",
                 options: [.readOnly]
             ) { transaction, _ in
                 do {
@@ -602,7 +602,7 @@ extension Datastore {
             try await self.warmupIfNeeded()
             
             try await self.persistence._withTransaction(
-                actionName: nil,
+                actionName: "Load \(self.key) \(declaredIndex.indexName)",
                 options: [.readOnly]
             ) { transaction, _ in
                 do {
@@ -753,7 +753,7 @@ extension Datastore {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
-            actionName: nil,
+            actionName: "Start \(key) Observations",
             options: [.idempotent, .readOnly]
         ) { transaction, _ in
             try await transaction.makeObserver(
@@ -791,7 +791,7 @@ extension Datastore where AccessMode == ReadWrite {
         let instanceData = try await self.encoder(instance)
         
         return try await persistence._withTransaction(
-            actionName: "Persist Entry",
+            actionName: "Persist \(key) Instance",
             options: [.idempotent]
         ) { transaction, _ in
             /// Create any missing indexes or prime the datastore for writing.
@@ -977,7 +977,7 @@ extension Datastore where AccessMode == ReadWrite {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
-            actionName: "Delete Entry",
+            actionName: "Delete \(key) Instance",
             options: [.idempotent]
         ) { transaction, _ in
             /// Get a cursor to the entry within the primary index.
