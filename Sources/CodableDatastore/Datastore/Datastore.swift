@@ -469,10 +469,11 @@ extension Datastore {
         }
     }
     
-    /// Load an instance with a given identifier, or return nil if one is not found.
+    /// Load an instance with a given identifier, or return `nil` if one is not found.
+    ///
     /// - Parameter identifier: The identifier of the instance to load.
-    /// - Returns: The instance keyed to the identifier, or nil if none are found.
-    public func load(_ identifier: IdentifierType) async throws -> InstanceType? {
+    /// - Returns: The instance keyed to the identifier, or `nil` if none are found.
+    public func load(id identifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -499,6 +500,7 @@ extension Datastore {
     }
     
     /// **Internal:** Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
+    ///
     /// - Parameters:
     ///   - identifierRange: The range to load.
     ///   - order: The order to process instances in.
@@ -538,13 +540,13 @@ extension Datastore {
     
     /// Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
     ///
-    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
     ///   - identifierRange: The range to load.
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     public nonisolated func load(
-        _ identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
+        range identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
         _load(range: identifierRange, order: order, awaitWarmup: true)
@@ -553,28 +555,29 @@ extension Datastore {
     
     /// Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
     /// 
-    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
     ///   - identifierRange: The range to load.
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     @_disfavoredOverload
+    @inlinable
     public nonisolated func load(
-        _ identifierRange: IndexRange<IdentifierType>,
+        range identifierRange: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
-        load(identifierRange, order: order)
+        load(range: identifierRange, order: order)
     }
     
     /// Load all instances in a datastore as an async sequence.
     ///
-    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
     ///   - unboundedRange: The range to load. Specify `...` to load every instance.
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing all the instances.
     public nonisolated func load(
-        _ unboundedRange: Swift.UnboundedRange,
+        range unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(range: IndexRange.unbounded, order: order, awaitWarmup: true)
@@ -648,36 +651,36 @@ extension Datastore {
     ///
     /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified value, but is much more efficient as an index is already maintained for that value.
     ///
-    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
-    ///   - value: The value to match against.
-    ///   - order: The order to process instances in.   
     ///   - index: The index to load from.
+    ///   - value: The value to match against.
+    ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the specified indexed value.
     public nonisolated func load<
         Value: DiscreteIndexable,
         Index: RetrievableIndexRepresentation<InstanceType, Value>
     >(
-        _ value: Value,
-        order: RangeOrder = .ascending,
-        from index: KeyPath<Format, Index>
+        index: KeyPath<Format, Index>,
+        value: Value,
+        order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(index: index, range: IndexRange(only: value), order: order)
     }
     
-    /// Load an instance with the matching indexed value, or return nil if one is not found.
+    /// Load an instance with the matching indexed value, or return `nil` if one is not found.
     ///
     /// This requires either a ``DatastoreFormat/OneToOneIndex`` or ``DatastoreFormat/ManyToOneIndex`` to be declared as the index, and a guarantee on the caller's part that at most only a single instance will match the specified value. If multiple instancess match, the one with the identifier that sorts first will be returned.
     /// - Parameters:
-    ///   - value: The value to match against.
     ///   - index: The index to load from.
-    /// - Returns: The instance keyed to the specified indexed value, or nil if none are found.
+    ///   - value: The value to match against.
+    /// - Returns: The instance keyed to the specified indexed value, or `nil` if none are found.
     public nonisolated func load<
         Value: DiscreteIndexable,
         Index: SingleInstanceIndexRepresentation<InstanceType, Value>
     >(
-        _ value: Value,
-        from index: KeyPath<Format, Index>
+        index: KeyPath<Format, Index>,
+        value: Value
     ) async throws -> InstanceType? {
         try await _load(index: index, range: IndexRange(only: value)).first(where: { _ in true })
     }
@@ -686,19 +689,19 @@ extension Datastore {
     ///
     /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified range, but is much more efficient as an index is already maintained for that range of values.
     ///
-    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
+    ///   - index: The index to load from.
     ///   - range: The range to load.
     ///   - order: The order to process instances in.
-    ///   - index: The index to load from.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     public nonisolated func load<
         Value: RangedIndexable,
         Index: RetrievableIndexRepresentation<InstanceType, Value>
     >(
-        _ range: some IndexRangeExpression<Value> & Sendable,
-        order: RangeOrder = .ascending,
-        from index: KeyPath<Format, Index>
+        index: KeyPath<Format, Index>,
+        range: some IndexRangeExpression<Value> & Sendable,
+        order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(index: index, range: range, order: order)
     }
@@ -707,38 +710,38 @@ extension Datastore {
     ///
     /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified range, but is much more efficient as an index is already maintained for that range of values.
     ///
-    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Parameters:
+    ///   - index: The index to load from.
     ///   - range: The range to load.
     ///   - order: The order to process instances in.
-    ///   - index: The index to load from.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     @_disfavoredOverload
     public nonisolated func load<
         Value: RangedIndexable,
         Index: RetrievableIndexRepresentation<InstanceType, Value>
     >(
-        _ range: IndexRange<Value>,
-        order: RangeOrder = .ascending,
-        from index: KeyPath<Format, Index>
+        index: KeyPath<Format, Index>,
+        range: IndexRange<Value>,
+        order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(index: index, range: range, order: order)
     }
     
     /// Load all instances in a datastore in index order as an async sequence.
     ///
-    /// The sequence should be consumed a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     ///
-    /// - Note: If the index is a Mant-to-Any type of index, a smaller or larger number of results may be returned here, as some instances may not be respresented in the index, while others are other-represented and may show up multiple times.
+    /// - Note: If the index is a Many-to-Any type of index, a smaller or larger number of results may be returned here, as some instances may not be respresented in the index, while others are over-represented and may show up multiple times.
     /// - Parameters:
+    ///   - index: The index to load from.
     ///   - unboundedRange: The range to load. Specify `...` to load every instance.
     ///   - order: The order to process instances in.
-    ///   - index: The index to load from.
     /// - Returns: An asynchronous sequence containing all the instances, ordered by the specified index.
     public nonisolated func load<Index: IndexRepresentation<InstanceType>>(
-        _ unboundedRange: Swift.UnboundedRange,
-        order: RangeOrder = .ascending,
-        from index: KeyPath<Format, Index>
+        index: KeyPath<Format, Index>,
+        range unboundedRange: Swift.UnboundedRange,
+        order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(index: index, range: IndexRange.unbounded, order: order)
     }
@@ -747,11 +750,19 @@ extension Datastore {
 // MARK: - Observation
 
 extension Datastore {
-    public func observe(_ identifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
-        try await self.observe()
-            .filter { $0.id == identifier }
+    /// Observe changes made to an instance with the given identifier.
+    ///
+    /// - Parameter identifier: The identifier of the instance to observe.
+    /// - Returns: An unbounded asynchronous sequence reporting changes to the observed instance.
+    public func observe(
+        id identifier: IdentifierType
+    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
+        try await observe().filter { $0.id == identifier }
     }
     
+    /// Observe all changes made to a datastore.
+    ///
+    /// - Returns: An unbounded asynchronous sequence reporting changes to the datastore.
     public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
         try await warmupIfNeeded()
         
@@ -786,7 +797,10 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - instance: The instance to persist.
     ///   - identifier: The unique identifier to use to reference the item being persisted.
     @discardableResult
-    public func persist(_ instance: InstanceType, to identifier: IdentifierType) async throws -> InstanceType? {
+    public func persist(
+        _ instance: InstanceType,
+        to identifier: IdentifierType
+    ) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         let updatedDescriptor = try self.generateUpdatedDescriptor()
@@ -964,19 +978,36 @@ extension Datastore where AccessMode == ReadWrite {
     ///   - instance: The instance to persist.
     ///   - keypath: The keypath the identifier is located at.
     @discardableResult
-    public func persist(_ instance: InstanceType, id keypath: KeyPath<InstanceType, IdentifierType>) async throws -> InstanceType? {
+    public func persist(
+        _ instance: InstanceType,
+        id keypath: KeyPath<InstanceType, IdentifierType>
+    ) async throws -> InstanceType? {
         try await persist(instance, to: instance[keyPath: keypath])
     }
     
+    /// Delete the instance with the given identifier from the datastore.
+    ///
+    /// - Throws:Throws ``DatastoreInterfaceError/instanceNotFound`` if the instance does not exist.
+    /// - Parameter identifier: The identifier of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore.
+    @inlinable
     @discardableResult
-    public func delete(_ identifier: IdentifierType) async throws -> InstanceType {
-        guard let deletedInstance = try await deleteIfPresent(identifier)
+    public func delete(
+        id identifier: IdentifierType
+    ) async throws -> InstanceType {
+        guard let deletedInstance = try await deleteIfPresent(id: identifier)
         else { throw DatastoreInterfaceError.instanceNotFound }
         return deletedInstance
     }
     
+    /// Delete the instance with the given identifier from the datastore whether it exists or not.
+    ///
+    /// - Parameter identifier: The identifier of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore, or `nil` if none are found.
     @discardableResult
-    public func deleteIfPresent(_ identifier: IdentifierType) async throws -> InstanceType? {
+    public func deleteIfPresent(
+        id identifier: IdentifierType
+    ) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -1085,32 +1116,59 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     ///
     /// If an instance does not already exist for the specified identifier, it will be created. If an instance already exists, it will be updated.
     /// - Parameter instance: The instance to persist.
-    @_disfavoredOverload
+    @inlinable
     @discardableResult
-    public func persist(_ instance: InstanceType) async throws -> InstanceType? where AccessMode == ReadWrite {
-        try await self.persist(instance, to: instance.id)
+    public func persist(
+        _ instance: InstanceType
+    ) async throws -> InstanceType? where AccessMode == ReadWrite {
+        try await persist(instance, to: instance.id)
     }
     
-    @_disfavoredOverload
+    /// Delete the instance with the same identifier from the datastore.
+    ///
+    /// - Throws:Throws ``DatastoreInterfaceError/instanceNotFound`` if the instance does not exist.
+    /// - Parameter instance: A copy of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore.
+    @inlinable
     @discardableResult
-    public func delete(_ instance: InstanceType) async throws -> InstanceType where AccessMode == ReadWrite {
-        try await self.delete(instance.id)
+    public func delete(
+        instance: InstanceType
+    ) async throws -> InstanceType where AccessMode == ReadWrite {
+        try await delete(id: instance.id)
     }
     
-    @_disfavoredOverload
+    /// Delete the instance with the same identifier from the datastore whether it exists or not.
+    ///
+    /// - Parameter instance: A copy of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore, or `nil` if none are found.
+    @inlinable
     @discardableResult
-    public func deleteIfPresent(_ instance: InstanceType) async throws -> InstanceType? where AccessMode == ReadWrite {
-        try await self.deleteIfPresent(instance.id)
+    public func deleteIfPresent(
+        instance: InstanceType
+    ) async throws -> InstanceType? where AccessMode == ReadWrite {
+        try await deleteIfPresent(id: instance.id)
     }
     
-    @_disfavoredOverload
-    public func load(_ instance: InstanceType) async throws -> InstanceType? {
-        try await self.load(instance.id)
+    /// Reload an instance with a given identifier and return it, or return `nil` if one is not found.
+    ///
+    /// - Parameter instance: A copy of the instance to load.
+    /// - Returns: The instance keyed to the identifier, or `nil` if none are found.
+    @inlinable
+    public func load(
+        instance: InstanceType
+    ) async throws -> InstanceType? {
+        try await load(id: instance.id)
     }
     
-    @_disfavoredOverload
-    public func observe(_ instance: InstanceType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
-        try await observe(instance.id)
+    /// Observe changes made to an instance with a given identifier.
+    ///
+    /// - Parameter identifier: A copy of the instance to observe.
+    /// - Returns: An unbounded asynchronous sequence reporting changes to the observed instance.
+    @inlinable
+    public func observe(
+        instance: InstanceType
+    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
+        try await observe(id: instance.id)
     }
 }
 
