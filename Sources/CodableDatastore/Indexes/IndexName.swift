@@ -42,3 +42,7 @@ extension IndexName: Encodable {
         try container.encode(rawValue)
     }
 }
+
+extension IndexName: CustomStringConvertible {
+    public var description: String { rawValue }
+}
