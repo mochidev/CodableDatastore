@@ -41,3 +41,8 @@ extension DatastoreKey: Encodable {
         try container.encode(rawValue)
     }
 }
+
+extension DatastoreKey: CustomStringConvertible {
+    @inlinable
+    public var description: String { rawValue }
+}
