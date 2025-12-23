@@ -263,7 +263,7 @@ extension Datastore {
             /// Create any missing indexes and prime the datastore for writing.
             try await transaction.apply(descriptor: updatedDescriptor, for: key)
             
-            let primaryIndex = _load(IndexRange(), order: .ascending, awaitWarmup: false)
+            let primaryIndex = _load(range: IndexRange(), order: .ascending, awaitWarmup: false)
             
             let versionData = try Data(self.version)
             
@@ -505,7 +505,7 @@ extension Datastore {
     ///   - awaitWarmup: Whether the sequence should await warmup or jump right into loading.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     nonisolated func _load(
-        _ identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
+        range identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
         order: RangeOrder,
         awaitWarmup: Bool
     ) -> some TypedAsyncSequence<(id: IdentifierType, instance: InstanceType)> & Sendable {
@@ -519,7 +519,10 @@ extension Datastore {
                 options: [.readOnly]
             ) { transaction, _ in
                 do {
-                    try await transaction.primaryIndexScan(range: identifierRange.applying(order), datastoreKey: self.key) { versionData, instanceData in
+                    try await transaction.primaryIndexScan(
+                        range: identifierRange.applying(order),
+                        datastoreKey: self.key
+                    ) { versionData, instanceData in
                         let entryVersion = try Version(versionData)
                         let decoder = try await self.decoder(for: entryVersion)
                         let decodedValue = try await decoder(instanceData)
@@ -544,7 +547,7 @@ extension Datastore {
         _ identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
-        _load(identifierRange, order: order, awaitWarmup: true)
+        _load(range: identifierRange, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
     
@@ -574,24 +577,24 @@ extension Datastore {
         _ unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
-        _load(IndexRange(), order: order, awaitWarmup: true)
+        _load(range: IndexRange.unbounded, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
     
     /// **Internal:** Load a range of instances from a given index as an async sequence.
     /// - Parameters:
+    ///   - index: The index to load from.
     ///   - range: The range to load.
     ///   - order: The order to process instances in.
-    ///   - index: The index to load from.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     @usableFromInline
     nonisolated func _load<
         Index: IndexRepresentation<InstanceType>,
         Bound: Indexable
     >(
-        _ range: some IndexRangeExpression<Bound> & Sendable,
-        order: RangeOrder = .ascending,
-        from index: KeyPath<Format, Index>
+        index: KeyPath<Format, Index>,
+        range: some IndexRangeExpression<Bound> & Sendable,
+        order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])]
         
@@ -659,7 +662,7 @@ extension Datastore {
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
-        _load(IndexRange(only: value), order: order, from: index)
+        _load(index: index, range: IndexRange(only: value), order: order)
     }
     
     /// Load an instance with the matching indexed value, or return nil if one is not found.
@@ -676,7 +679,7 @@ extension Datastore {
         _ value: Value,
         from index: KeyPath<Format, Index>
     ) async throws -> InstanceType? {
-        try await _load(IndexRange(only: value), from: index).first(where: { _ in true })
+        try await _load(index: index, range: IndexRange(only: value)).first(where: { _ in true })
     }
     
     /// Load a range of instances from a given index as an async sequence.
@@ -697,7 +700,7 @@ extension Datastore {
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
-        _load(range, order: order, from: index)
+        _load(index: index, range: range, order: order)
     }
     
     /// Load a range of instances from a given index as an async sequence.
@@ -719,7 +722,7 @@ extension Datastore {
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
-        _load(range, order: order, from: index)
+        _load(index: index, range: range, order: order)
     }
     
     /// Load all instances in a datastore in index order as an async sequence.
@@ -737,7 +740,7 @@ extension Datastore {
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
-        _load(IndexRange.unbounded, order: order, from: index)
+        _load(index: index, range: IndexRange.unbounded, order: order)
     }
 }
 
