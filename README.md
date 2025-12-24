@@ -220,7 +220,7 @@ for try await book in bookDatastore.load(dimitri.id, from: \.author) {
     print("Book written by Dimitri: \(book.title)")
 }
 
-let allShelves = try await shelfDatastore.load(...).reduce(into: []) { $0.append($1) }
+let allShelves = try await shelfDatastore.load(...).collectInstances(upTo: .infinity)
 ```
 
 Writing or deleteing is equally as straight-forward:
