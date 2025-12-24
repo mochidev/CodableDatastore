@@ -108,14 +108,14 @@ public protocol DatastoreFormat<Version, Instance, Identifier>: Sendable {
     /// This type of index is typically used for most unique identifiers, and may be useful if there is an alternative unique identifier a instance may be referenced under.
     typealias OneToOneIndex<Value: Indexable & DiscreteIndexable> = OneToOneIndexRepresentation<Instance, Value>
     
-    /// A Many-value to One-instance index.
-    ///
-    /// This type of index can be used if several alternative identifiers can reference an instance, and they all reside in a single property.
-    typealias ManyToManyIndex<S: Sequence<Value>, Value: Indexable> = ManyToManyIndexRepresentation<Instance, S, Value>
-    
     /// A Many-value to Many-instance index.
     ///
     /// This type of index is common when building relationships between different instances, where one instance may be related to several others in some way.
+    typealias ManyToManyIndex<S: Sequence<Value>, Value: Indexable> = ManyToManyIndexRepresentation<Instance, S, Value>
+    
+    /// A Many-value to One-instance index.
+    ///
+    /// This type of index can be used if several alternative identifiers can reference an instance, and they all reside in a single property.
     typealias ManyToOneIndex<S: Sequence<Value>, Value: Indexable & DiscreteIndexable> = ManyToOneIndexRepresentation<Instance, S, Value>
     
     /// Generate index representations for the datastore.
