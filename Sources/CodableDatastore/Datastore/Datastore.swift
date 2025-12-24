@@ -267,7 +267,7 @@ extension Datastore {
             
             let versionData = try Data(self.version)
             
-            for try await (idenfifier, instance) in primaryIndex {
+            for try await (identifier, instance) in primaryIndex {
                 defer { index += 1 }
                 
                 /// Notify progress handlers we are starting an entry.
@@ -278,11 +278,11 @@ extension Datastore {
                 let instanceData = try await encoder(instance)
                 
                 if rebuildPrimaryIndex {
-                    let insertionCursor = try await transaction.primaryIndexCursor(inserting: idenfifier, datastoreKey: key)
+                    let insertionCursor = try await transaction.primaryIndexCursor(inserting: identifier, datastoreKey: key)
                     
                     try await transaction.persistPrimaryIndexEntry(
                         versionData: versionData,
-                        identifierValue: idenfifier,
+                        identifierValue: identifier,
                         instanceData: instanceData,
                         cursor: insertionCursor,
                         datastoreKey: key
@@ -305,7 +305,7 @@ extension Datastore {
                             /// Grab a cursor to insert the new value in the index.
                             let updatedValueCursor = try await transaction.directIndexCursor(
                                 inserting: updatedValue.indexed,
-                                identifier: idenfifier,
+                                identifier: identifier,
                                 indexName: indexName,
                                 datastoreKey: key
                             )
@@ -314,7 +314,7 @@ extension Datastore {
                             try await transaction.persistDirectIndexEntry(
                                 versionData: versionData,
                                 indexValue: updatedValue.indexed,
-                                identifierValue: idenfifier,
+                                identifierValue: identifier,
                                 instanceData: instanceData,
                                 cursor: updatedValueCursor,
                                 indexName: indexName,
@@ -332,7 +332,7 @@ extension Datastore {
                             /// Grab a cursor to insert the new value in the index.
                             let updatedValueCursor = try await transaction.secondaryIndexCursor(
                                 inserting: updatedValue.indexed,
-                                identifier: idenfifier,
+                                identifier: identifier,
                                 indexName: indexName,
                                 datastoreKey: self.key
                             )
@@ -340,7 +340,7 @@ extension Datastore {
                             /// Insert it.
                             try await transaction.persistSecondaryIndexEntry(
                                 indexValue: updatedValue.indexed,
-                                identifierValue: idenfifier,
+                                identifierValue: identifier,
                                 cursor: updatedValueCursor,
                                 indexName: indexName,
                                 datastoreKey: self.key
@@ -744,9 +744,9 @@ extension Datastore {
 // MARK: - Observation
 
 extension Datastore {
-    public func observe(_ idenfifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
+    public func observe(_ identifier: IdentifierType) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
         try await self.observe()
-            .filter { $0.id == idenfifier }
+            .filter { $0.id == identifier }
     }
     
     public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
@@ -781,9 +781,9 @@ extension Datastore where AccessMode == ReadWrite {
     /// - Note: If you instance conforms to Identifiable, it it preferable to use ``persist(_:)`` instead.
     /// - Parameters:
     ///   - instance: The instance to persist.
-    ///   - idenfifier: The unique identifier to use to reference the item being persisted.
+    ///   - identifier: The unique identifier to use to reference the item being persisted.
     @discardableResult
-    public func persist(_ instance: InstanceType, to idenfifier: IdentifierType) async throws -> InstanceType? {
+    public func persist(_ instance: InstanceType, to identifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         let updatedDescriptor = try self.generateUpdatedDescriptor()
@@ -799,7 +799,7 @@ extension Datastore where AccessMode == ReadWrite {
             
             let existingEntry: (cursor: any InstanceCursorProtocol, instance: InstanceType, versionData: Data, instanceData: Data)? = try await {
                 do {
-                    let existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+                    let existingEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
                     
                     let existingVersion = try Version(existingEntry.versionData)
                     let decoder = try self.decoder(for: existingVersion)
@@ -822,13 +822,13 @@ extension Datastore where AccessMode == ReadWrite {
             let existingInstance = existingEntry?.instance
             let insertionCursor: any InsertionCursorProtocol = try await {
                 if let existingEntry { return existingEntry.cursor }
-                return try await transaction.primaryIndexCursor(inserting: idenfifier, datastoreKey: self.key)
+                return try await transaction.primaryIndexCursor(inserting: identifier, datastoreKey: self.key)
             }()
             
             if let existingEntry {
                 try await transaction.emit(
                     event: .updated(
-                        id: idenfifier,
+                        id: identifier,
                         oldEntry: ObservationEntry(
                             versionData: existingEntry.versionData,
                             instanceData: existingEntry.instanceData
@@ -843,7 +843,7 @@ extension Datastore where AccessMode == ReadWrite {
             } else {
                 try await transaction.emit(
                     event: .created(
-                        id: idenfifier,
+                        id: identifier,
                         newEntry: ObservationEntry(
                             versionData: versionData,
                             instanceData: instanceData
@@ -856,7 +856,7 @@ extension Datastore where AccessMode == ReadWrite {
             /// Persist the entry in the primary index
             try await transaction.persistPrimaryIndexEntry(
                 versionData: versionData,
-                identifierValue: idenfifier,
+                identifierValue: identifier,
                 instanceData: instanceData,
                 cursor: insertionCursor,
                 datastoreKey: self.key
@@ -876,7 +876,7 @@ extension Datastore where AccessMode == ReadWrite {
                         /// Grab a cursor to the old value in the index.
                         let existingValueCursor = try await transaction.directIndexCursor(
                             for: existingValue.indexed,
-                            identifier: idenfifier,
+                            identifier: identifier,
                             indexName: indexName,
                             datastoreKey: self.key
                         )
@@ -893,7 +893,7 @@ extension Datastore where AccessMode == ReadWrite {
                         /// Grab a cursor to insert the new value in the index.
                         let updatedValueCursor = try await transaction.directIndexCursor(
                             inserting: updatedValue.indexed,
-                            identifier: idenfifier,
+                            identifier: identifier,
                             indexName: indexName,
                             datastoreKey: self.key
                         )
@@ -902,7 +902,7 @@ extension Datastore where AccessMode == ReadWrite {
                         try await transaction.persistDirectIndexEntry(
                             versionData: versionData,
                             indexValue: updatedValue.indexed,
-                            identifierValue: idenfifier,
+                            identifierValue: identifier,
                             instanceData: instanceData,
                             cursor: updatedValueCursor,
                             indexName: indexName,
@@ -915,7 +915,7 @@ extension Datastore where AccessMode == ReadWrite {
                         /// Grab a cursor to the old value in the index.
                         let existingValueCursor = try await transaction.secondaryIndexCursor(
                             for: existingValue.indexed,
-                            identifier: idenfifier,
+                            identifier: identifier,
                             indexName: indexName,
                             datastoreKey: self.key
                         )
@@ -932,7 +932,7 @@ extension Datastore where AccessMode == ReadWrite {
                         /// Grab a cursor to insert the new value in the index.
                         let updatedValueCursor = try await transaction.secondaryIndexCursor(
                             inserting: updatedValue.indexed,
-                            identifier: idenfifier,
+                            identifier: identifier,
                             indexName: indexName,
                             datastoreKey: self.key
                         )
@@ -940,7 +940,7 @@ extension Datastore where AccessMode == ReadWrite {
                         /// Insert it.
                         try await transaction.persistSecondaryIndexEntry(
                             indexValue: updatedValue.indexed,
-                            identifierValue: idenfifier,
+                            identifierValue: identifier,
                             cursor: updatedValueCursor,
                             indexName: indexName,
                             datastoreKey: self.key
@@ -966,14 +966,14 @@ extension Datastore where AccessMode == ReadWrite {
     }
     
     @discardableResult
-    public func delete(_ idenfifier: IdentifierType) async throws -> InstanceType {
-        guard let deletedInstance = try await deleteIfPresent(idenfifier)
+    public func delete(_ identifier: IdentifierType) async throws -> InstanceType {
+        guard let deletedInstance = try await deleteIfPresent(identifier)
         else { throw DatastoreInterfaceError.instanceNotFound }
         return deletedInstance
     }
     
     @discardableResult
-    public func deleteIfPresent(_ idenfifier: IdentifierType) async throws -> InstanceType? {
+    public func deleteIfPresent(_ identifier: IdentifierType) async throws -> InstanceType? {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -983,7 +983,7 @@ extension Datastore where AccessMode == ReadWrite {
             /// Get a cursor to the entry within the primary index.
             let existingEntry: (cursor: any InstanceCursorProtocol, instanceData: Data, versionData: Data)
             do {
-                existingEntry = try await transaction.primaryIndexCursor(for: idenfifier, datastoreKey: self.key)
+                existingEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
             } catch DatastoreInterfaceError.instanceNotFound {
                 return nil
             } catch DatastoreInterfaceError.datastoreKeyNotFound {
@@ -1003,7 +1003,7 @@ extension Datastore where AccessMode == ReadWrite {
             
             try await transaction.emit(
                 event: .deleted(
-                    id: idenfifier,
+                    id: identifier,
                     oldEntry: ObservationEntry(
                         versionData: existingEntry.versionData,
                         instanceData: existingEntry.instanceData
@@ -1025,7 +1025,7 @@ extension Datastore where AccessMode == ReadWrite {
                         /// Grab a cursor to the old value in the index.
                         let existingValueCursor = try await transaction.directIndexCursor(
                             for: existingValue.indexed,
-                            identifier: idenfifier,
+                            identifier: identifier,
                             indexName: indexName,
                             datastoreKey: self.key
                         )
@@ -1042,7 +1042,7 @@ extension Datastore where AccessMode == ReadWrite {
                         /// Grab a cursor to the old value in the index.
                         let existingValueCursor = try await transaction.secondaryIndexCursor(
                             for: existingValue.indexed,
-                            identifier: idenfifier,
+                            identifier: identifier,
                             indexName: indexName,
                             datastoreKey: self.key
                         )
