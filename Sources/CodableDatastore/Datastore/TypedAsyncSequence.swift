@@ -6,7 +6,7 @@
 //  Copyright © 2023-24 Mochi Development, Inc. All rights reserved.
 //
 
-public protocol TypedAsyncSequence<Element>: AsyncSequence {}
+public protocol TypedAsyncSequence<Element>: AsyncSequence, Sendable {}
 
 // MARK: - Standard Library Conformances
 
