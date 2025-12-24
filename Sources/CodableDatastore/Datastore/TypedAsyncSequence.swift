@@ -1,18 +1,18 @@
 //
-//  TypedAsyncSequence.swift
+//  AsyncInstances.swift
 //  CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-07-12.
 //  Copyright © 2023-24 Mochi Development, Inc. All rights reserved.
 //
 
-public protocol TypedAsyncSequence<Element>: AsyncSequence, Sendable {}
+public protocol AsyncInstances<Element>: AsyncSequence, Sendable {}
 
 // MARK: - Standard Library Conformances
 
-extension AsyncMapSequence: TypedAsyncSequence {}
-extension AsyncThrowingMapSequence: TypedAsyncSequence {}
-extension AsyncCompactMapSequence: TypedAsyncSequence {}
-extension AsyncThrowingCompactMapSequence: TypedAsyncSequence {}
-extension AsyncFilterSequence: TypedAsyncSequence {}
-extension AsyncThrowingFilterSequence: TypedAsyncSequence {}
+extension AsyncMapSequence: AsyncInstances {}
+extension AsyncThrowingMapSequence: AsyncInstances {}
+extension AsyncCompactMapSequence: AsyncInstances {}
+extension AsyncThrowingCompactMapSequence: AsyncInstances {}
+extension AsyncFilterSequence: AsyncInstances {}
+extension AsyncThrowingFilterSequence: AsyncInstances {}
