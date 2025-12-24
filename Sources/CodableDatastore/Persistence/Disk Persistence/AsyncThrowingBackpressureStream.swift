@@ -95,7 +95,7 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
     }
 }
 
-extension AsyncThrowingBackpressureStream: TypedAsyncSequence {
+extension AsyncThrowingBackpressureStream: AsyncInstances {
     struct AsyncIterator: AsyncIteratorProtocol {
         fileprivate var stateMachine: StateMachine
         

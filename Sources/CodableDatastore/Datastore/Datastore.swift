@@ -520,7 +520,7 @@ extension Datastore {
         range identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder,
         awaitWarmup: Bool
-    ) -> some TypedAsyncSequence<(id: IdentifierType, instance: InstanceType)> {
+    ) -> some AsyncInstances<(id: IdentifierType, instance: InstanceType)> {
         AsyncThrowingBackpressureStream { provider in
             if awaitWarmup {
                 try await self.warmupIfNeeded()
@@ -558,7 +558,7 @@ extension Datastore {
     public nonisolated func load(
         range identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
+    ) -> some AsyncInstances<InstanceType> where IdentifierType: RangedIndexable {
         _load(range: identifierRange, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
@@ -575,7 +575,7 @@ extension Datastore {
     public nonisolated func load(
         _ identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
+    ) -> some AsyncInstances<InstanceType> where IdentifierType: RangedIndexable {
         load(range: identifierRange, order: order)
     }
     
@@ -591,7 +591,7 @@ extension Datastore {
     public nonisolated func load(
         range identifierRange: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
+    ) -> some AsyncInstances<InstanceType> where IdentifierType: RangedIndexable {
         load(range: identifierRange, order: order)
     }
     
@@ -608,7 +608,7 @@ extension Datastore {
     public nonisolated func load(
         _ identifierRange: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> where IdentifierType: RangedIndexable {
+    ) -> some AsyncInstances<InstanceType> where IdentifierType: RangedIndexable {
         load(range: identifierRange, order: order)
     }
     
@@ -622,7 +622,7 @@ extension Datastore {
     public nonisolated func load(
         range unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         _load(range: IndexRange.unbounded, order: order, awaitWarmup: true)
             .map { $0.instance }
     }
@@ -639,7 +639,7 @@ extension Datastore {
     public nonisolated func load(
         _ unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         load(range: ..., order: order)
     }
     
@@ -657,7 +657,7 @@ extension Datastore {
         index: KeyPath<Format, Index>,
         range: some IndexRangeExpression<Bound>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])]
         
         return AsyncThrowingBackpressureStream { provider in
@@ -723,7 +723,7 @@ extension Datastore {
         index: KeyPath<Format, Index>,
         value: Value,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         _load(index: index, range: IndexRange(only: value), order: order)
     }
     
@@ -745,7 +745,7 @@ extension Datastore {
         _ value: Value,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         load(index: index, value: value, order: order)
     }
     
@@ -802,7 +802,7 @@ extension Datastore {
         index: KeyPath<Format, Index>,
         range: some IndexRangeExpression<Value>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         _load(index: index, range: range, order: order)
     }
     
@@ -825,7 +825,7 @@ extension Datastore {
         _ range: some IndexRangeExpression<Value>,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         load(index: index, range: range, order: order)
     }
     
@@ -847,7 +847,7 @@ extension Datastore {
         index: KeyPath<Format, Index>,
         range: IndexRange<Value>,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         _load(index: index, range: range, order: order)
     }
     
@@ -871,7 +871,7 @@ extension Datastore {
         _ range: IndexRange<Value>,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         load(index: index, range: range, order: order)
     }
     
@@ -889,7 +889,7 @@ extension Datastore {
         index: KeyPath<Format, Index>,
         range unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         _load(index: index, range: IndexRange.unbounded, order: order)
     }
     
@@ -908,7 +908,7 @@ extension Datastore {
         _ unboundedRange: Swift.UnboundedRange,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
-    ) -> some TypedAsyncSequence<InstanceType> {
+    ) -> some AsyncInstances<InstanceType> {
         load(index: index, range: ..., order: order)
     }
 }
@@ -922,7 +922,7 @@ extension Datastore {
     /// - Returns: An unbounded asynchronous sequence reporting changes to the observed instance.
     public func observe(
         id identifier: IdentifierType
-    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    ) async throws -> some AsyncInstances<ObservedEvent<IdentifierType, InstanceType>> {
         try await observe().filter { $0.id == identifier }
     }
     
@@ -934,14 +934,14 @@ extension Datastore {
     @inlinable
     public func observe(
         _ identifier: IdentifierType
-    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    ) async throws -> some AsyncInstances<ObservedEvent<IdentifierType, InstanceType>> {
         try await observe(id: identifier)
     }
     
     /// Observe all changes made to a datastore.
     ///
     /// - Returns: An unbounded asynchronous sequence reporting changes to the datastore.
-    public func observe() async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    public func observe() async throws -> some AsyncInstances<ObservedEvent<IdentifierType, InstanceType>> {
         try await warmupIfNeeded()
         
         return try await persistence._withTransaction(
@@ -1414,7 +1414,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     @inlinable
     public func observe(
         instance: InstanceType
-    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    ) async throws -> some AsyncInstances<ObservedEvent<IdentifierType, InstanceType>> {
         try await observe(id: instance.id)
     }
     
@@ -1427,7 +1427,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     @inlinable
     public func observe(
         _ instance: InstanceType
-    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> {
+    ) async throws -> some AsyncInstances<ObservedEvent<IdentifierType, InstanceType>> {
         try await observe(instance: instance)
     }
 }
