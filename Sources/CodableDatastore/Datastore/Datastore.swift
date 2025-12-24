@@ -499,6 +499,16 @@ extension Datastore {
         }
     }
     
+    /// **[Elided Form]** Load an instance with a given identifier, or return `nil` if one is not found.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(id:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameter identifier: The identifier of the instance to load.
+    /// - Returns: The instance keyed to the identifier, or `nil` if none are found.
+    @inlinable
+    public func load(_ identifier: IdentifierType) async throws -> InstanceType? {
+        try await load(id: identifier)
+    }
+    
     /// **Internal:** Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
     ///
     /// - Parameters:
@@ -553,6 +563,22 @@ extension Datastore {
             .map { $0.instance }
     }
     
+    /// **[Elided Form]** Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
+    ///
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(range:order:)-(IndexRangeExpression<IdentifierType>&Sendable,_)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - identifierRange: The range to load.
+    ///   - order: The order to process instances in.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
+    @inlinable
+    public nonisolated func load(
+        _ identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
+        order: RangeOrder = .ascending
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
+        load(range: identifierRange, order: order)
+    }
+    
     /// Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
     /// 
     /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
@@ -564,6 +590,23 @@ extension Datastore {
     @inlinable
     public nonisolated func load(
         range identifierRange: IndexRange<IdentifierType>,
+        order: RangeOrder = .ascending
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
+        load(range: identifierRange, order: order)
+    }
+    
+    /// **[Elided Form]** Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
+    ///
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(range:order:)-(IndexRange<IdentifierType>,_)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - identifierRange: The range to load.
+    ///   - order: The order to process instances in.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
+    @_disfavoredOverload
+    @inlinable
+    public nonisolated func load(
+        _ identifierRange: IndexRange<IdentifierType>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
         load(range: identifierRange, order: order)
@@ -582,6 +625,22 @@ extension Datastore {
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(range: IndexRange.unbounded, order: order, awaitWarmup: true)
             .map { $0.instance }
+    }
+    
+    /// **[Elided Form]** Load all instances in a datastore as an async sequence.
+    ///
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(range:order:)-(UnboundedRange,_)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - unboundedRange: The range to load. Specify `...` to load every instance.
+    ///   - order: The order to process instances in.
+    /// - Returns: An asynchronous sequence containing all the instances.
+    @inlinable
+    public nonisolated func load(
+        _ unboundedRange: Swift.UnboundedRange,
+        order: RangeOrder = .ascending
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
+        load(range: ..., order: order)
     }
     
     /// **Internal:** Load a range of instances from a given index as an async sequence.
@@ -668,6 +727,28 @@ extension Datastore {
         _load(index: index, range: IndexRange(only: value), order: order)
     }
     
+    /// **[Elided Form]** Load all instances with the matching indexed value as an async sequence.
+    ///
+    /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified value, but is much more efficient as an index is already maintained for that value.
+    ///
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:value:order:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - value: The value to match against.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing the instances matching the specified indexed value.
+    public nonisolated func load<
+        Value: DiscreteIndexable,
+        Index: RetrievableIndexRepresentation<InstanceType, Value>
+    >(
+        _ value: Value,
+        order: RangeOrder = .ascending,
+        from index: KeyPath<Format, Index>
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
+        load(index: index, value: value, order: order)
+    }
+    
     /// Load an instance with the matching indexed value, or return `nil` if one is not found.
     ///
     /// This requires either a ``DatastoreFormat/OneToOneIndex`` or ``DatastoreFormat/ManyToOneIndex`` to be declared as the index, and a guarantee on the caller's part that at most only a single instance will match the specified value. If multiple instancess match, the one with the identifier that sorts first will be returned.
@@ -683,6 +764,25 @@ extension Datastore {
         value: Value
     ) async throws -> InstanceType? {
         try await _load(index: index, range: IndexRange(only: value)).first(where: { _ in true })
+    }
+    
+    /// **[Elided Form]** Load an instance with the matching indexed value, or return `nil` if one is not found.
+    ///
+    /// This requires either a ``DatastoreFormat/OneToOneIndex`` or ``DatastoreFormat/ManyToOneIndex`` to be declared as the index, and a guarantee on the caller's part that at most only a single instance will match the specified value. If multiple instancess match, the one with the identifier that sorts first will be returned.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:value:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - value: The value to match against.
+    ///   - index: The index to load from.
+    /// - Returns: The instance keyed to the specified indexed value, or `nil` if none are found.
+    @inlinable
+    public nonisolated func load<
+        Value: DiscreteIndexable,
+        Index: SingleInstanceIndexRepresentation<InstanceType, Value>
+    >(
+        _ value: Value,
+        from index: KeyPath<Format, Index>
+    ) async throws -> InstanceType? {
+        try await load(index: index, value: value)
     }
     
     /// Load a range of instances from a given index as an async sequence.
@@ -704,6 +804,29 @@ extension Datastore {
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(index: index, range: range, order: order)
+    }
+    
+    /// **[Elided Form]** Load a range of instances from a given index as an async sequence.
+    ///
+    /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified range, but is much more efficient as an index is already maintained for that range of values.
+    ///
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:range:order:)-(_,IndexRangeExpression<Value>&Sendable,_)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
+    @inlinable
+    public nonisolated func load<
+        Value: RangedIndexable,
+        Index: RetrievableIndexRepresentation<InstanceType, Value>
+    >(
+        _ range: some IndexRangeExpression<Value> & Sendable,
+        order: RangeOrder = .ascending,
+        from index: KeyPath<Format, Index>
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
+        load(index: index, range: range, order: order)
     }
     
     /// Load a range of instances from a given index as an async sequence.
@@ -728,6 +851,30 @@ extension Datastore {
         _load(index: index, range: range, order: order)
     }
     
+    /// **[Elided Form]** Load a range of instances from a given index as an async sequence.
+    ///
+    /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified range, but is much more efficient as an index is already maintained for that range of values.
+    ///
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:range:order:)-(_,IndexRange<Value>,_)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - range: The range to load.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
+    @_disfavoredOverload
+    @inlinable
+    public nonisolated func load<
+        Value: RangedIndexable,
+        Index: RetrievableIndexRepresentation<InstanceType, Value>
+    >(
+        _ range: IndexRange<Value>,
+        order: RangeOrder = .ascending,
+        from index: KeyPath<Format, Index>
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
+        load(index: index, range: range, order: order)
+    }
+    
     /// Load all instances in a datastore in index order as an async sequence.
     ///
     /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
@@ -745,6 +892,25 @@ extension Datastore {
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(index: index, range: IndexRange.unbounded, order: order)
     }
+    
+    /// **[Elided Form]** Load all instances in a datastore in index order as an async sequence.
+    ///
+    /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
+    /// - Note: If the index is a Many-to-Any type of index, a smaller or larger number of results may be returned here, as some instances may not be respresented in the index, while others are over-represented and may show up multiple times.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:range:order:)-(_,UnboundedRange,_)`` instead for better completion support, type inference, and indentation.
+    /// - Parameters:
+    ///   - unboundedRange: The range to load. Specify `...` to load every instance.
+    ///   - order: The order to process instances in.
+    ///   - index: The index to load from.
+    /// - Returns: An asynchronous sequence containing all the instances, ordered by the specified index.
+    @inlinable
+    public nonisolated func load<Index: IndexRepresentation<InstanceType>>(
+        _ unboundedRange: Swift.UnboundedRange,
+        order: RangeOrder = .ascending,
+        from index: KeyPath<Format, Index>
+    ) -> some TypedAsyncSequence<InstanceType> & Sendable {
+        load(index: index, range: ..., order: order)
+    }
 }
 
 // MARK: - Observation
@@ -758,6 +924,18 @@ extension Datastore {
         id identifier: IdentifierType
     ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
         try await observe().filter { $0.id == identifier }
+    }
+    
+    /// **[Elided Form]** Observe changes made to an instance with the given identifier.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``observe(id:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameter identifier: The identifier of the instance to observe.
+    /// - Returns: An unbounded asynchronous sequence reporting changes to the observed instance.
+    @inlinable
+    public func observe(
+        _ identifier: IdentifierType
+    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
+        try await observe(id: identifier)
     }
     
     /// Observe all changes made to a datastore.
@@ -1000,6 +1178,20 @@ extension Datastore where AccessMode == ReadWrite {
         return deletedInstance
     }
     
+    /// **[Elided Form]** Delete the instance with the given identifier from the datastore.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``observe(id:)`` instead for better completion support, type inference, and indentation.
+    /// - Throws:Throws ``DatastoreInterfaceError/instanceNotFound`` if the instance does not exist.
+    /// - Parameter identifier: The identifier of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore.
+    @inlinable
+    @discardableResult
+    public func delete(
+        _ identifier: IdentifierType
+    ) async throws -> InstanceType {
+        try await delete(id: identifier)
+    }
+    
     /// Delete the instance with the given identifier from the datastore whether it exists or not.
     ///
     /// - Parameter identifier: The identifier of the instance to delete.
@@ -1095,6 +1287,19 @@ extension Datastore where AccessMode == ReadWrite {
         }
     }
     
+    /// **[Elided Form]** Delete the instance with the given identifier from the datastore whether it exists or not.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``deleteIfPresent(id:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameter identifier: The identifier of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore, or `nil` if none are found.
+    @inlinable
+    @discardableResult
+    public func deleteIfPresent(
+        _ identifier: IdentifierType
+    ) async throws -> InstanceType? {
+        try await deleteIfPresent(id: identifier)
+    }
+    
     /// A read-only view into the data store.
     // TODO: Make a proper copy here
     public var readOnly: Datastore<Format, ReadOnly> {
@@ -1137,6 +1342,21 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         try await delete(id: instance.id)
     }
     
+    /// **[Elided Form]** Delete the instance with the same identifier from the datastore.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``delete(instance:)`` instead for better completion support, type inference, and indentation.
+    /// - Throws:Throws ``DatastoreInterfaceError/instanceNotFound`` if the instance does not exist.
+    /// - Parameter instance: A copy of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore.
+    @_disfavoredOverload
+    @inlinable
+    @discardableResult
+    public func delete(
+        _ instance: InstanceType
+    ) async throws -> InstanceType where AccessMode == ReadWrite {
+        try await delete(instance: instance)
+    }
+    
     /// Delete the instance with the same identifier from the datastore whether it exists or not.
     ///
     /// - Parameter instance: A copy of the instance to delete.
@@ -1147,6 +1367,20 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         instance: InstanceType
     ) async throws -> InstanceType? where AccessMode == ReadWrite {
         try await deleteIfPresent(id: instance.id)
+    }
+    
+    /// **[Elided Form]** Delete the instance with the same identifier from the datastore whether it exists or not.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``deleteIfPresent(instance:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameter instance: A copy of the instance to delete.
+    /// - Returns: A copy of the instance that was deleted as it existed in the datastore, or `nil` if none are found.
+    @_disfavoredOverload
+    @inlinable
+    @discardableResult
+    public func deleteIfPresent(
+        _ instance: InstanceType
+    ) async throws -> InstanceType? where AccessMode == ReadWrite {
+        try await deleteIfPresent(instance: instance)
     }
     
     /// Reload an instance with a given identifier and return it, or return `nil` if one is not found.
@@ -1160,6 +1394,19 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         try await load(id: instance.id)
     }
     
+    /// **[Elided Form]** Reload an instance with a given identifier and return it, or return `nil` if one is not found.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(instance:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameter instance: A copy of the instance to load.
+    /// - Returns: The instance keyed to the identifier, or `nil` if none are found.
+    @_disfavoredOverload
+    @inlinable
+    public func load(
+        _ instance: InstanceType
+    ) async throws -> InstanceType? {
+        try await load(instance: instance)
+    }
+    
     /// Observe changes made to an instance with a given identifier.
     ///
     /// - Parameter identifier: A copy of the instance to observe.
@@ -1169,6 +1416,19 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         instance: InstanceType
     ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
         try await observe(id: instance.id)
+    }
+    
+    /// **[Elided Form]** Observe changes made to an instance with a given identifier.
+    ///
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``observe(instance:)`` instead for better completion support, type inference, and indentation.
+    /// - Parameter identifier: A copy of the instance to observe.
+    /// - Returns: An unbounded asynchronous sequence reporting changes to the observed instance.
+    @_disfavoredOverload
+    @inlinable
+    public func observe(
+        _ instance: InstanceType
+    ) async throws -> some TypedAsyncSequence<ObservedEvent<IdentifierType, InstanceType>> & Sendable {
+        try await observe(instance: instance)
     }
 }
 
