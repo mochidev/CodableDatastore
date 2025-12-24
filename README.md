@@ -214,7 +214,7 @@ for try await book in bookDatastore.load("A"..<"B", from: \.title) {
     print("Book that starts with A: \(book.title)")
 }
 
-guard let dimitri = authorDatastore.load("Dimitri Bouniol", from: \.fullname).first(where: { _ in true })
+guard let dimitri = authorDatastore.load("Dimitri Bouniol", from: \.fullname).firstInstance
 else { throw NotFoundError() }
 for try await book in bookDatastore.load(dimitri.id, from: \.author) {
     print("Book written by Dimitri: \(book.title)")
