@@ -720,7 +720,7 @@ private func secondaryIndexBoundComparator<IndexType: Indexable>(lhs: (bound: Ra
 
 extension DiskPersistence.Transaction {
     func primaryIndexScan<IdentifierType: Indexable>(
-        range: some IndexRangeExpression<IdentifierType> & Sendable,
+        range: some IndexRangeExpression<IdentifierType>,
         datastoreKey: DatastoreKey,
         instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws {
@@ -788,7 +788,7 @@ extension DiskPersistence.Transaction {
     }
     
     func directIndexScan<IndexType: Indexable>(
-        range: some IndexRangeExpression<IndexType> & Sendable,
+        range: some IndexRangeExpression<IndexType>,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
         instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
@@ -858,7 +858,7 @@ extension DiskPersistence.Transaction {
     }
     
     func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
-        range: some IndexRangeExpression<IndexType> & Sendable,
+        range: some IndexRangeExpression<IndexType>,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
         identifierConsumer: @Sendable (_ identifier: IdentifierType) async throws -> ()

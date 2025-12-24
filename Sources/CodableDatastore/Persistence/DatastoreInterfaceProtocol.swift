@@ -137,20 +137,20 @@ public protocol DatastoreInterfaceProtocol: Sendable {
     // MARK: Range Lookups
     
     func primaryIndexScan<IdentifierType: Indexable>(
-        range: some IndexRangeExpression<IdentifierType> & Sendable,
+        range: some IndexRangeExpression<IdentifierType>,
         datastoreKey: DatastoreKey,
         instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws
     
     func directIndexScan<IndexType: Indexable>(
-        range: some IndexRangeExpression<IndexType> & Sendable,
+        range: some IndexRangeExpression<IndexType>,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
         instanceConsumer: @Sendable (_ versionData: Data, _ instanceData: Data) async throws -> ()
     ) async throws
     
     func secondaryIndexScan<IndexType: Indexable, IdentifierType: Indexable>(
-        range: some IndexRangeExpression<IndexType> & Sendable,
+        range: some IndexRangeExpression<IndexType>,
         indexName: IndexName,
         datastoreKey: DatastoreKey,
         identifierConsumer: @Sendable (_ identifier: IdentifierType) async throws -> ()

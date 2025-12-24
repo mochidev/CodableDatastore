@@ -517,7 +517,7 @@ extension Datastore {
     ///   - awaitWarmup: Whether the sequence should await warmup or jump right into loading.
     /// - Returns: An asynchronous sequence containing the instances matching the range of values in that sequence.
     nonisolated func _load(
-        range identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
+        range identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder,
         awaitWarmup: Bool
     ) -> some TypedAsyncSequence<(id: IdentifierType, instance: InstanceType)> & Sendable {
@@ -556,7 +556,7 @@ extension Datastore {
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     public nonisolated func load(
-        range identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
+        range identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
         _load(range: identifierRange, order: order, awaitWarmup: true)
@@ -566,14 +566,14 @@ extension Datastore {
     /// **[Elided Form]** Load a range of instances from a datastore based on the identifier range passed in as an async sequence.
     ///
     /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
-    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(range:order:)-(IndexRangeExpression<IdentifierType>&Sendable,_)`` instead for better completion support, type inference, and indentation.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(range:order:)-(IndexRangeExpression<IdentifierType>,_)`` instead for better completion support, type inference, and indentation.
     /// - Parameters:
     ///   - identifierRange: The range to load.
     ///   - order: The order to process instances in.
     /// - Returns: An asynchronous sequence containing the instances matching the range of identifiers.
     @inlinable
     public nonisolated func load(
-        _ identifierRange: some IndexRangeExpression<IdentifierType> & Sendable,
+        _ identifierRange: some IndexRangeExpression<IdentifierType>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable where IdentifierType: RangedIndexable {
         load(range: identifierRange, order: order)
@@ -655,7 +655,7 @@ extension Datastore {
         Bound: Indexable
     >(
         index: KeyPath<Format, Index>,
-        range: some IndexRangeExpression<Bound> & Sendable,
+        range: some IndexRangeExpression<Bound>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         let declaredIndex = self.indexRepresentations[AnyIndexRepresentation(indexRepresentation: self.format[keyPath: index])]
@@ -800,7 +800,7 @@ extension Datastore {
         Index: RetrievableIndexRepresentation<InstanceType, Value>
     >(
         index: KeyPath<Format, Index>,
-        range: some IndexRangeExpression<Value> & Sendable,
+        range: some IndexRangeExpression<Value>,
         order: RangeOrder = .ascending
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {
         _load(index: index, range: range, order: order)
@@ -811,7 +811,7 @@ extension Datastore {
     /// This is conceptually similar to loading all instances and filtering only those who's indexed key path matches the specified range, but is much more efficient as an index is already maintained for that range of values.
     ///
     /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
-    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:range:order:)-(_,IndexRangeExpression<Value>&Sendable,_)`` instead for better completion support, type inference, and indentation.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:range:order:)-(_,IndexRangeExpression<Value>,_)`` instead for better completion support, type inference, and indentation.
     /// - Parameters:
     ///   - range: The range to load.
     ///   - order: The order to process instances in.
@@ -822,7 +822,7 @@ extension Datastore {
         Value: RangedIndexable,
         Index: RetrievableIndexRepresentation<InstanceType, Value>
     >(
-        _ range: some IndexRangeExpression<Value> & Sendable,
+        _ range: some IndexRangeExpression<Value>,
         order: RangeOrder = .ascending,
         from index: KeyPath<Format, Index>
     ) -> some TypedAsyncSequence<InstanceType> & Sendable {

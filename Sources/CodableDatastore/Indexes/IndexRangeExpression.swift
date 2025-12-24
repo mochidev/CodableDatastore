@@ -37,8 +37,8 @@ public enum RangeOrder: Equatable, Sendable {
 }
 
 /// A type that can represent a range within an index.
-public protocol IndexRangeExpression<Bound> {
-    associatedtype Bound: Comparable
+public protocol IndexRangeExpression<Bound>: Sendable {
+    associatedtype Bound: Comparable & Sendable
     
     /// The definition of the lower bound of the range.
     var lowerBoundExpression: RangeBoundExpression<Bound> { get }
