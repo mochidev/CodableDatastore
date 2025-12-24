@@ -763,7 +763,7 @@ extension Datastore {
         index: KeyPath<Format, Index>,
         value: Value
     ) async throws -> InstanceType? {
-        try await _load(index: index, range: IndexRange(only: value)).first(where: { _ in true })
+        try await _load(index: index, range: IndexRange(only: value)).firstInstance
     }
     
     /// **[Elided Form]** Load an instance with the matching indexed value, or return `nil` if one is not found.

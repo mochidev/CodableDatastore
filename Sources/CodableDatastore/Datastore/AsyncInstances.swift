@@ -8,6 +8,15 @@
 
 public protocol AsyncInstances<Element>: AsyncSequence, Sendable {}
 
+extension AsyncInstances {
+    /// Returns the first instance of the sequence, if it exists.
+    ///
+    /// - Returns: The first instance of the sequence, or `nil` if the sequence is empty.
+    public var firstInstance: Element? {
+        get async throws { try await first { _ in true } }
+    }
+}
+
 // MARK: - Standard Library Conformances
 
 extension AsyncMapSequence: AsyncInstances {}
