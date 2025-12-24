@@ -316,7 +316,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
         
-        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["2", "3", "1"])
     }
     
@@ -356,7 +356,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
         
-        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["2", "3", "1"])
         let value3 = try await datastore.load("My name is Dimitri", from: \.value).map { $0.id }
         XCTAssertEqual(value3, "3")
@@ -404,15 +404,15 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
         
-        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["2", "3", "1", "2", "1", "3", "1", "3"])
-        let valuesA = try await datastore.load("A", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesA = try await datastore.load("A", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesA, ["3"])
-        let valuesB = try await datastore.load("B", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesB = try await datastore.load("B", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesB, ["3", "1"])
-        let valuesC = try await datastore.load("C", order: .ascending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesC = try await datastore.load("C", order: .ascending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesC, ["1", "2"])
-        let valuesD = try await datastore.load("D", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesD = try await datastore.load("D", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesD, [])
     }
     
@@ -452,21 +452,21 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         let count = try await datastore.count
         XCTAssertEqual(count, 3)
         
-        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let values = try await datastore.load("A"..."Z", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["2", "3", "1", "2", "1", "3", "1", "3"])
-        let valuesA = try await datastore.load("A", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesA = try await datastore.load("A", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesA, ["3"])
         let valueA = try await datastore.load("A", from: \.value).map { $0.id }
         XCTAssertEqual(valueA, "3")
-        let valuesB = try await datastore.load("B", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesB = try await datastore.load("B", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesB, ["3", "1"])
         let valueB = try await datastore.load("B", from: \.value).map { $0.id }
         XCTAssertEqual(valueB, "1")
-        let valuesC = try await datastore.load("C", order: .ascending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesC = try await datastore.load("C", order: .ascending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesC, ["1", "2"])
         let valueC = try await datastore.load("C", from: \.value).map { $0.id }
         XCTAssertEqual(valueC, "1")
-        let valuesD = try await datastore.load("D", order: .descending, from: \.value).map { $0.id }.reduce(into: []) { $0.append($1) }
+        let valuesD = try await datastore.load("D", order: .descending, from: \.value).map { $0.id }.collectInstances(upTo: .infinity)
         XCTAssertEqual(valuesD, [])
         let valueNil = try await datastore.load("D", from: \.value).map { $0.id }
         XCTAssertNil(valueNil)
@@ -558,7 +558,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         )
         
         /// Read before persisting anything
-        var values = try await datastore.load(...).map { $0.value }.reduce(into: []) { $0.append($1) }
+        var values = try await datastore.load(...).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, [])
         
         for n in 0..<200 {
@@ -572,57 +572,57 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(iteratedCount, 200)
         
         /// Simple ranges
-        values = try await datastore.load(5..<9).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(5..<9).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["6", "8"])
         
-        values = try await datastore.load((5..<9).reversed).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load((5..<9).reversed).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["8", "6"])
         
         /// Larger ranges
-        values = try await datastore.load(221..<241).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(221..<241).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["222", "224", "226", "228", "230", "232", "234", "236", "238", "240"])
 
-        values = try await datastore.load((221..<241).reversed).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load((221..<241).reversed).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["240", "238", "236", "234", "232", "230", "228", "226", "224", "222"])
         
         /// Across page boudries
-        values = try await datastore.load(209...217).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(209...217).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["210", "212", "214", "216"])
         
-        values = try await datastore.load((209...217).reversed).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load((209...217).reversed).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["216", "214", "212", "210"])
         
         /// Unbounded ranges
-        values = Array(try await datastore.load(.unbounded).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        values = Array(try await datastore.load(.unbounded).map { $0.value }.collectInstances(upTo: .infinity).prefix(5))
         XCTAssertEqual(values, ["0", "2", "4", "6", "8"])
         
-        values = Array(try await datastore.load(...).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        values = Array(try await datastore.load(...).map { $0.value }.collectInstances(upTo: .infinity).prefix(5))
         XCTAssertEqual(values, ["0", "2", "4", "6", "8"])
         
-        values = Array(try await datastore.load(.unbounded.reversed).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        values = Array(try await datastore.load(.unbounded.reversed).map { $0.value }.collectInstances(upTo: .infinity).prefix(5))
         XCTAssertEqual(values, ["398", "396", "394", "392", "390"])
         
-        values = Array(try await datastore.load(..., order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }.prefix(5))
+        values = Array(try await datastore.load(..., order: .descending).map { $0.value }.collectInstances(upTo: .infinity).prefix(5))
         XCTAssertEqual(values, ["398", "396", "394", "392", "390"])
         
         /// Inclusive ranges
-        values = try await datastore.load(6...10).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(6...10).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["6", "8", "10"])
         
-        values = try await datastore.load(6...10, order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(6...10, order: .descending).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["10", "8", "6"])
         
         /// Exclusive ranges
-        values = try await datastore.load(6..<10).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(6..<10).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["6", "8"])
         
-        values = try await datastore.load(6..<10, order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(6..<10, order: .descending).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["8", "6"])
         
-        values = try await datastore.load(6..>10).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(6..>10).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["8", "10"])
         
-        values = try await datastore.load(6..>10, order: .descending).map { $0.value }.reduce(into: []) { $0.append($1) }
+        values = try await datastore.load(6..>10, order: .descending).map { $0.value }.collectInstances(upTo: .infinity)
         XCTAssertEqual(values, ["10", "8"])
     }
     
@@ -902,7 +902,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             try await datastore.persist(.init(id: 10, value: valueBank.randomElement()!))
             try await persistence.perform {
                 /// Resolve and close out the previous child transaction, which should not corrupt the parent.
-                let resolvedInstances = try await allInstances.reduce(into: []) { $0.append($1) }
+                let resolvedInstances = try await allInstances.collectInstances(upTo: .infinity)
                 XCTAssertEqual(resolvedInstances.count, 10)
                 
                 /// Allow corruption to occur if they will.
