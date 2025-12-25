@@ -555,6 +555,15 @@ extension DiskPersistence {
         transaction: @Sendable (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
         try await withoutActuallyEscaping(transaction) { escapingTransaction in
+            /// If the transaction is starting in the context of another persistence's transaction, make sure it is a read-only one. Otherwise assert and throw an error as it likely indicates a mistake and could lead to unexpected consistency violations if one persistence succeeds while the other fails.
+            if
+                Transaction.isTransactingExternally(to: self),
+                !options.contains(.readOnly)
+            {
+                assertionFailure(DatastoreInterfaceError.transactingWithinExternalPersistence.localizedDescription)
+                throw DatastoreInterfaceError.transactingWithinExternalPersistence
+            }
+            
             let currentCounter = nextTransactionCounter()
 //            print("[CDS] Starting transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
             let (transaction, task) = await Transaction.makeTransaction(

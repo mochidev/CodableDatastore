@@ -331,6 +331,13 @@ extension DiskPersistence {
         ) -> Self? {
             TransactionTaskLocals.transaction(for: persistence).map({ $0 as! Self })
         }
+        
+        /// Check to see if we are in a transaction that pertains to a different persistence than the one provided.
+        ///
+        /// This is determined by checking if the only transactions present belong to other persistences. If there are no other transactions, or a transaction for the persistence is already registered, it has already been vetted and is no longer considered external.
+        nonisolated static func isTransactingExternally(to persistence: DiskPersistence<AccessMode>) -> Bool {
+            !TransactionTaskLocals.transactionStorage.isEmpty && TransactionTaskLocals.transactionStorage[ObjectIdentifier(persistence)] == nil
+        }
     }
 }
 
