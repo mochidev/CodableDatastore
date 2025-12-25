@@ -37,6 +37,9 @@ public enum DatastoreInterfaceError: LocalizedError {
     /// The transaction was accessed outside of its activity window.
     case transactionInactive
     
+    /// The transaction was started in the context of another persistence, disqualifying consistency guarantees.
+    case transactingWithinExternalPersistence
+    
     /// The cursor does not match the one provided by the persistence.
     case unknownCursor
     
@@ -63,6 +66,8 @@ public enum DatastoreInterfaceError: LocalizedError {
             "The index being manipulated does not yet exist in the datastore."
         case .transactionInactive:
             "The transaction was accessed outside of its activity window. Please make sure the transaction wasn't escaped."
+        case .transactingWithinExternalPersistence:
+            "The transaction was started in the context of another persistence, disqualifying consistency guarantees. Wrap calls to this persistence's datastores and transactions in Task.detached to acknowledge this risk."
         case .unknownCursor:
             "The cursor does not match the one provided by the persistence."
         case .staleCursor:
