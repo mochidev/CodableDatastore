@@ -179,7 +179,7 @@ extension Snapshot {
     func updateManifest<T>(
         updater: @Sendable @escaping (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
     ) -> Task<T, Error> where AccessMode == ReadWrite {
-        if let (manifest, iteration) = SnapshotTaskLocals.manifest {
+        if let (manifest, iteration) = SnapshotTaskLocals.manifest(for: persistence) {
             return Task {
                 var updatedManifest = manifest
                 var updatedIteration = iteration
@@ -211,7 +211,7 @@ extension Snapshot {
             }
 
             /// Let the updater do something with the manifest, storing the variable on the Task Local stack.
-            let returnValue = try await SnapshotTaskLocals.$manifest.withValue((manifest, iteration)) {
+            let returnValue = try await SnapshotTaskLocals.with(manifest: manifest, iteration: iteration, for: persistence) {
                 try await updater(&manifest, &iteration)
             }
             
@@ -248,7 +248,7 @@ extension Snapshot {
         accessor: @Sendable @escaping (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
     ) -> Task<T, Error> {
         
-        if let (manifest, iteration) = SnapshotTaskLocals.manifest {
+        if let (manifest, iteration) = SnapshotTaskLocals.manifest(for: persistence) {
             return Task { try await accessor(manifest, iteration) }
         }
         
@@ -271,7 +271,7 @@ extension Snapshot {
             }
 
             /// Let the accessor do something with the manifest, storing the variable on the Task Local stack.
-            return try await SnapshotTaskLocals.$manifest.withValue((manifest, iteration)) {
+            return try await SnapshotTaskLocals.with(manifest: manifest, iteration: iteration, for: persistence) {
                 try await accessor(manifest, iteration)
             }
         }
@@ -314,7 +314,23 @@ extension Snapshot {
 
 private enum SnapshotTaskLocals {
     @TaskLocal
-    static var manifest: (SnapshotManifest, SnapshotIteration)?
+    static var manifestStorage: [ObjectIdentifier : (SnapshotManifest, SnapshotIteration)] = [:]
+    
+    static func manifest<AccessMode: _AccessMode>(for persistence: DiskPersistence<AccessMode>) -> (SnapshotManifest, SnapshotIteration)? {
+        manifestStorage[ObjectIdentifier(persistence)]
+    }
+    
+    static func with<AccessMode: _AccessMode, R>(
+        manifest: SnapshotManifest,
+        iteration: SnapshotIteration,
+        for persistence: DiskPersistence<AccessMode>,
+        operation: () async throws -> R
+    ) async rethrows -> R {
+        var currentStorage = manifestStorage
+        currentStorage[ObjectIdentifier(persistence)] = (manifest, iteration)
+        
+        return try await $manifestStorage.withValue(currentStorage, operation: operation)
+    }
 }
 
 // MARK: - Datastore Management

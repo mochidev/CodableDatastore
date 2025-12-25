@@ -56,7 +56,7 @@ extension DiskPersistence {
         ) async -> Task<T, Error> {
             let task = Task {
                 isActive = true
-                let returnValue = try await TransactionTaskLocals.$transaction.withValue(self) {
+                let returnValue = try await TransactionTaskLocals.with(transaction: self, for: persistence) {
                     try await handler()
                 }
                 isActive = false
@@ -210,8 +210,8 @@ extension DiskPersistence {
             options: UnsafeTransactionOptions,
             @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
-            if let parent = Self.unsafeCurrentTransaction {
-//                print("[CDS] Found parent, making child \(transactionIndex)")
+            if let parent = Self.unsafeCurrentTransaction(for: persistence) {
+//                print("[CDS] Found parent \(parent.transactionIndex), making child \(transactionIndex)")
                 let (child, task) = await parent.childTransaction(
                     transactionIndex: transactionIndex,
                     actionName: actionName,
@@ -326,8 +326,10 @@ extension DiskPersistence {
             }
         }
         
-        nonisolated static var unsafeCurrentTransaction: Self? {
-            TransactionTaskLocals.transaction.map({ $0 as! Self })
+        nonisolated static func unsafeCurrentTransaction(
+            for persistence: DiskPersistence<AccessMode>
+        ) -> Self? {
+            TransactionTaskLocals.transaction(for: persistence).map({ $0 as! Self })
         }
     }
 }
@@ -1373,5 +1375,20 @@ fileprivate protocol AnyDiskTransaction: Sendable {}
 
 fileprivate enum TransactionTaskLocals {
     @TaskLocal
-    static var transaction: AnyDiskTransaction?
+    static var transactionStorage: [ObjectIdentifier : AnyDiskTransaction] = [:]
+    
+    static func transaction<AccessMode: _AccessMode>(for persistence: DiskPersistence<AccessMode>) -> AnyDiskTransaction? {
+        transactionStorage[ObjectIdentifier(persistence)]
+    }
+    
+    static func with<AccessMode: _AccessMode, R>(
+        transaction: AnyDiskTransaction,
+        for persistence: DiskPersistence<AccessMode>,
+        operation: () async throws -> R
+    ) async rethrows -> R {
+        var currentStorage = transactionStorage
+        currentStorage[ObjectIdentifier(persistence)] = transaction
+        
+        return try await $transactionStorage.withValue(currentStorage, operation: operation)
+    }
 }
