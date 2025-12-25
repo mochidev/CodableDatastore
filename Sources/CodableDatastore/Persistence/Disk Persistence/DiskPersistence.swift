@@ -179,7 +179,7 @@ extension DiskPersistence {
     func updateStoreInfo<T: Sendable>(
         @_inheritActorContext updater: @Sendable @escaping (_ storeInfo: inout StoreInfo) async throws -> T
     ) -> Task<T, Error> where AccessMode == ReadWrite {
-        if let storeInfo = DiskPersistenceTaskLocals.storeInfo {
+        if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
             return Task {
                 var updatedStoreInfo = storeInfo
                 let returnValue = try await updater(&updatedStoreInfo)
@@ -202,7 +202,7 @@ extension DiskPersistence {
             var storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
             
             /// Let the updater do something with the store info, storing the variable on the Task Local stack.
-            let returnValue = try await DiskPersistenceTaskLocals.$storeInfo.withValue(storeInfo) {
+            let returnValue = try await DiskPersistenceTaskLocals.with(storeInfo: storeInfo, for: self) {
                 try await updater(&storeInfo)
             }
             
@@ -227,7 +227,7 @@ extension DiskPersistence {
     func updateStoreInfo<T: Sendable>(
         @_inheritActorContext accessor: @Sendable @escaping (_ storeInfo: StoreInfo) async throws -> T
     ) -> Task<T, Error> {
-        if let storeInfo = DiskPersistenceTaskLocals.storeInfo {
+        if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
             return Task { try await accessor(storeInfo) }
         }
         
@@ -241,7 +241,7 @@ extension DiskPersistence {
             let storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
             
             /// Let the accessor do something with the store info, storing the variable on the Task Local stack.
-            return try await DiskPersistenceTaskLocals.$storeInfo.withValue(storeInfo) {
+            return try await DiskPersistenceTaskLocals.with(storeInfo: storeInfo, for: self) {
                 try await accessor(storeInfo)
             }
         }
@@ -713,6 +713,21 @@ enum ModificationUpdate {
 
 private enum DiskPersistenceTaskLocals {
     @TaskLocal
-    static var storeInfo: StoreInfo?
+    static var storeInfoStorage: [ObjectIdentifier : StoreInfo] = [:]
+    
+    static func storeInfo<AccessMode: _AccessMode>(for persistence: DiskPersistence<AccessMode>) -> StoreInfo? {
+        storeInfoStorage[ObjectIdentifier(persistence)]
+    }
+    
+    static func with<AccessMode: _AccessMode, R>(
+        storeInfo: StoreInfo,
+        for persistence: DiskPersistence<AccessMode>,
+        operation: () async throws -> R
+    ) async rethrows -> R {
+        var currentStorage = storeInfoStorage
+        currentStorage[ObjectIdentifier(persistence)] = storeInfo
+        
+        return try await $storeInfoStorage.withValue(currentStorage, operation: operation)
+    }
 }
 
