@@ -110,8 +110,8 @@ struct BookStore: DatastoreFormat {
             // version, and convert it to the modern type you use in the app.
             // Conversions are typically only done at read time.
             migrations: [
-                .v1: { data, decoder in try Book(decoder.decode(BookV1.self, from: data)) },
-                .current: { data, decoder in try decoder.decode(Book.self, from: data) }
+                .v1: { try Book($0.decode(BookV1.self, from: $1)) },
+                .current: { try $0.decode(Book.self, from: $1) }
             ]
         )
     }

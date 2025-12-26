@@ -49,9 +49,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -87,9 +85,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -125,9 +121,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -165,9 +159,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -201,9 +193,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -237,9 +227,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
                 persistence: persistence,
                 format: TestFormat.self,
                 migrations: [
-                    .zero: { data, decoder in
-                        try decoder.decode(TestFormat.Instance.self, from: data)
-                    }
+                    .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
                 ]
             )
             
@@ -262,9 +250,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             key: "test",
             version: .zero,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         let count = try await datastore.count
@@ -303,9 +289,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -343,9 +327,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -391,9 +373,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -439,9 +419,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -493,9 +471,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -551,9 +527,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -648,9 +622,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -702,9 +674,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -758,9 +728,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -815,9 +783,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -877,9 +843,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -937,9 +901,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -1014,9 +976,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             persistence: persistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -1094,9 +1054,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
                 persistence: persistence,
                 format: TestFormat.self,
                 migrations: [
-                    .zero: { data, decoder in
-                        try decoder.decode(TestFormat.Instance.self, from: data)
-                    }
+                    .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
                 ]
             )
             
@@ -1125,9 +1083,7 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
                 persistence: persistence,
                 format: TestFormat.self,
                 migrations: [
-                    .zero: { data, decoder in
-                        try decoder.decode(TestFormat.Instance.self, from: data)
-                    }
+                    .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
                 ]
             )
             

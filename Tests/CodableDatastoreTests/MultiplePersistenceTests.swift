@@ -48,9 +48,7 @@ final class MultiplePersistenceTests: XCTestCase, @unchecked Sendable {
             persistence: outerPersistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
@@ -58,9 +56,7 @@ final class MultiplePersistenceTests: XCTestCase, @unchecked Sendable {
             persistence: innerPersistence,
             format: TestFormat.self,
             migrations: [
-                .zero: { data, decoder in
-                    try decoder.decode(TestFormat.Instance.self, from: data)
-                }
+                .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
             ]
         )
         
