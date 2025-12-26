@@ -1442,7 +1442,7 @@ extension Datastore where AccessMode == ReadWrite {
         version: Version = Format.currentVersion,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ decoder: JSONDecoder, _ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1451,7 +1451,7 @@ extension Datastore where AccessMode == ReadWrite {
             version: version,
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues { migration in
-                { @Sendable data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(decoder, data) }
             },
             configuration: configuration
         )
@@ -1463,7 +1463,7 @@ extension Datastore where AccessMode == ReadWrite {
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ decoder: PropertyListDecoder, _ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         let encoder = PropertyListEncoder()
@@ -1477,7 +1477,7 @@ extension Datastore where AccessMode == ReadWrite {
             version: version,
             encoder: { try encoder.encode($0) },
             decoders: migrations.mapValues { migration in
-                { @Sendable data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(decoder, data) }
             },
             configuration: configuration
         )
@@ -1491,7 +1491,7 @@ extension Datastore where AccessMode == ReadOnly {
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ decoder: JSONDecoder, _ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         self.init(
@@ -1499,7 +1499,7 @@ extension Datastore where AccessMode == ReadOnly {
             key: key,
             version: version,
             decoders: migrations.mapValues { migration in
-                { @Sendable data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(decoder, data) }
             },
             configuration: configuration
         )
@@ -1510,7 +1510,7 @@ extension Datastore where AccessMode == ReadOnly {
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> (id: IdentifierType, instance: InstanceType)],
+        migrations: [Version : @Sendable (_ decoder: PropertyListDecoder, _ data: Data) async throws -> (id: IdentifierType, instance: InstanceType)],
         configuration: Configuration = .init()
     ) -> Self {
         let decoder = PropertyListDecoder()
@@ -1520,7 +1520,7 @@ extension Datastore where AccessMode == ReadOnly {
             key: key,
             version: version,
             decoders: migrations.mapValues { migration in
-                { @Sendable data in try await migration(data, decoder) }
+                { @Sendable data in try await migration(decoder, data) }
             },
             configuration: configuration
         )
@@ -1561,7 +1561,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         version: Version = Format.currentVersion,
         encoder: JSONEncoder = JSONEncoder(),
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ decoder: JSONDecoder, _ data: Data) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.JSONStore(
@@ -1571,8 +1571,8 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             encoder: encoder,
             decoder: decoder,
             migrations: migrations.mapValues { migration in
-                { @Sendable data, decoder in
-                    let instance = try await migration(data, decoder)
+                { @Sendable decoder, data in
+                    let instance = try await migration(decoder, data)
                     return (id: instance.id, instance: instance)
                 }
             },
@@ -1586,7 +1586,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         outputFormat: PropertyListSerialization.PropertyListFormat = .binary,
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ decoder: PropertyListDecoder, _ data: Data) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.propertyListStore(
@@ -1595,8 +1595,8 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             version: version,
             outputFormat: outputFormat,
             migrations: migrations.mapValues { migration in
-                { @Sendable data, decoder in
-                    let instance = try await migration(data, decoder)
+                { @Sendable decoder, data in
+                    let instance = try await migration(decoder, data)
                     return (id: instance.id, instance: instance)
                 }
             },
@@ -1634,7 +1634,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
         decoder: JSONDecoder = JSONDecoder(),
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: JSONDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ decoder: JSONDecoder, _ data: Data) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyJSONStore(
@@ -1643,8 +1643,8 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             version: version,
             decoder: decoder,
             migrations: migrations.mapValues { migration in
-                { @Sendable data, decoder in
-                    let instance = try await migration(data, decoder)
+                { @Sendable decoder, data in
+                    let instance = try await migration(decoder, data)
                     return (id: instance.id, instance: instance)
                 }
             },
@@ -1657,7 +1657,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
         format: Format.Type = Format.self,
         key: DatastoreKey = Format.defaultKey,
         version: Version = Format.currentVersion,
-        migrations: [Version : @Sendable (_ data: Data, _ decoder: PropertyListDecoder) async throws -> InstanceType],
+        migrations: [Version : @Sendable (_ decoder: PropertyListDecoder, _ data: Data) async throws -> InstanceType],
         configuration: Configuration = .init()
     ) -> Self {
         self.readOnlyPropertyListStore(
@@ -1665,8 +1665,8 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
             key: key,
             version: version,
             migrations: migrations.mapValues { migration in
-                { @Sendable data, decoder in
-                    let instance = try await migration(data, decoder)
+                { @Sendable decoder, data in
+                    let instance = try await migration(decoder, data)
                     return (id: instance.id, instance: instance)
                 }
             },
