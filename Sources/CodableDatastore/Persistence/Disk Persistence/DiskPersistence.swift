@@ -565,7 +565,7 @@ extension DiskPersistence {
             }
             
             let currentCounter = nextTransactionCounter()
-//            print("[CDS] Starting transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
+//            print("[CDS] [\(storeURL.lastPathComponent)] Starting transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
             let (transaction, task) = await Transaction.makeTransaction(
                 persistence: self,
                 transactionIndex: currentCounter,
@@ -582,7 +582,7 @@ extension DiskPersistence {
             }
             
             let result = try await task.value
-//            print("[CDS] Finished transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
+//            print("[CDS] [\(storeURL.lastPathComponent)] Finished transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
             return result
         }
     }
@@ -607,7 +607,7 @@ extension DiskPersistence {
         /// If nothing changed, don't bother writing anything.
         if !containsEdits { return }
         
-//        print("[CDS] Persisting \(transactionIndex) “\(actionName ?? "")” - \(roots.keys), added \(addedDatastoreRoots), removed \(removedDatastoreRoots)")
+//        print("[CDS] [\(storeURL.lastPathComponent)] Persisting \(transactionIndex) “\(actionName ?? "")” - \(roots.keys), added \(addedDatastoreRoots), removed \(removedDatastoreRoots)")
         
         /// If we are read-only, make sure no edits have been made
         guard let self = self as? DiskPersistence<ReadWrite>

@@ -152,7 +152,7 @@ extension DiskPersistence {
             
             /// If the transaction has a parent, offload responsibility to it to persist the changes along with other children.
             if let parent {
-//                print("[CDS] Offloading persist to parent \(transactionIndex) - \(options)")
+//                print("[CDS] [\(persistence.storeURL.lastPathComponent)] Offloading persist to parent \(transactionIndex) - \(options)")
                 try await parent.apply(
                     rootObjects: rootObjects,
                     entryMutations: entryMutations,
@@ -211,7 +211,7 @@ extension DiskPersistence {
             @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
         ) async -> (Transaction, Task<T, Error>) {
             if let parent = Self.unsafeCurrentTransaction(for: persistence) {
-//                print("[CDS] Found parent \(parent.transactionIndex), making child \(transactionIndex)")
+//                print("[CDS] [\(persistence.storeURL.lastPathComponent)] Found parent \(parent.transactionIndex), making child \(transactionIndex)")
                 let (child, task) = await parent.childTransaction(
                     transactionIndex: transactionIndex,
                     actionName: actionName,
