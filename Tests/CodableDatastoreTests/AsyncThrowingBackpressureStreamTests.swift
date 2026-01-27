@@ -123,6 +123,7 @@ final class AsyncThrowingBackpressureStreamTests: XCTestCase {
                 } catch {
                     XCTAssertEqual(error is CancellationError, true)
                     expectation.fulfill()
+                    throw error
                 }
             }
             
@@ -166,6 +167,7 @@ final class AsyncThrowingBackpressureStreamTests: XCTestCase {
                 } catch {
                     XCTAssertEqual(error is CancellationError, true)
                     expectation.fulfill()
+                    throw error
                 }
             }
             
@@ -182,8 +184,9 @@ final class AsyncThrowingBackpressureStreamTests: XCTestCase {
                 _ = try await iterator.next()
                 XCTFail()
             } catch {
+                /// Let the write happen strictly after the read, in its own task so signaling doesn't "see" the cancellation.
                 XCTAssertEqual(error is CancellationError, true)
-                await writeContinuations.first(where: { _ in true })?.resume()
+                await Task { await writeContinuations.first(where: { _ in true })!.resume() }.value
             }
         }
         
@@ -198,7 +201,7 @@ final class AsyncThrowingBackpressureStreamTests: XCTestCase {
         let expectation = expectation(description: "Writes were cancelled")
         
         let task = Task {
-            let stream = AsyncThrowingBackpressureStream<Int> { continuation in
+            var stream: AsyncThrowingBackpressureStream<Int>? = AsyncThrowingBackpressureStream<Int> { continuation in
                 try await continuation.yield(0)
                 await withCheckedContinuation { continuation in
                     readProvider.yield(continuation)
@@ -206,13 +209,15 @@ final class AsyncThrowingBackpressureStreamTests: XCTestCase {
                 do {
                     try await continuation.yield(1)
                     XCTFail()
+                    expectation.fulfill()
                 } catch {
                     XCTAssertEqual(error is CancellationError, true)
                     expectation.fulfill()
+                    throw error
                 }
             }
             
-            let iterator = stream.makeAsyncIterator()
+            let iterator = stream!.makeAsyncIterator()
             let result = try await iterator.next()
             XCTAssertEqual(result, 0)
             
@@ -220,15 +225,18 @@ final class AsyncThrowingBackpressureStreamTests: XCTestCase {
                 task?.cancel()
             }
             
-            /// Let the write happen stritly after cancellation
-            await writeContinuations.first(where: { _ in true })?.resume()
+            /// Let the write happen strictly after cancellation, in its own task so signaling doesn't "see" the cancellation.
+            await Task { await writeContinuations.first(where: { _ in true })!.resume() }.value
             
             /// The stream can't be marked as cancelled if another read never happens.
             let wasCancelled = await iterator.wasCancelled
             XCTAssertEqual(wasCancelled, false)
+            
+            stream = nil
         }
         
         try? await task.value
+        readProvider.finish()
         
         await fulfillment(of: [expectation], timeout: 10)
     }
