@@ -21,24 +21,24 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
         var pendingReadContinuation: CheckedContinuation<Element?, Error>?
         var wasCancelled = false
         
-        func provide(_ result: Result<Element?, Error>) async throws {
+        func provide(_ result: Result<Element?, Error>, in continuation: CheckedContinuation<Void, Error>) {
             /// If reads were cancelled, propagate the cancellation to the provider without saving the result.
-            if wasCancelled { throw CancellationError() }
+            guard !wasCancelled else {
+                continuation.resume(throwing: CancellationError())
+                return
+            }
             
-            /// Enqueue the provided result and continue the task once it is ready to be consumed.
-            try await withCheckedThrowingContinuation { continuation in
-                /// Ideally, no more than one pending event should be queued up, as a second event means backpressure isn't working.
-                precondition(pendingWriteEvents.isEmpty, "More than one event has been queued on the stream.")
-                
-                /// If a read is currently pending, signal that a new result has been provided.
-                if let pendingReadContinuation {
-                    self.pendingReadContinuation = nil
-                    pendingReadContinuation.resume(with: result)
-                    continuation.resume()
-                } else {
-                    /// If we aren't ready for events, queue the event and suspend the task until events are ready. This will stop more values from being provided (ie. the backpressure at work).
-                    pendingWriteEvents.append((continuation, result))
-                }
+            /// Ideally, no more than one pending event should be queued up, as a second event means backpressure isn't working.
+            precondition(pendingWriteEvents.isEmpty, "More than one event has been queued on the stream.")
+            
+            /// If a read is currently pending, signal that a new result has been provided.
+            if let pendingReadContinuation {
+                self.pendingReadContinuation = nil
+                pendingReadContinuation.resume(with: result)
+                continuation.resume()
+            } else {
+                /// If we aren't ready for events, queue the event and suspend the task until events are ready. This will stop more values from being provided (ie. the backpressure at work).
+                pendingWriteEvents.append((continuation, result))
             }
         }
         
@@ -112,17 +112,34 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
         }
         
         func yield(_ value: Element) async throws {
-            guard let stateMachine else { throw CancellationError() }
-            try await stateMachine.provide(.success(value))
+            do {
+                try await withCheckedThrowingContinuation { continuation in
+                    guard let stateMachine else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    Task {
+                        await stateMachine.provide(.success(value), in: continuation)
+                    }
+                } as Void
+            } catch {
+                throw error
+            }
         }
         
         fileprivate func finish(throwing error: Error? = nil) async throws {
-            guard let stateMachine else { throw CancellationError() }
-            if let error {
-                try await stateMachine.provide(.failure(error))
-            } else {
-                try await stateMachine.provide(.success(nil))
-            }
+            try await withCheckedThrowingContinuation { continuation in
+                guard let stateMachine else { continuation.resume(throwing: CancellationError())
+                    return
+                }
+                Task {
+                    if let error {
+                        await stateMachine.provide(.failure(error), in: continuation)
+                    } else {
+                        await stateMachine.provide(.success(nil), in: continuation)
+                    }
+                }
+            } as Void
         }
     }
     
