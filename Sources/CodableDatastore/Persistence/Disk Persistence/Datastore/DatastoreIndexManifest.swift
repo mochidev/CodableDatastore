@@ -7,9 +7,9 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-import Foundation
 import AsyncSequenceReader
 import Bytes
+import Foundation
 
 typealias DatastoreIndexManifestIdentifier = DatedIdentifier<DatastoreIndexManifest>
 
@@ -102,7 +102,7 @@ extension DatastoreIndexManifest {
 #endif
     }
     
-    init(sequence: AnyReadableSequence<UInt8>, id: ID) async throws {
+    init(sequence: AnyReadableSequence<Byte, any Error>, id: ID) async throws {
         self.id = id
         
         var iterator = sequence.makeAsyncIterator()

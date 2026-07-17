@@ -7,9 +7,9 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-import Foundation
 import AsyncSequenceReader
 import Bytes
+import Foundation
 
 typealias DatastorePageIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Datastore.Page>
 
@@ -19,7 +19,7 @@ extension DiskPersistence.Datastore {
         
         let id: PersistenceDatastorePageID
         
-        var blocksReaderTask: Task<MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>>, Error>?
+        var blocksReaderTask: Task<MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock, any Error>>, Error>?
         
         var isPersisted: Bool
         
@@ -88,7 +88,7 @@ extension DiskPersistence.Datastore.Page {
 // MARK: - Persistence
 
 extension DiskPersistence.Datastore.Page {
-    private var readableSequence: AnyReadableSequence<Byte> {
+    private var readableSequence: AnyReadableSequence<Byte, any Error> {
         get throws {
 #if canImport(Darwin)
             if #available(macOS 12.0, iOS 15, watchOS 8, tvOS 15, *) {
@@ -102,13 +102,13 @@ extension DiskPersistence.Datastore.Page {
         }
     }
     
-    private nonisolated func performRead(sequence: AnyReadableSequence<Byte>) async throws -> MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>> {
-        var iterator = sequence.makeAsyncIterator()
+    private nonisolated func performRead(sequence: AnyReadableSequence<Byte, any Error>) async throws -> MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock, any Error>> {
+        var iterator = sequence.makeBufferedIterator()
         
         try await iterator.check(Self.header)
         
         /// Pages larger than 1 GB are unsupported.
-        let transformation = try await iterator.collect(max: Configuration.maximumPageSize) { sequence in
+        let transformation = await iterator.collect(max: Configuration.maximumPageSize) { sequence in
             sequence.iteratorMap { iterator in
                 guard let block = try await iterator.next(DatastorePageEntryBlock.self)
                 else { throw DiskPersistenceError.invalidPageFormat }
@@ -123,7 +123,7 @@ extension DiskPersistence.Datastore.Page {
         }
     }
     
-    var blocks: MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock>> {
+    var blocks: MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock, any Error>> {
         get async throws {
             if let blocksReaderTask {
                 return try await blocksReaderTask.value
