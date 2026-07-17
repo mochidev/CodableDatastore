@@ -120,7 +120,7 @@ final class DatastorePageEntryTests: XCTestCase {
             )
         ) { error in
             switch error {
-            case BytesError.invalidMemorySize(targetSize: 1, targetType: _, actualSize: 0): break
+            case BytesError.BufferSizeError.invalidBufferSize(targetSize: 1, targetType: "Byte", actualSize: 0): break
             default:
                 XCTFail("Unknown error \(error)")
             }
@@ -135,7 +135,7 @@ final class DatastorePageEntryTests: XCTestCase {
             )
         ) { error in
             switch error {
-            case BytesError.checkedSequenceNotFound: break
+            case BytesError.SequenceCheckError.checkedSequenceNotFound: break
             default:
                 XCTFail("Unknown error \(error)")
             }
@@ -152,7 +152,7 @@ final class DatastorePageEntryTests: XCTestCase {
             )
         ) { error in
             switch error {
-            case BytesError.invalidMemorySize(targetSize: 1, targetType: _, actualSize: 0): break
+            case BytesError.BufferSizeError.invalidBufferSize(targetSize: 1, targetType: "Byte", actualSize: 0): break
             default:
                 XCTFail("Unknown error \(error)")
             }
@@ -181,7 +181,7 @@ final class DatastorePageEntryTests: XCTestCase {
             )
         ) { error in
             switch error {
-            case BytesError.invalidMemorySize(targetSize: 1, targetType: _, actualSize: 0): break
+            case BytesError.BufferSizeError.invalidBufferSize(targetSize: 1, targetType: "Byte", actualSize: 0): break
             default:
                 XCTFail("Unknown error \(error)")
             }

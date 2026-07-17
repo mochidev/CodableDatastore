@@ -11,6 +11,7 @@
 @preconcurrency import Foundation
 #endif
 import XCTest
+import Bytes
 @testable import CodableDatastore
 
 fileprivate struct SortError: Error, Equatable {}
