@@ -7,9 +7,9 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-import Foundation
 import AsyncSequenceReader
 import Bytes
+import Foundation
 
 struct DatastorePageEntry: Hashable {
     var headers: [Bytes]
