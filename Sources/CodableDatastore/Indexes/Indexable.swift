@@ -7,7 +7,7 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-import Foundation
+public import Foundation
 
 /// An alias representing the requirements for a property to be indexable, namely that they conform to both ``/Swift/Codable`` and ``/Swift/Comparable``.
 public typealias Indexable = Comparable & Hashable & Codable & Sendable

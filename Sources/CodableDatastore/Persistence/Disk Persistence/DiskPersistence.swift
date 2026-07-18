@@ -7,11 +7,7 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-#if canImport(Darwin)
-import Foundation
-#else
-@preconcurrency import Foundation
-#endif
+public import Foundation
 
 public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The location of this persistence.

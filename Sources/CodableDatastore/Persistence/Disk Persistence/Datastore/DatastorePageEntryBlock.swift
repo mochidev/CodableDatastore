@@ -8,7 +8,7 @@
 //
 
 import AsyncSequenceReader
-import Bytes
+public import Bytes
 import Foundation
 
 /// A block of data that represents a portion of an entry on a page.

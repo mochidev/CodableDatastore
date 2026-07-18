@@ -7,7 +7,7 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-import Foundation
+public import Foundation
 
 /// Make UUIDs comparable on platforms that shipped without it, so that they can be used transparently as an index.
 #if !canImport(FoundationEssentials)
