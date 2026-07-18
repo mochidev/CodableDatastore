@@ -7,7 +7,7 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-import Foundation
+public import Foundation
 
 /// A interface a ``Datastore`` uses to communicate with a ``Persistence``.
 /// 
