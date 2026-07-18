@@ -14,6 +14,8 @@
 import PackageDescription
 
 let swiftSettings: [PackageDescription.SwiftSetting] = [
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
     .enableUpcomingFeature("ImmutableWeakCaptures"),
 ]
 
