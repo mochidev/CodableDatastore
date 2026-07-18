@@ -110,9 +110,21 @@ extension DiskPersistence.Datastore.Page {
         /// Pages larger than 1 GB are unsupported.
         let transformation = await iterator.collect(max: Configuration.maximumPageSize) { sequence in
             sequence.iteratorMap { iterator in
+                #if canImport(Darwin)
+                if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
+                    guard let block = try await iterator.next(DatastorePageEntryBlock.self, isolation: #isolation)
+                    else { throw DiskPersistenceError.invalidPageFormat }
+                    return block
+                } else {
+                    guard let block = try await iterator.next(DatastorePageEntryBlock.self)
+                    else { throw DiskPersistenceError.invalidPageFormat }
+                    return block
+                }
+                #else
                 guard let block = try await iterator.next(DatastorePageEntryBlock.self)
                 else { throw DiskPersistenceError.invalidPageFormat }
                 return block
+                #endif
             }
         }
         
@@ -218,7 +230,7 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence wh
 }
 
 extension RangeReplaceableCollection where Self: Sendable {
-    init<S: AsyncSequence>(_ sequence: S) async throws where S.Element == Element {
+    init<S: AsyncSequence>(_ sequence: sending S) async throws where S.Element == Element {
         self = try await sequence.reduce(into: Self.init()) { @Sendable partialResult, element in
             partialResult.append(element)
         }

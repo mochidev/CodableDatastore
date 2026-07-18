@@ -35,9 +35,55 @@ enum DatastorePageEntryBlock: Hashable, Sendable {
 
 // MARK: - Decoding
 
+#if canImport(Darwin)
+@available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension AsyncIteratorProtocol where Element == Byte {
+    #if swift(>=6.2)
+    @concurrent
+    #endif
     @usableFromInline
     mutating func next(_ type: DatastorePageEntryBlock.Type) async throws -> DatastorePageEntryBlock? {
+        guard let blockType = try await nextIfPresent(utf8: String.self, count: 1) else {
+            return nil
+        }
+        
+        /// Fail early if the block type is not supported.
+        switch blockType {
+        case "<", "=", ">", "~": break
+        default:
+            throw DiskPersistenceError.invalidPageFormat
+        }
+        
+        /// Artificially limit ourselves to ~ 9 GB, though realistically our limit will be much, much lower.
+        guard let blockSizeBytes = try await collect(upToIncluding: "\n".utf8Bytes, throwsIfOver: 11)
+        else { throw DiskPersistenceError.invalidPageFormat }
+        
+        let decimalSizeString = String(utf8Bytes: blockSizeBytes.dropLast(1))
+        guard let blockSize = Int(decimalSizeString), blockSize > 0
+        else { throw DiskPersistenceError.invalidPageFormat }
+        
+        let payload = try await next(Bytes.self, count: blockSize)
+        
+        try await check(utf8: "\n")
+        
+        switch blockType {
+        case "<": return .tail(payload)
+        case "=": return .complete(payload)
+        case ">": return .head(payload)
+        case "~": return .slice(payload)
+        default: throw DiskPersistenceError.invalidPageFormat
+        }
+    }
+}
+#endif // canImport(Darwin)
+
+@available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+extension AsyncIteratorProtocol where Element == Byte {
+    @usableFromInline
+    mutating func next(
+        _ type: DatastorePageEntryBlock.Type,
+        isolation actor: isolated (any Actor)? = #isolation
+    ) async throws -> DatastorePageEntryBlock? {
         guard let blockType = try await nextIfPresent(utf8: String.self, count: 1) else {
             return nil
         }
