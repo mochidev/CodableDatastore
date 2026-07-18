@@ -7,12 +7,10 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
+#if !canImport(FoundationEssentials)
 public import Foundation
 
 /// Make UUIDs comparable on platforms that shipped without it, so that they can be used transparently as an index.
-#if !canImport(FoundationEssentials)
-#if swift(<5.9) || os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Windows)
-#if compiler(>=6)
 extension UUID: @retroactive Comparable {
     @inlinable
     @_disfavoredOverload
@@ -20,17 +18,6 @@ extension UUID: @retroactive Comparable {
         lhs.uuid < rhs.uuid
     }
 }
-#else
-extension UUID: Comparable {
-    @inlinable
-    @_disfavoredOverload
-    public static func < (lhs: UUID, rhs: UUID) -> Bool {
-        lhs.uuid < rhs.uuid
-    }
-}
-#endif
-#endif
-#endif
 
 /// Make UUIDs comparable, so that they can be used transparently as an index.
 ///
@@ -57,3 +44,4 @@ public func < (lhs: uuid_t, rhs: uuid_t) -> Bool {
     
     return result < 0
 }
+#endif
