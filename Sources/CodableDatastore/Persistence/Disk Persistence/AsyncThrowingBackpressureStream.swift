@@ -18,11 +18,11 @@ import Foundation
 /// The reading task may be cancelled at any time, immediately ending the loop, and propagaing the cancellation to the writing child task, stopping any more values from being provided to the stream.
 struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
     fileprivate actor StateMachine {
-        var pendingWriteEvents: [(CheckedContinuation<Void, Error>, Result<Element?, Error>)] = []
-        var pendingReadContinuation: CheckedContinuation<Element?, Error>?
+        var pendingWriteEvents: [(CheckedContinuation<Void, any Error>, Result<Element?, any Error>)] = []
+        var pendingReadContinuation: CheckedContinuation<Element?, any Error>?
         var wasCancelled = false
         
-        func provide(_ result: Result<Element?, Error>, in continuation: CheckedContinuation<Void, Error>) {
+        func provide(_ result: Result<Element?, any Error>, in continuation: CheckedContinuation<Void, any Error>) {
             /// If reads were cancelled, propagate the cancellation to the provider without saving the result.
             guard !wasCancelled else {
                 continuation.resume(throwing: CancellationError())
@@ -128,7 +128,7 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
             }
         }
         
-        fileprivate func finish(throwing error: Error? = nil) async throws {
+        fileprivate func finish(throwing error: (any Error)? = nil) async throws {
             try await withCheckedThrowingContinuation { continuation in
                 guard let stateMachine else { continuation.resume(throwing: CancellationError())
                     return

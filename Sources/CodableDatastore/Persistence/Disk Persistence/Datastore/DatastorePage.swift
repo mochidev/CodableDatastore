@@ -19,7 +19,7 @@ extension DiskPersistence.Datastore {
         
         let id: PersistenceDatastorePageID
         
-        var blocksReaderTask: Task<MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock, any Error>>, Error>?
+        var blocksReaderTask: Task<MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock, any Error>>, any Error>?
         
         var isPersisted: Bool
         
@@ -174,7 +174,7 @@ extension DiskPersistence.Datastore.Page {
 actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence where Base.Element: Sendable, Base.AsyncIterator: Sendable, Base.AsyncIterator.Element: Sendable {
     typealias Element = Base.Element
     
-    private var cachedEntries: [Task<Element?, Error>] = []
+    private var cachedEntries: [Task<Element?, any Error>] = []
     private var baseIterator: Base.AsyncIterator?
     
     struct AsyncIterator: AsyncIteratorProtocol & Sendable {
@@ -196,7 +196,7 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence wh
             
             precondition(index == cachedEntries.count, "\(index) is out of bounds.")
             
-            let lastTask: Task<Element?, Error>? = cachedEntries.last
+            let lastTask: Task<Element?, any Error>? = cachedEntries.last
             
             let newTask = Task {
                 /// Make sure previous iteration finished before sourcing the next one.
