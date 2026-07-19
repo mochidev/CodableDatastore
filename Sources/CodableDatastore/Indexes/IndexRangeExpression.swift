@@ -1,9 +1,10 @@
 //
 //  IndexRangeExpression.swift
-//  CodableDatastore
+//  https://github.com/mochidev/CodableDatastore
 //
 //  Created by Dimitri Bouniol on 2023-06-05.
-//  Copyright © 2023-24 Mochi Development, Inc. All rights reserved.
+//  Copyright © 2023-26 Mochi Development, Inc. All rights reserved.
+//  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
 /// A type of bound found on either end of a range.

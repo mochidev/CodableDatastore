@@ -1,6 +1,16 @@
 // swift-tools-version: 5.9
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
+//
+//  Package.swift
+//  https://github.com/mochidev/CodableDatastore
+//
+//  Created by Dimitri Bouniol on 2023-05-10.
+//  Copyright © 2023-26 Mochi Development, Inc. All rights reserved.
+//  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
+//
+
+
 import PackageDescription
 
 let package = Package(
