@@ -1,9 +1,10 @@
 //
 //  Task+Unresolved.swift
-//  CodableDatastore
+//  https://github.com/mochidev/CodableDatastore
 //
-//  Created by Dimitri Bouniol on 12/22/25.
-//  Copyright © 2023-25 Mochi Development, Inc. All rights reserved.
+//  Created by Dimitri Bouniol on 2025-12-22.
+//  Copyright © 2023-26 Mochi Development, Inc. All rights reserved.
+//  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
 extension Task where Success == Void, Failure == Never {
