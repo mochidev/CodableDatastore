@@ -35,7 +35,7 @@ actor Snapshot<AccessMode: _AccessMode> {
     var cachedIteration: SnapshotIteration?
     
     /// A pointer to the last manifest updater, so updates can be serialized after the last request.
-    var lastUpdateManifestTask: Task<Sendable, Error>?
+    var lastUpdateManifestTask: Task<any Sendable, any Error>?
     
     /// The loaded datastores.
     var datastores: [DatastoreIdentifier: DiskPersistence<AccessMode>.Datastore] = [:]
@@ -179,7 +179,7 @@ extension Snapshot {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateManifest<T>(
         updater: @Sendable @escaping (_ manifest: inout SnapshotManifest, _ iteration: inout SnapshotIteration) async throws -> T
-    ) -> Task<T, Error> where AccessMode == ReadWrite {
+    ) -> Task<T, any Error> where AccessMode == ReadWrite {
         if let (manifest, iteration) = SnapshotTaskLocals.manifest(for: persistence) {
             return Task {
                 var updatedManifest = manifest
@@ -247,7 +247,7 @@ extension Snapshot {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func readManifest<T>(
         accessor: @Sendable @escaping (_ manifest: SnapshotManifest, _ iteration: SnapshotIteration) async throws -> T
-    ) -> Task<T, Error> {
+    ) -> Task<T, any Error> {
         
         if let (manifest, iteration) = SnapshotTaskLocals.manifest(for: persistence) {
             return Task { try await accessor(manifest, iteration) }

@@ -173,7 +173,7 @@ extension Datastore {
         }
     }
     
-    func registerAndMigrate(with transaction: DatastoreInterfaceProtocol) async throws -> Progress {
+    func registerAndMigrate(with transaction: any DatastoreInterfaceProtocol) async throws -> Progress {
         let persistedDescriptor = try await transaction.register(datastore: self)
         
         /// Only operate on read-write datastores beyond this point.
@@ -1676,6 +1676,6 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
 
 private enum TaskStatus<Value> {
     case waiting
-    case inProgress(Task<Value, Error>)
+    case inProgress(Task<Value, any Error>)
     case complete(Value)
 }

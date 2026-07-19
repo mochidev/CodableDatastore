@@ -23,9 +23,9 @@ extension DiskPersistence.Datastore {
         let id: PersistenceDatastoreIndexID
         
         var _manifest: DatastoreIndexManifest?
-        var manifestTask: Task<DatastoreIndexManifest, Error>?
+        var manifestTask: Task<DatastoreIndexManifest, any Error>?
         
-        var cachedOrderedPages: Task<[LazyTask<DiskPersistence.Datastore.Page>?], Error>?
+        var cachedOrderedPages: Task<[LazyTask<DiskPersistence.Datastore.Page>?], any Error>?
         
         var isPersisted: Bool
         

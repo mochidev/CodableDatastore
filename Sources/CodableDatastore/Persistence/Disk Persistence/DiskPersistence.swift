@@ -17,7 +17,7 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     var cachedStoreInfo: StoreInfo?
     
     /// A pointer to the last store info updater, so updates can be serialized after the last request
-    var lastUpdateStoreInfoTask: Task<Sendable, Error>?
+    var lastUpdateStoreInfoTask: Task<any Sendable, any Error>?
     
     /// The loaded Snapshots
     var snapshots: [SnapshotIdentifier: Snapshot<AccessMode>] = [:]
@@ -175,7 +175,7 @@ extension DiskPersistence {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateStoreInfo<T: Sendable>(
         @_inheritActorContext updater: @Sendable @escaping (_ storeInfo: inout StoreInfo) async throws -> T
-    ) -> Task<T, Error> where AccessMode == ReadWrite {
+    ) -> Task<T, any Error> where AccessMode == ReadWrite {
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
             return Task {
                 var updatedStoreInfo = storeInfo
@@ -223,7 +223,7 @@ extension DiskPersistence {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateStoreInfo<T: Sendable>(
         @_inheritActorContext accessor: @Sendable @escaping (_ storeInfo: StoreInfo) async throws -> T
-    ) -> Task<T, Error> {
+    ) -> Task<T, any Error> {
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
             return Task { try await accessor(storeInfo) }
         }
@@ -315,7 +315,7 @@ extension DiskPersistence {
     func updateCurrentSnapshot<T: Sendable>(
         dateUpdate: ModificationUpdate = .updateOnWrite,
         updater: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
-    ) -> Task<T, Error> where AccessMode == ReadWrite {
+    ) -> Task<T, any Error> where AccessMode == ReadWrite {
         /// Grab access to the store info to load and update it.
         return updateStoreInfo { storeInfo in
             /// Grab the current snapshot from the store info
@@ -341,7 +341,7 @@ extension DiskPersistence {
     /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
     func updateCurrentSnapshot<T: Sendable>(
         accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
-    ) -> Task<T, Error> {
+    ) -> Task<T, any Error> {
         /// Grab access to the store info to load and update it.
         return updateStoreInfo { storeInfo in
             /// Grab the current snapshot from the store info
@@ -549,7 +549,7 @@ extension DiskPersistence {
     public func _withTransaction<T: Sendable>(
         actionName: String?,
         options: UnsafeTransactionOptions,
-        transaction: @Sendable (_ transaction: DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        transaction: @Sendable (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
         try await withoutActuallyEscaping(transaction) { escapingTransaction in
             /// If the transaction is starting in the context of another persistence's transaction, make sure it is a read-only one. Otherwise assert and throw an error as it likely indicates a mistake and could lead to unexpected consistency violations if one persistence succeeds while the other fails.

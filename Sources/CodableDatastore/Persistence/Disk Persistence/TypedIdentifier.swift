@@ -23,12 +23,12 @@ protocol TypedIdentifierProtocol: RawRepresentable, Codable, Equatable, Hashable
 }
 
 extension TypedIdentifierProtocol {
-    init(from decoder: Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let rawValue = try decoder.singleValueContainer().decode(String.self)
         self.init(rawValue: rawValue)
     }
     
-    func encode(to encoder: Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var encoder = encoder.singleValueContainer()
         try encoder.encode(rawValue)
     }

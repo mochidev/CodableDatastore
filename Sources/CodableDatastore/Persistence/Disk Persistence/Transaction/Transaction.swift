@@ -17,7 +17,7 @@ extension DiskPersistence {
         unowned let parent: Transaction?
         weak var lastReadWriteChildTransaction: Transaction?
         
-        private(set) var task: Task<Void, Error>!
+        private(set) var task: Task<Void, any Error>!
         let transactionIndex: Int
         let actionName: String?
         let options: UnsafeTransactionOptions
@@ -54,7 +54,7 @@ extension DiskPersistence {
         private func attachTask<T>(
             options: UnsafeTransactionOptions,
             @_inheritActorContext handler: @Sendable @escaping () async throws -> T
-        ) async -> Task<T, Error> {
+        ) async -> Task<T, any Error> {
             let task = Task {
                 isActive = true
                 let returnValue = try await TransactionTaskLocals.with(transaction: self, for: persistence) {
@@ -210,7 +210,7 @@ extension DiskPersistence {
             actionName: String?,
             options: UnsafeTransactionOptions,
             @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
-        ) async -> (Transaction, Task<T, Error>) {
+        ) async -> (Transaction, Task<T, any Error>) {
             if let parent = Self.unsafeCurrentTransaction(for: persistence) {
 //                print("[CDS] [\(persistence.storeURL.lastPathComponent)] Found parent \(parent.transactionIndex), making child \(transactionIndex)")
                 let (child, task) = await parent.childTransaction(
@@ -246,7 +246,7 @@ extension DiskPersistence {
             actionName: String?,
             options: UnsafeTransactionOptions,
             @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
-        ) async -> (Transaction, Task<T, Error>) {
+        ) async -> (Transaction, Task<T, any Error>) {
             assert(!self.options.contains(.readOnly) || options.contains(.readOnly), "A child transaction was declared read-write, even though its parent was read-only!")
             let childTransaction = Transaction(
                 persistence: persistence,
@@ -1383,14 +1383,14 @@ fileprivate protocol AnyDiskTransaction: Sendable {}
 
 fileprivate enum TransactionTaskLocals {
     @TaskLocal
-    static var transactionStorage: [ObjectIdentifier : AnyDiskTransaction] = [:]
+    static var transactionStorage: [ObjectIdentifier : any AnyDiskTransaction] = [:]
     
-    static func transaction<AccessMode: _AccessMode>(for persistence: DiskPersistence<AccessMode>) -> AnyDiskTransaction? {
+    static func transaction<AccessMode: _AccessMode>(for persistence: DiskPersistence<AccessMode>) -> (any AnyDiskTransaction)? {
         transactionStorage[ObjectIdentifier(persistence)]
     }
     
     static func with<AccessMode: _AccessMode, R>(
-        transaction: AnyDiskTransaction,
+        transaction: any AnyDiskTransaction,
         for persistence: DiskPersistence<AccessMode>,
         operation: () async throws -> R
     ) async rethrows -> R {
