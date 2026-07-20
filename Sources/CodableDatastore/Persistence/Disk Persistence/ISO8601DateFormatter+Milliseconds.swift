@@ -14,22 +14,31 @@ private struct GlobalDateFormatter: Sendable {
     static let cachedFormatter = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
     
     static let parse: @Sendable (_ value: String) -> Date? = {
+        #if canImport(FoundationEssentials)
+        return { try? cachedFormatter.parse($0) }
+        #else
         if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
             return { try? cachedFormatter.parse($0) }
         } else {
             return { ISO8601DateFormatter.withMilliseconds.date(from: $0) }
         }
+        #endif
     }()
     
     static let format: @Sendable (_ value: Date) -> String = {
+        #if canImport(FoundationEssentials)
+        return { cachedFormatter.format($0) }
+        #else
         if #available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *) {
             return { cachedFormatter.format($0) }
         } else {
             return { ISO8601DateFormatter.withMilliseconds.string(from: $0) }
         }
+        #endif
     }()
 }
 
+#if !canImport(FoundationEssentials)
 private extension ISO8601DateFormatter {
     nonisolated(unsafe) static let withMilliseconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
@@ -44,6 +53,7 @@ private extension ISO8601DateFormatter {
         return formatter
     }()
 }
+#endif // !canImport(FoundationEssentials)
 
 extension JSONDecoder.DateDecodingStrategy {
     static let iso8601WithMilliseconds: Self = custom { decoder in
