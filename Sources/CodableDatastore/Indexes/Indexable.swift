@@ -25,7 +25,6 @@ public struct AnyIndexable {
 
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 /// Matching implementation from https://github.com/apple/swift/pull/64899/files
-#if compiler(>=6)
 extension Never: @retroactive Codable {
     public init(from decoder: any Decoder) throws {
         let context = DecodingError.Context(
@@ -35,17 +34,6 @@ extension Never: @retroactive Codable {
     }
     public func encode(to encoder: any Encoder) throws {}
 }
-#else
-extension Never: Codable {
-    public init(from decoder: any Decoder) throws {
-        let context = DecodingError.Context(
-            codingPath: decoder.codingPath,
-            debugDescription: "Unable to decode an instance of Never.")
-        throw DecodingError.typeMismatch(Never.self, context)
-    }
-    public func encode(to encoder: any Encoder) throws {}
-}
-#endif
 #endif
 
 /// A marker protocol for types that can be used as a ranged index.
@@ -92,21 +80,12 @@ extension UInt16: DiscreteIndexable, RangedIndexable {}
 extension UInt32: DiscreteIndexable, RangedIndexable {}
 extension UInt64: DiscreteIndexable, RangedIndexable {}
 
-#if compiler(>=6)
 extension Optional: @retroactive Comparable where Wrapped: Comparable {
     public static func < (lhs: Self, rhs: Self) -> Bool {
         if let lhs, let rhs { return lhs < rhs }
         return lhs == nil && rhs != nil
     }
 }
-#else
-extension Optional: Comparable where Wrapped: Comparable {
-    public static func < (lhs: Self, rhs: Self) -> Bool {
-        if let lhs, let rhs { return lhs < rhs }
-        return lhs == nil && rhs != nil
-    }
-}
-#endif
 extension Optional: DiscreteIndexable where Wrapped: DiscreteIndexable {}
 extension Optional: RangedIndexable where Wrapped: RangedIndexable {}
 
