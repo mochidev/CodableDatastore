@@ -155,6 +155,14 @@ extension PartialRangeFrom: IndexRangeExpression {
     public var order: RangeOrder { .ascending }
 }
 
+#if compiler(<6.2)
+extension Range: @unchecked Sendable where Bound: Sendable {}
+extension ClosedRange: @unchecked Sendable where Bound: Sendable {}
+extension PartialRangeUpTo: @unchecked Sendable where Bound: Sendable {}
+extension PartialRangeThrough: @unchecked Sendable where Bound: Sendable {}
+extension PartialRangeFrom: @unchecked Sendable where Bound: Sendable {}
+#endif
+
 /// A range of indices within an Index to fetch.
 public struct IndexRange<Bound: Comparable>: IndexRangeExpression {
     /// The lower bound of the range.
