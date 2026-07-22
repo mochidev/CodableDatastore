@@ -276,9 +276,5 @@ public struct AnyIndexRepresentation<Instance: Sendable>: Hashable, Sendable {
     }
 }
 
-/// Forced KeyPath conformance since Swift 5.10 doesn't support it out of the box.
-#if compiler(>=6)
+/// Forced KeyPath conformance since Swift 6 doesn't support it out of the box.
 extension KeyPath: @unchecked @retroactive Sendable where Root: Sendable, Value: Sendable {}
-#else
-extension KeyPath: @unchecked Sendable where Root: Sendable, Value: Sendable {}
-#endif
