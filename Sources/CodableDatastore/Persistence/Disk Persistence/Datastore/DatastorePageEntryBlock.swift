@@ -38,7 +38,7 @@ enum DatastorePageEntryBlock: Hashable, Sendable {
 #if canImport(Darwin)
 @available(macOS 10.15, iOS 13.0, watchOS 6.0, tvOS 13.0, *)
 extension AsyncIteratorProtocol where Element == Byte {
-    #if swift(>=6.2)
+    #if compiler(>=6.2)
     @concurrent
     #endif
     @usableFromInline
