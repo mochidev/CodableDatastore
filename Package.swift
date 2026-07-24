@@ -38,19 +38,26 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/mochidev/AsyncSequenceReader.git", .upToNextMinor(from: "0.5.0")),
         .package(url: "https://github.com/mochidev/Bytes.git", .upToNextMinor(from: "0.6.2")),
+        .package(url: "https://github.com/mochidev/swift-questionable-concurrency", .upToNextMinor(from: "0.2.1")),
     ],
     targets: [
         .target(
             name: "CodableDatastore",
             dependencies: [
                 "AsyncSequenceReader",
-                "Bytes"
+                "Bytes",
+                .product(name: "QuestionableConcurrency", package: "swift-questionable-concurrency")
             ],
             swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "CodableDatastoreTests",
-            dependencies: ["CodableDatastore"],
+            dependencies: [
+                "AsyncSequenceReader",
+                "CodableDatastore",
+                "Bytes",
+                .product(name: "QuestionableConcurrency", package: "swift-questionable-concurrency")
+            ],
             swiftSettings: swiftSettings
         ),
     ]
