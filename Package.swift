@@ -38,7 +38,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/mochidev/AsyncSequenceReader.git", .upToNextMinor(from: "0.5.0")),
         .package(url: "https://github.com/mochidev/Bytes.git", .upToNextMinor(from: "0.6.2")),
-        .package(url: "https://github.com/mochidev/swift-questionable-concurrency", .upToNextMinor(from: "0.2.1")),
+        .package(url: "https://github.com/mochidev/swift-questionable-concurrency", .upToNextMinor(from: "0.2.2")),
     ],
     targets: [
         .target(

@@ -143,19 +143,16 @@ final class SnapshotTests: XCTestCase, @unchecked Sendable {
         let date1 = Date(timeIntervalSince1970: 0)
         let date2 = Date(timeIntervalSince1970: 10)
         
-        let task1 = await snapshot.updateManifest { manifest, _ in
+        try await snapshot.updatingManifest { manifest, _ in
             sleep(1)
             XCTAssertNotEqual(manifest.modificationDate, date2)
             manifest.modificationDate = date1
         }
         
-        let task2 = await snapshot.updateManifest { manifest, _ in
+        try await snapshot.updatingManifest { manifest, _ in
             XCTAssertEqual(manifest.modificationDate, date1)
             manifest.modificationDate = date2
         }
-        
-        try await task1.value
-        try await task2.value
         
         let currentManifest = await snapshot.cachedManifest
         XCTAssertEqual(currentManifest?.modificationDate, date2)
