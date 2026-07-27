@@ -8,6 +8,7 @@
 //
 
 public import Foundation
+import QuestionableConcurrency
 
 public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// The location of this persistence.
@@ -16,8 +17,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// A cached instance of the store info as last loaded from disk.
     var cachedStoreInfo: StoreInfo?
     
-    /// A pointer to the last store info updater, so updates can be serialized after the last request
-    var lastUpdateStoreInfoTask: Task<any Sendable, any Error>?
+    /// A transaction stream for storeInfo updates, so reads and writes can be serialized in request order.
+    var storeInfoTransactionStream = TransactionStream()
     
     /// The loaded Snapshots
     var snapshots: [SnapshotIdentifier: Snapshot<AccessMode>] = [:]
@@ -166,35 +167,28 @@ extension DiskPersistence {
         cachedStoreInfo = storeInfo
     }
     
-    /// Load and update the store info in an updater, returning the task for the updater.
+    /// Load and update the store info in an updater.
     ///
     /// This method loads the ``StoreInfo`` from cache, offers it to be mutated, then writes it back to disk, if it changed. It is up to the caller to update the modification date of the store.
     ///
     /// - Note: Calling this method when no store info exists on disk will create it, even if no changes occur in the block.
     /// - Parameter updater: An updater that takes a mutable reference to a store info, and will forward the returned value to the caller.
-    /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateStoreInfo<T: Sendable>(
-        @_inheritActorContext updater: @Sendable @escaping (_ storeInfo: inout StoreInfo) async throws -> T
-    ) -> Task<T, any Error> where AccessMode == ReadWrite {
+    /// - Returns: The value returned from the `updater`.
+    func withStoreInfo<T: Sendable>(
+        updater: (_ storeInfo: inout StoreInfo) async throws -> T
+    ) async throws -> T where AccessMode == ReadWrite {
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
-            return Task {
-                var updatedStoreInfo = storeInfo
-                let returnValue = try await updater(&updatedStoreInfo)
-                
-                guard updatedStoreInfo == storeInfo else {
-                    throw DiskPersistenceInternalError.nestedStoreWrite
-                }
-                
-                return returnValue
+            var updatedStoreInfo = storeInfo
+            let returnValue = try await updater(&updatedStoreInfo)
+            
+            guard updatedStoreInfo == storeInfo else {
+                throw DiskPersistenceInternalError.nestedStoreWrite
             }
+            
+            return returnValue
         }
         
-        /// Grab the last task so we can chain off of it in a serial manner.
-        let lastUpdaterTask = lastUpdateStoreInfoTask
-        let updaterTask = Task {
-            /// We don't care if the last request throws an error or not, but we do want it to complete first.
-            _ = try? await lastUpdaterTask?.value
-            
+        return try await storeInfoTransactionStream.withTransaction {
             /// Load the store info so we have a fresh copy, unless we have a cached copy already.
             var storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
             
@@ -209,58 +203,6 @@ extension DiskPersistence {
             }
             return returnValue
         }
-        /// Assign the task to our pointer so we can depend on it the next time. Also, re-wrap it so we can keep proper type information when returning from this method.
-        lastUpdateStoreInfoTask = Task { try await updaterTask.value }
-        
-        return updaterTask
-    }
-    
-    /// Load the store info in an accessor, returning the task for the updater.
-    ///
-    /// This method loads the ``StoreInfo`` from cache.
-    ///
-    /// - Parameter accessor: An accessor that takes an immutable reference to a store info, and will forward the returned value to the caller.
-    /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateStoreInfo<T: Sendable>(
-        @_inheritActorContext accessor: @Sendable @escaping (_ storeInfo: StoreInfo) async throws -> T
-    ) -> Task<T, any Error> {
-        if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
-            return Task { try await accessor(storeInfo) }
-        }
-        
-        /// Grab the last task so we can chain off of it in a serial manner.
-        let lastUpdaterTask = lastUpdateStoreInfoTask
-        let updaterTask = Task {
-            /// We don't care if the last request throws an error or not, but we do want it to complete first.
-            _ = try? await lastUpdaterTask?.value
-            
-            /// Load the store info so we have a fresh copy, unless we have a cached copy already.
-            let storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
-            
-            /// Let the accessor do something with the store info, storing the variable on the Task Local stack.
-            return try await DiskPersistenceTaskLocals.with(storeInfo: storeInfo, for: self) {
-                try await accessor(storeInfo)
-            }
-        }
-        /// Assign the task to our pointer so we can depend on it the next time. Also, re-wrap it so we can keep proper type information when returning from this method.
-        lastUpdateStoreInfoTask = Task { try await updaterTask.value }
-        
-        return updaterTask
-    }
-    
-    /// Load and update the store info in an updater.
-    ///
-    /// This method loads the ``StoreInfo`` from cache, offers it to be mutated, then writes it back to disk, if it changed. It is up to the caller to update the modification date of the store.
-    ///
-    /// - Note: Calling this method when no store info exists on disk will create it, even if no changes occur in the block.
-    /// - Parameter updater: An updater that takes a mutable reference to a store info, and will forward the returned value to the caller.
-    /// - Returns: The value returned from the `updater`.
-    func withStoreInfo<T: Sendable>(
-        updater: @Sendable (_ storeInfo: inout StoreInfo) async throws -> T
-    ) async throws -> T where AccessMode == ReadWrite {
-        try await withoutActuallyEscaping(updater) { escapingClosure in
-            try await updateStoreInfo(updater: escapingClosure).value
-        }
     }
     
     /// Load the store info in an updater.
@@ -271,10 +213,20 @@ extension DiskPersistence {
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
     func withStoreInfo<T: Sendable>(
-        accessor: @Sendable (_ storeInfo: StoreInfo) async throws -> T
+        accessor: (_ storeInfo: StoreInfo) async throws -> T
     ) async throws -> T {
-        try await withoutActuallyEscaping(accessor) { escapingClosure in
-            try await updateStoreInfo(accessor: escapingClosure).value
+        if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
+            return try await accessor(storeInfo)
+        }
+        
+        return try await storeInfoTransactionStream.withTransaction {
+            /// Load the store info so we have a fresh copy, unless we have a cached copy already.
+            let storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
+            
+            /// Let the accessor do something with the store info, storing the variable on the Task Local stack.
+            return try await DiskPersistenceTaskLocals.with(storeInfo: storeInfo, for: self) {
+                try await accessor(storeInfo)
+            }
         }
     }
 }
@@ -304,22 +256,22 @@ extension DiskPersistence {
         return snapshot
     }
     
-    /// Load and update the current snapshot in an updater, returning the task for the updater.
+    /// Load the current snapshot in an updater.
     ///
     /// This method loads the current ``Snapshot`` so it can be updated.
     ///
     /// - Note: Calling this method when no store info exists on disk will create it.
     /// - Parameter dateUpdate: The method to which to update the date of the main store with.
     /// - Parameter updater: An updater that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
-    /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateCurrentSnapshot<T: Sendable>(
+    /// - Returns: The value returned from the `accessor`. 
+    func updatingCurrentSnapshot<T: Sendable>(
         dateUpdate: ModificationUpdate = .updateOnWrite,
-        updater: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
-    ) -> Task<T, any Error> where AccessMode == ReadWrite {
+        updater: sending (_ snapshot: Snapshot<AccessMode>) async throws -> T
+    ) async throws -> T where AccessMode == ReadWrite {
         /// Grab access to the store info to load and update it.
-        return updateStoreInfo { storeInfo in
+        try await withStoreInfo { storeInfo in
             /// Grab the current snapshot from the store info
-            let snapshot = self.loadSnapshot(from: storeInfo)
+            let snapshot = loadSnapshot(from: storeInfo)
             
             /// Load a modification date to use
             let modificationDate = dateUpdate.modificationDate(for: storeInfo.modificationDate)
@@ -335,40 +287,6 @@ extension DiskPersistence {
         }
     }
     
-    /// Load the current snapshot in an accessor, returning the task for the accessor.
-    ///
-    /// - Parameter accessor: An accessor that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
-    /// - Returns: A ``/Swift/Task`` which contains the value of the updater upon completion.
-    func updateCurrentSnapshot<T: Sendable>(
-        accessor: @escaping (_ snapshot: Snapshot<AccessMode>) async throws -> T
-    ) -> Task<T, any Error> {
-        /// Grab access to the store info to load and update it.
-        return updateStoreInfo { storeInfo in
-            /// Grab the current snapshot from the store info
-            let snapshot = self.loadSnapshot(from: storeInfo)
-            
-            /// Let the accessor do what it needs to do with the snapshot
-            return try await accessor(snapshot)
-        }
-    }
-    
-    /// Load the current snapshot in an updater.
-    ///
-    /// This method loads the current ``Snapshot`` so it can be updated.
-    ///
-    /// - Note: Calling this method when no store info exists on disk will create it.
-    /// - Parameter dateUpdate: The method to which to update the date of the main store with.
-    /// - Parameter updater: An updater that takes a reference to the current ``Snapshot``, and will forward the returned value to the caller.
-    /// - Returns: The value returned from the `accessor`. 
-    func updatingCurrentSnapshot<T: Sendable>(
-        dateUpdate: ModificationUpdate = .updateOnWrite,
-        updater: @Sendable (_ snapshot: Snapshot<AccessMode>) async throws -> T
-    ) async throws -> T where AccessMode == ReadWrite {
-        try await withoutActuallyEscaping(updater) { escapingClosure in
-            try await updateCurrentSnapshot(dateUpdate: dateUpdate, updater: escapingClosure).value
-        }
-    }
-    
     /// Load the current snapshot in an accessor.
     ///
     /// This method loads the current ``Snapshot`` so it can be accessed.
@@ -379,10 +297,15 @@ extension DiskPersistence {
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
     func readingCurrentSnapshot<T: Sendable>(
-        accessor: @Sendable (_ snapshot: Snapshot<AccessMode>) async throws -> T
+        accessor: sending @Sendable (_ snapshot: Snapshot<AccessMode>) async throws -> T
     ) async throws -> T {
-        try await withoutActuallyEscaping(accessor) { escapingClosure in
-            try await updateCurrentSnapshot(accessor: escapingClosure).value
+        /// Grab access to the store info to load and update it.
+        try await withStoreInfo { storeInfo in
+            /// Grab the current snapshot from the store info
+            let snapshot = self.loadSnapshot(from: storeInfo)
+            
+            /// Let the accessor do what it needs to do with the snapshot
+            return try await accessor(snapshot)
         }
     }
     
@@ -405,7 +328,7 @@ extension DiskPersistence {
     var currentSnapshot: Snapshot<AccessMode> {
         // TODO: This should return a readonly snapshot, but we need to be able to make a read-only copy from the persistence first.
         get async throws {
-            try await withStoreInfo { await loadSnapshot(from: $0) }
+            try await withStoreInfo { loadSnapshot(from: $0) }
         }
     }
     
@@ -726,6 +649,7 @@ private enum DiskPersistenceTaskLocals {
     }
     
     static func with<AccessMode: _AccessMode, R>(
+        isolation actor: isolated (any Actor)? = #isolation,
         storeInfo: StoreInfo,
         for persistence: DiskPersistence<AccessMode>,
         operation: () async throws -> R

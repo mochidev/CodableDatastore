@@ -131,19 +131,16 @@ final class DiskPersistenceTests: XCTestCase, @unchecked Sendable {
         let date1 = Date(timeIntervalSince1970: 0)
         let date2 = Date(timeIntervalSince1970: 10)
         
-        let task1 = await persistence.updateStoreInfo { storeInfo in
+        try await persistence.withStoreInfo { storeInfo in
             sleep(1)
             XCTAssertNotEqual(storeInfo.modificationDate, date2)
             storeInfo.modificationDate = date1
         }
         
-        let task2 = await persistence.updateStoreInfo { storeInfo in
+        try await persistence.withStoreInfo { storeInfo in
             XCTAssertEqual(storeInfo.modificationDate, date1)
             storeInfo.modificationDate = date2
         }
-        
-        try await task1.value
-        try await task2.value
         
         let currentStoreInfo = await persistence.cachedStoreInfo
         XCTAssertEqual(currentStoreInfo?.modificationDate, date2)
