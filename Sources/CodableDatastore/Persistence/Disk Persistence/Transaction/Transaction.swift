@@ -73,16 +73,14 @@ extension DiskPersistence {
         ///   - operation: The operation itself, which takes a reference to the owning transaction and the `isDurable` flag
         /// - Returns: The return value of the operation, if any.
         func run<T>(
+            isolation actor: isolated (any Actor)? = #isolation,
             lastTransaction: Transaction?,
             isDurable: Bool,
             operation: (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
         ) async throws -> T {
-            guard let workDidFinishPromise = workDidFinishPromise.take()
-            else { fatalError("workDidFinishPromise was already consumed. Please report this as a critical bug!") }
-            
             let returnValue: T
             do {
-                isActive = true
+                await setIsActive(true)
                 
                 /// If provided, wait for the last transaction to properly finish before startign the next one.
                 if let lastTransaction {
@@ -94,17 +92,14 @@ extension DiskPersistence {
                     try await operation(self, isDurable)
                 }
                 
-                isActive = false
+                await setIsActive(false)
                 
                 /// Mark the work as done so opportunistic transaction may begin.
-                workDidFinishPromise.resume()
+                await reportWorkDidFinish()
             } catch {
                 /// If the operation failed, make sure to resume both continuations so the next transaction can start.
-                workDidFinishPromise.resume()
-                
-                guard let transactionDidPersistPromise = transactionDidPersistPromise.take()
-                else { fatalError("transactionDidPersistPromise was already consumed. Please report this as a critical bug!") }
-                transactionDidPersistPromise.resume()
+                await reportWorkDidFinish()
+                await reportTransactionDidPersist()
                 
                 throw error
             }
@@ -123,6 +118,18 @@ extension DiskPersistence {
             return returnValue
         }
         
+        private func reportWorkDidFinish() {
+            guard let workDidFinishPromise = workDidFinishPromise.take()
+            else { fatalError("workDidFinishPromise was already consumed. Please report this as a critical bug!") }
+            workDidFinishPromise.resume()
+        }
+        
+        private func reportTransactionDidPersist() {
+            guard let transactionDidPersistPromise = transactionDidPersistPromise.take()
+            else { fatalError("transactionDidPersistPromise was already consumed. Please report this as a critical bug!") }
+            transactionDidPersistPromise.resume()
+        }
+        
         /// Yield and wait for the main work of the transaction to be complete.
         func yieldWorkCompletion() async {
             await workDidFinishResult.yield()
@@ -131,6 +138,10 @@ extension DiskPersistence {
         /// Yield and wait for the transaction to finish persisting, which is the ideal point to start another mutating transaction.
         func yieldPersistenceCompletion() async {
             await transactionDidPersistResult.yield()
+        }
+        
+        private func setIsActive(_ isActive: Bool) {
+            self.isActive = isActive
         }
         
         /// Ensure the receiving transaction is currenrtly active.
