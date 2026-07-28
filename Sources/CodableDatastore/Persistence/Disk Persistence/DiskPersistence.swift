@@ -38,7 +38,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     var rollingPageCacheIndex = 0
     var rollingPageCache: [Datastore.Page] = []
     
-    var transactionCounter = 0
+    nonisolated(unsafe) var transactionCounter = 0
+    let transactionCounterLock = UnfairLock()
     
     /// Initialize a ``DiskPersistence`` with a read-write URL.
     ///
@@ -464,16 +465,28 @@ extension DiskPersistence {
 // MARK: - Transactions
 
 extension DiskPersistence {
-    func nextTransactionCounter() -> Int {
-        let transactionIndex = transactionCounter
-        transactionCounter += 1
-        return transactionIndex
+    nonisolated func nextTransactionCounter() -> Int {
+        transactionCounterLock.withLock {
+            let transactionIndex = transactionCounter
+            transactionCounter += 1
+            return transactionIndex
+        }
+    }
+    
+    /// Replace the last mutating root transaction with the specified transaction, and return the previous one.
+    func enqueue(rootTransaction: Transaction) -> Transaction? {
+        let lastTransaction = lastMutatingTransaction
+        if !rootTransaction.options.contains(.readOnly) {
+            self.lastMutatingTransaction = rootTransaction
+        }
+        return lastTransaction
     }
     
     public func _withTransaction<T: Sendable>(
+        isolation actor: isolated (any Actor)? = #isolation,
         actionName: String?,
         options: UnsafeTransactionOptions,
-        transaction operation: sending (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        transaction operation: (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
         /// If the transaction is starting in the context of another persistence's transaction, make sure it is a read-only one. Otherwise assert and throw an error as it likely indicates a mistake and could lead to unexpected consistency violations if one persistence succeeds while the other fails.
         if isTransactingExternally() {
@@ -519,10 +532,7 @@ extension DiskPersistence {
         )
         
         /// Save the last non-concurrent root transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
-        let lastTransaction = lastMutatingTransaction
-        if !options.contains(.readOnly) {
-            self.lastMutatingTransaction = transaction
-        }
+        let lastTransaction = await enqueue(rootTransaction: transaction)
         
         let result = try await transaction.run(
             lastTransaction: !options.contains(.readOnly) ? lastTransaction : nil,

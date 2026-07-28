@@ -19,13 +19,33 @@ public protocol Persistence<AccessMode>: Sendable {
     ///   - options: The options to use while building the transaction.
     ///   - transaction: A closure representing the transaction with which to perform operations on. You should not escape the provided transaction.
     func _withTransaction<T>(
+        isolation actor: isolated (any Actor)?,
         actionName: String?,
         options: UnsafeTransactionOptions,
-        transaction: sending (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        transaction: (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T
 }
 
 extension Persistence {
+    /// Perform a transaction on the persistence with the specified options.
+    /// - Parameters:
+    ///   - actionName: The name of the action to use in an undo operation. Only the names of top-level transactions are recorded. We recommend you use the Base localization name here, as you may no longer have the localized version in future versions of your app.
+    ///   - options: The options to use while building the transaction.
+    ///   - transaction: A closure representing the transaction with which to perform operations on. You should not escape the provided transaction.
+    func _withTransaction<T>(
+        isolation actor: isolated (any Actor)? = #isolation,
+        actionName: String?,
+        options: UnsafeTransactionOptions,
+        transaction: (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+    ) async throws -> T {
+        try await _withTransaction(
+            isolation: actor,
+            actionName: actionName,
+            options: options,
+            transaction: transaction
+        )
+    }
+    
     /// Perform a set of operations as a single transaction.
     ///
     /// Within the transaction block, perform operations on multiple ``Datastore``s such that if any one of them were to fail, none will be persisted, and if all of them succeed, they will be persisted atomically.
@@ -39,9 +59,10 @@ extension Persistence {
     ///   - transaction: A closure with the set of operations to perform. Parameters include a reference to the persistence, and a flag indicating if the transaction is durable.
     /// - SeeAlso: ``Persistence/perform(actionName:options:transaction:)-1tpvd``   
     public func perform<T>(
+        isolation actor: isolated (any Actor)? = #isolation,
         actionName: String? = nil,
         options: TransactionOptions = [],
-        _inheritActorContext transaction: @Sendable (_ persistence: Self, _ isDurable: Bool) async throws -> T
+        transaction: (_ persistence: Self, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
         try await _withTransaction(
             actionName: actionName,
@@ -64,9 +85,10 @@ extension Persistence {
     ///   - transaction: A closure with the set of operations to perform.
     /// - SeeAlso: ``Persistence/perform(actionName:options:transaction:)-5476l``
     public func perform<T>(
+        isolation actor: isolated (any Actor)? = #isolation,
         actionName: String? = nil,
         options: TransactionOptions = [],
-        @_inheritActorContext transaction: @Sendable () async throws -> T
+        transaction: () async throws -> T
     ) async throws -> T {
         try await _withTransaction(
             actionName: actionName,
