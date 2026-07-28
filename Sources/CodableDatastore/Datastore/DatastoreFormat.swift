@@ -87,7 +87,7 @@ public protocol DatastoreFormat<Version, Instance, Identifier>: Sendable {
     
     /// The identifier to be used when de-duplicating instances saved in the persistence.
     ///
-    /// Although ``Instance`` does _not_ need to be ``Identifiable``, a consistent identifier must still be provided for every instance to retrive and persist them. This identifier can be different from `Instance.ID` if truly necessary, though most conformers can simply set it to `Instance.ID`
+    /// Although ``Instance`` does _not_ need to be ``/Swift/Identifiable``, a consistent identifier must still be provided for every instance to retrive and persist them. This identifier can be different from `Instance.ID` if truly necessary, though most conformers can simply set it to `Instance.ID`
     associatedtype Identifier: Indexable & DiscreteIndexable & Sendable
     
     /// A default initializer creating a format instance the datastore can use for evaluation.

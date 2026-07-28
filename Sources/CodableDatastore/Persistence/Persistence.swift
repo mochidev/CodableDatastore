@@ -15,6 +15,7 @@ public protocol Persistence<AccessMode>: Sendable {
     
     /// Perform a transaction on the persistence with the specified options.
     /// - Parameters:
+    ///   - actor: The isolation context to run the reciever on.  
     ///   - actionName: The name of the action to use in an undo operation. Only the names of top-level transactions are recorded. We recommend you use the Base localization name here, as you may no longer have the localized version in future versions of your app.
     ///   - options: The options to use while building the transaction.
     ///   - transaction: A closure representing the transaction with which to perform operations on. You should not escape the provided transaction.
@@ -29,6 +30,7 @@ public protocol Persistence<AccessMode>: Sendable {
 extension Persistence {
     /// Perform a transaction on the persistence with the specified options.
     /// - Parameters:
+    ///   - actor: The isolation context to run the reciever on.
     ///   - actionName: The name of the action to use in an undo operation. Only the names of top-level transactions are recorded. We recommend you use the Base localization name here, as you may no longer have the localized version in future versions of your app.
     ///   - options: The options to use while building the transaction.
     ///   - transaction: A closure representing the transaction with which to perform operations on. You should not escape the provided transaction.
@@ -54,10 +56,11 @@ extension Persistence {
     ///
     /// - Warning: Performing changes to a datastore that is not part of the persistence this is called on is unsupported and will result in an error.
     /// - Parameters:
+    ///   - actor: The isolation context to run the reciever on. 
     ///   - actionName: The name of the action to use in an undo operation. Only the names of top-level transactions are recorded. We recommend you use the Base localization name here, as you may no longer have the localized version in future versions of your app.
     ///   - options: A set of options to use when performing the transaction.
     ///   - transaction: A closure with the set of operations to perform. Parameters include a reference to the persistence, and a flag indicating if the transaction is durable.
-    /// - SeeAlso: ``Persistence/perform(actionName:options:transaction:)-1tpvd``   
+    /// - SeeAlso: ``Persistence/perform(isolation:actionName:options:transaction:)-(_,_,_,(Self,Bool)->T)``
     public func perform<T>(
         isolation actor: isolated (any Actor)? = #isolation,
         actionName: String? = nil,
@@ -80,10 +83,11 @@ extension Persistence {
     ///
     /// - Warning: Performing changes to a datastore that is not part of the persistence this is called on is unsupported and will result in an error.
     /// - Parameters:
+    ///   - actor: The isolation context to run the reciever on.
     ///   - actionName: The name of the action to use in an undo operation. Only the names of top-level transactions are recorded.
     ///   - options: A set of options to use when performing the transaction.
     ///   - transaction: A closure with the set of operations to perform.
-    /// - SeeAlso: ``Persistence/perform(actionName:options:transaction:)-5476l``
+    /// - SeeAlso: ``Persistence/perform(isolation:actionName:options:transaction:)-(_,_,_,()->T)``
     public func perform<T>(
         isolation actor: isolated (any Actor)? = #isolation,
         actionName: String? = nil,
