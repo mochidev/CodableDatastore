@@ -25,7 +25,7 @@ public protocol DatastoreInterfaceProtocol: Sendable {
     // MARK: Descriptors
     
     /// Load the descriptor of a ``Datastore``.
-    /// - Parameter datastore: The datastore to query.
+    /// - Parameter datastoreKey: The key of the datastore to query.
     /// - Returns: A descriptor of the datastore as the persistence knows it.
     func datastoreDescriptor(for datastoreKey: DatastoreKey) async throws -> DatastoreDescriptor?
     
@@ -91,7 +91,7 @@ public protocol DatastoreInterfaceProtocol: Sendable {
     ///
     /// - Throws: ``DatastoreInterfaceError/instanceAlreadyExists`` if an instance for the specified identifier already exists.
     /// - Parameters:
-    ///   - indexedValue: The indexed value to search against.
+    ///   - index: The indexed value to search against.
     ///   - identifier: The identifier of an instance to insert.
     ///   - indexName: The name of the direct index to search in.
     ///   - datastoreKey: The key of the datastore the index belongs to.
@@ -107,7 +107,7 @@ public protocol DatastoreInterfaceProtocol: Sendable {
     ///
     /// - Throws: ``DatastoreInterfaceError/instanceNotFound`` if an instance for the specified identifier could not be found.
     /// - Parameters:
-    ///   - indexedValue: The indexed value to search against.
+    ///   - index: The indexed value to search against.
     ///   - identifier: The identifier of the instance to load.
     ///   - indexName: The name of the secondary index to search in.
     ///   - datastoreKey: The key of the datastore the index belongs to.
@@ -123,7 +123,7 @@ public protocol DatastoreInterfaceProtocol: Sendable {
     ///
     /// - Throws: ``DatastoreInterfaceError/instanceAlreadyExists`` if an instance for the specified identifier already exists.
     /// - Parameters:
-    ///   - indexedValue: The indexed value to search against.
+    ///   - index: The indexed value to search against.
     ///   - identifier: The identifier of an instance to insert.
     ///   - indexName: The name of the secondary index to search in.
     ///   - datastoreKey: The key of the datastore the index belongs to.

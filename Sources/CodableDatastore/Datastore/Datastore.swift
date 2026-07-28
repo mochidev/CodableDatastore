@@ -627,7 +627,7 @@ extension Datastore {
     /// **[Elided Form]** Load all instances in a datastore as an async sequence.
     ///
     /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
-    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(range:order:)-(UnboundedRange,_)`` instead for better completion support, type inference, and indentation.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(range:order:)-(.UnboundedRange,_)`` instead for better completion support, type inference, and indentation.
     /// - Parameters:
     ///   - unboundedRange: The range to load. Specify `...` to load every instance.
     ///   - order: The order to process instances in.
@@ -894,7 +894,7 @@ extension Datastore {
     ///
     /// - Important: The sequence should be consumed at most a single time, ideally within the same transaction it was created in as it holds a reference to that transaction and thus snapshot of the datastore for data consistency.
     /// - Note: If the index is a Many-to-Any type of index, a smaller or larger number of results may be returned here, as some instances may not be respresented in the index, while others are over-represented and may show up multiple times.
-    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:range:order:)-(_,UnboundedRange,_)`` instead for better completion support, type inference, and indentation.
+    /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``load(index:range:order:)-(_,.UnboundedRange,_)`` instead for better completion support, type inference, and indentation.
     /// - Parameters:
     ///   - unboundedRange: The range to load. Specify `...` to load every instance.
     ///   - order: The order to process instances in.
@@ -1406,7 +1406,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     
     /// Observe changes made to an instance with a given identifier.
     ///
-    /// - Parameter identifier: A copy of the instance to observe.
+    /// - Parameter instance: A copy of the instance to observe.
     /// - Returns: An unbounded asynchronous sequence reporting changes to the observed instance.
     @inlinable
     public func observe(
@@ -1418,7 +1418,7 @@ extension Datastore where InstanceType: Identifiable, IdentifierType == Instance
     /// **[Elided Form]** Observe changes made to an instance with a given identifier.
     ///
     /// - SeeAlso: This is form that elides the first argument name instead for better completion support, type inference, and indentation. You may however prefer to use ``observe(instance:)`` instead for better completion support, type inference, and indentation.
-    /// - Parameter identifier: A copy of the instance to observe.
+    /// - Parameter instance: A copy of the instance to observe.
     /// - Returns: An unbounded asynchronous sequence reporting changes to the observed instance.
     @_disfavoredOverload
     @inlinable
