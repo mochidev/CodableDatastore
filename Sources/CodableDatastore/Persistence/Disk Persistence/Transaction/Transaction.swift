@@ -7,15 +7,21 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-import Foundation
 import Bytes
+import Foundation
+import QuestionableConcurrency
 
 extension DiskPersistence {
     actor Transaction: AnyDiskTransaction {
         unowned let persistence: DiskPersistence
         
         unowned let parent: Transaction?
-        weak var lastReadWriteChildTransaction: Transaction?
+        weak var lastMutatingChildTransaction: Transaction?
+        
+        var workDidFinishPromise: Promise<Void, Never>?
+        var transactionDidPersistPromise: Promise<Void, Never>?
+        let workDidFinishResult: AsyncResult<Void, Never>
+        let transactionDidPersistResult: AsyncResult<Void, Never>
         
         private(set) var task: Task<Void, any Error>!
         let transactionIndex: Int
@@ -37,7 +43,7 @@ extension DiskPersistence {
         
         var isActive = false
         
-        private init(
+        init(
             persistence: DiskPersistence,
             transactionIndex: Int,
             parent: Transaction?,
@@ -49,39 +55,85 @@ extension DiskPersistence {
             self.actionName = actionName
             self.options = options
             self.transactionIndex = transactionIndex
+            
+            let workDidFinishPromise = Promise(name: "DiskPersistence.Transaction.workDidFinish - \"\(actionName ?? "")\"")
+            let transactionDidPersistPromise = Promise(name: "DiskPersistence.Transaction.transactionDidPersist - \"\(actionName ?? "")\"")
+            
+            self.workDidFinishResult = workDidFinishPromise.future
+            self.transactionDidPersistResult = transactionDidPersistPromise.future
+            self.workDidFinishPromise = consume workDidFinishPromise
+            self.transactionDidPersistPromise = consume transactionDidPersistPromise
         }
         
-        private func attachTask<T>(
-            options: UnsafeTransactionOptions,
-            @_inheritActorContext handler: @Sendable @escaping () async throws -> T
-        ) async -> Task<T, any Error> {
-            let task = Task {
+        /// An internal method to attach an operation to the transaction.
+        /// - Warning: Do not call this method more than once for a single transaction.
+        /// - Parameters:
+        ///   - lastTransaction: The last transaction this one should be chained to.
+        ///   - isDurable: A flag that reports whether or not the operation was durable.
+        ///   - operation: The operation itself, which takes a reference to the owning transaction and the `isDurable` flag
+        /// - Returns: The return value of the operation, if any.
+        func run<T>(
+            lastTransaction: Transaction?,
+            isDurable: Bool,
+            operation: (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        ) async throws -> T {
+            guard let workDidFinishPromise = workDidFinishPromise.take()
+            else { fatalError("workDidFinishPromise was already consumed. Please report this as a critical bug!") }
+            
+            let returnValue: T
+            do {
                 isActive = true
-                let returnValue = try await TransactionTaskLocals.with(transaction: self, for: persistence) {
-                    try await handler()
+                
+                /// If provided, wait for the last transaction to properly finish before startign the next one.
+                if let lastTransaction {
+                    await lastTransaction.yieldPersistenceCompletion()
                 }
+                
+                /// Perform the operation with the current transaction set as the task-local.
+                returnValue = try await TransactionTaskLocals.with(transaction: self, for: persistence) {
+                    try await operation(self, isDurable)
+                }
+                
                 isActive = false
                 
+                /// Mark the work as done so opportunistic transaction may begin.
+                workDidFinishPromise.resume()
+            } catch {
+                /// If the operation failed, make sure to resume both continuations so the next transaction can start.
+                workDidFinishPromise.resume()
+                
+                guard let transactionDidPersistPromise = transactionDidPersistPromise.take()
+                else { fatalError("transactionDidPersistPromise was already consumed. Please report this as a critical bug!") }
+                transactionDidPersistPromise.resume()
+                
+                throw error
+            }
+            
+            /// Persist the work that was just completed to signal to the next transaction that it can start, but check for the requested timing option first. ``persist()`` takes care of signaling when the persistence is finished.
+            if options.contains(.collateWrites) {
+                /// If we are skipping immediate writes, kick off persistence in a separate task.
+                Task {
+                    try await self.persist()
+                }
+            } else {
                 /// If we don't care to collate our writes, go ahead and wait for the persistence to stick
-                if !options.contains(.collateWrites) {
-                    try await self.persist()
-                }
-                
-                return returnValue
+                try await self.persist()
             }
             
-            self.task = Task {
-                _ = try await task.value
-                
-                /// If we previously skipped persisting, go ahead and do so now.
-                if options.contains(.collateWrites) {
-                    try await self.persist()
-                }
-            }
-            
-            return task
+            return returnValue
         }
         
+        /// Yield and wait for the main work of the transaction to be complete.
+        func yieldWorkCompletion() async {
+            await workDidFinishResult.yield()
+        }
+        
+        /// Yield and wait for the transaction to finish persisting, which is the ideal point to start another mutating transaction.
+        func yieldPersistenceCompletion() async {
+            await transactionDidPersistResult.yield()
+        }
+        
+        /// Ensure the receiving transaction is currenrtly active.
         func checkIsActive() throws {
             guard isActive else {
                 assertionFailure(DatastoreInterfaceError.transactionInactive.localizedDescription)
@@ -137,6 +189,10 @@ extension DiskPersistence {
                 deletedRootObjects.removeAll()
                 deletedIndexes.removeAll()
                 deletedPages.removeAll()
+                
+                guard let transactionDidPersistPromise = transactionDidPersistPromise.take()
+                else { fatalError("transactionDidPersistPromise was already consumed. Please report this as a critical bug!") }
+                transactionDidPersistPromise.resume()
             }
             
             /// If the transaction is read-only, stop here without applying anything to the parent.
@@ -203,76 +259,17 @@ extension DiskPersistence {
             }
         }
         
-        static func makeTransaction<T>(
-            persistence: DiskPersistence,
-            transactionIndex: Int,
-            lastTransaction: Transaction?,
-            actionName: String?,
-            options: UnsafeTransactionOptions,
-            @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
-        ) async -> (Transaction, Task<T, any Error>) {
-            if let parent = Self.unsafeCurrentTransaction(for: persistence) {
-//                print("[CDS] [\(persistence.storeURL.lastPathComponent)] Found parent \(parent.transactionIndex), making child \(transactionIndex)")
-                let (child, task) = await parent.childTransaction(
-                    transactionIndex: transactionIndex,
-                    actionName: actionName,
-                    options: options,
-                    handler: handler
-                )
-                return (child, task)
-            }
+        /// Replace the last mutating child transaction with the specified transaction, and return the previous one.
+        func enqueue(childTransaction: Transaction) throws -> Transaction? {
+            /// Make sure the parent transaction actually started, as we'll be dumping state into it as new child transactions complete.
+            try checkIsActive()
             
-            let transaction = Transaction(
-                persistence: persistence,
-                transactionIndex: transactionIndex,
-                parent: nil,
-                actionName: actionName,
-                options: options
-            )
-            
-            let task = await transaction.attachTask(options: options) {
-                /// If the transaction is not read only, wait for the last transaction to properly finish before starting the next one.
-                if !options.contains(.readOnly) {
-                    try? await lastTransaction?.task.value
-                }
-                return try await handler(transaction, options.isDisjoint(with: [.collateWrites, .readOnly]))
-            }
-            
-            return (transaction, task)
-        }
-        
-        func childTransaction<T>(
-            transactionIndex: Int,
-            actionName: String?,
-            options: UnsafeTransactionOptions,
-            @_inheritActorContext handler: @Sendable @escaping (_ transaction: Transaction, _ isDurable: Bool) async throws -> T
-        ) async -> (Transaction, Task<T, any Error>) {
-            assert(!self.options.contains(.readOnly) || options.contains(.readOnly), "A child transaction was declared read-write, even though its parent was read-only!")
-            let childTransaction = Transaction(
-                persistence: persistence,
-                transactionIndex: transactionIndex,
-                parent: self,
-                actionName: actionName,
-                options: options
-            )
-            
-            /// Get the last non-concurrent transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
-            let lastChild = lastReadWriteChildTransaction
+            /// Enqueue and get the last non-concurrent transaction from the parent's list. Note that disk persistence currently does not support concurrent idempotent transactions.
+            let lastChildTransaction = lastMutatingChildTransaction
             if !childTransaction.options.contains(.readOnly) {
-                lastReadWriteChildTransaction = childTransaction
+                lastMutatingChildTransaction = childTransaction
             }
-            
-            let task = await childTransaction.attachTask(options: options) {
-                try self.checkIsActive()
-                
-                /// If the transaction is not read only, wait for the last transaction to properly finish before starting the next one.
-                if !options.contains(.readOnly) {
-                    _ = try? await lastChild?.task.value
-                }
-                return try await handler(childTransaction, false)
-            }
-            
-            return (childTransaction, task)
+            return lastChildTransaction
         }
         
         func rootObject(for datastoreKey: DatastoreKey) async throws -> Datastore.RootObject? {
@@ -1370,7 +1367,16 @@ extension DiskPersistence.Transaction {
     }
 }
 
-// MARK: - Helper Types
+// MARK: - Task Locals
+
+extension DiskPersistence {
+    /// Check to see if we are in a transaction that pertains to a different persistence than the one provided.
+    ///
+    /// This is determined by checking if the only transactions present belong to other persistences. If there are no other transactions, or a transaction for the persistence is already registered, it has already been vetted and is no longer considered external.
+    nonisolated func isTransactingExternally() -> Bool {
+        !TransactionTaskLocals.transactionStorage.isEmpty && TransactionTaskLocals.transactionStorage[ObjectIdentifier(self)] == nil
+    }
+}
 
 fileprivate protocol AnyDiskTransaction: Sendable {}
 
@@ -1383,6 +1389,7 @@ fileprivate enum TransactionTaskLocals {
     }
     
     static func with<AccessMode: _AccessMode, R>(
+        isolation actor: isolated (any Actor)? = #isolation,
         transaction: any AnyDiskTransaction,
         for persistence: DiskPersistence<AccessMode>,
         operation: () async throws -> R

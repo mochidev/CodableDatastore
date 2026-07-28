@@ -21,7 +21,7 @@ public protocol Persistence<AccessMode>: Sendable {
     func _withTransaction<T>(
         actionName: String?,
         options: UnsafeTransactionOptions,
-        @_inheritActorContext transaction: @Sendable (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        transaction: sending (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T
 }
 

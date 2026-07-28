@@ -25,7 +25,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     
     var registeredDatastores: [DatastoreKey : [WeakDatastore]] = [:]
     
-    var lastTransaction: Transaction?
+    var lastMutatingTransaction: Transaction?
+    var rootTransactionStream = TransactionStream()
     
     /// Shared caches across all snapshots and datastores.
     var rollingRootObjectCacheIndex = 0
@@ -472,39 +473,64 @@ extension DiskPersistence {
     public func _withTransaction<T: Sendable>(
         actionName: String?,
         options: UnsafeTransactionOptions,
-        transaction: @Sendable (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        transaction operation: sending (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
-        try await withoutActuallyEscaping(transaction) { escapingTransaction in
-            /// If the transaction is starting in the context of another persistence's transaction, make sure it is a read-only one. Otherwise assert and throw an error as it likely indicates a mistake and could lead to unexpected consistency violations if one persistence succeeds while the other fails.
-            if
-                Transaction.isTransactingExternally(to: self),
-                !options.contains(.readOnly)
-            {
+        /// If the transaction is starting in the context of another persistence's transaction, make sure it is a read-only one. Otherwise assert and throw an error as it likely indicates a mistake and could lead to unexpected consistency violations if one persistence succeeds while the other fails.
+        if isTransactingExternally() {
+            guard options.contains(.readOnly)
+            else {
                 assertionFailure(DatastoreInterfaceError.transactingWithinExternalPersistence.localizedDescription)
                 throw DatastoreInterfaceError.transactingWithinExternalPersistence
             }
-            
-            let currentCounter = nextTransactionCounter()
-//            print("[CDS] [\(storeURL.lastPathComponent)] Starting transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
-            let (transaction, task) = await Transaction.makeTransaction(
+        }
+        
+        let currentCounter = nextTransactionCounter()
+//        print("[CDS] [\(storeURL.lastPathComponent)] Starting transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
+        
+        if let parent = Transaction.unsafeCurrentTransaction(for: self) {
+//            print("[CDS] [\(storeURL.lastPathComponent)] Found parent \(parent.transactionIndex), making child \(currentCounter)")
+            assert(!parent.options.contains(.readOnly) || options.contains(.readOnly), "A child transaction was declared read-write, even though its parent was read-only!")
+            let transaction = Transaction(
                 persistence: self,
                 transactionIndex: currentCounter,
-                lastTransaction: lastTransaction,
+                parent: parent,
                 actionName: actionName,
                 options: options
-            ) { interface, isDurable in
-                try await escapingTransaction(interface, isDurable)
-            }
+            )
             
-            /// Save the last non-concurrent top-level transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
-            if !options.contains(.readOnly), transaction.parent == nil {
-                lastTransaction = transaction
-            }
+            /// Enqueue and get the last non-concurrent transaction from the parent's list. Note that disk persistence currently does not support concurrent idempotent transactions.
+            let lastChildTransaction = try await parent.enqueue(childTransaction: transaction)
             
-            let result = try await task.value
+            let result = try await transaction.run(
+                lastTransaction: !options.contains(.readOnly) ? lastChildTransaction : nil,
+                isDurable: false,
+                operation: operation
+            )
 //            print("[CDS] [\(storeURL.lastPathComponent)] Finished transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
             return result
         }
+        
+        let transaction = Transaction(
+            persistence: self,
+            transactionIndex: currentCounter,
+            parent: nil,
+            actionName: actionName,
+            options: options
+        )
+        
+        /// Save the last non-concurrent root transaction from the list. Note that disk persistence currently does not support concurrent idempotent transactions.
+        let lastTransaction = lastMutatingTransaction
+        if !options.contains(.readOnly) {
+            self.lastMutatingTransaction = transaction
+        }
+        
+        let result = try await transaction.run(
+            lastTransaction: !options.contains(.readOnly) ? lastTransaction : nil,
+            isDurable: options.isDisjoint(with: [.collateWrites, .readOnly]),
+            operation: operation
+        )
+//        print("[CDS] [\(storeURL.lastPathComponent)] Finished transaction \(currentCounter) “\(actionName ?? "")” - \(options)")
+        return result
     }
     
     func persist(
