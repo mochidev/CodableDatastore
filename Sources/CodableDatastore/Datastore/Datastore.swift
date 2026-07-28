@@ -125,7 +125,7 @@ extension Datastore {
         return descriptor
     }
     
-    func decoder(for version: Version) throws -> @Sendable (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType) {
+    nonisolated func decoder(for version: Version) throws -> @Sendable (_ data: Data) async throws -> (id: IdentifierType, instance: InstanceType) {
         guard let decoder = decoders[version] else {
             throw DatastoreError.missingDecoder(version: String(describing: version))
         }
@@ -533,7 +533,7 @@ extension Datastore {
                         datastoreKey: self.key
                     ) { versionData, instanceData in
                         let entryVersion = try Version(versionData)
-                        let decoder = try await self.decoder(for: entryVersion)
+                        let decoder = try self.decoder(for: entryVersion)
                         let decodedValue = try await decoder(instanceData)
                         
                         try await provider.yield(decodedValue)
@@ -676,7 +676,7 @@ extension Datastore {
                             datastoreKey: self.key
                         ) { versionData, instanceData in
                             let entryVersion = try Version(versionData)
-                            let decoder = try await self.decoder(for: entryVersion)
+                            let decoder = try self.decoder(for: entryVersion)
                             let instance = try await decoder(instanceData).instance
                             
                             try await provider.yield(instance)
@@ -690,7 +690,7 @@ extension Datastore {
                             let persistedEntry = try await transaction.primaryIndexCursor(for: identifier, datastoreKey: self.key)
                             
                             let entryVersion = try Version(persistedEntry.versionData)
-                            let decoder = try await self.decoder(for: entryVersion)
+                            let decoder = try self.decoder(for: entryVersion)
                             let instance = try await decoder(persistedEntry.instanceData).instance
                             
                             try await provider.yield(instance)
@@ -953,7 +953,7 @@ extension Datastore {
         }.compactMap { event in
             try? await event.mapEntries { entry in
                 let version = try Version(entry.versionData)
-                let decoder = try await self.decoder(for: version)
+                let decoder = try self.decoder(for: version)
                 let instance = try await decoder(entry.instanceData).instance
                 return instance
             }

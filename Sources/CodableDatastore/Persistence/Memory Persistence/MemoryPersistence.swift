@@ -17,7 +17,7 @@ extension MemoryPersistence {
     public func _withTransaction<T: Sendable>(
         actionName: String?,
         options: UnsafeTransactionOptions,
-        transaction: @Sendable (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
+        transaction: sending (_ transaction: any DatastoreInterfaceProtocol, _ isDurable: Bool) async throws -> T
     ) async throws -> T {
         preconditionFailure("Unimplemented")
     }
