@@ -14,4 +14,8 @@ extension Task where Failure == Never {
         self.init(priority: priority, operation: operation)
     }
 }
+
+public func extendLifetime<T>(_ x: borrowing T) where T : ~Copyable {
+    withExtendedLifetime(x) {}
+}
 #endif
