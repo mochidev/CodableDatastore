@@ -42,6 +42,12 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// The loaded datastores.
     var datastores: [DatastoreIdentifier: DiskPersistence<AccessMode>.Datastore] = [:]
     
+    /// The chain of iterations
+    var iterationChain: SparseIterationChain
+    var iterationChainState: IterationChainState
+    
+//    private let (pruningTasksStream, pruningTasksStreamProvider) = AsyncStream.makeStream(of: Task<Void, Error>.self)
+//    private var pruningTasksIterator: AsyncStream<Task<Void, any Error>>.AsyncIterator
     private var pruningWatermark = 0
     private var lastPruningTask: Task<Void, Error>?
     
@@ -55,6 +61,10 @@ actor Snapshot<AccessMode: _AccessMode> {
         self.persistence = persistence
         self.isBackup = isBackup
         self.isExtendedIterationCacheEnabled = isExtendedIterationCacheEnabled
+        
+        self.iterationChain = SparseIterationChain()
+        self.iterationChainState = .forwardEditsOnly
+//        prunedIterationIterator = prunedIterationStream.makeAsyncIterator()
     }
 }
 
@@ -132,16 +142,80 @@ extension Snapshot {
         }
     }
     
-    func setExtendedIterationCacheEnabled(_ isEnabled: Bool) {
+    func setExtendedIterationCacheEnabled(_ isEnabled: Bool) async {
         isExtendedIterationCacheEnabled = isEnabled
+        
+        await invalidateIterationChainState()
+    }
+    
+    private func invalidateIterationChainState() async {
+        switch iterationChainState {
+        case .forwardEditsOnly:
+            /// If we are currently only collecting forward edits, and the extended cache was just enabled, start the crawling process.
+            if isExtendedIterationCacheEnabled {
+                iterationChainState = .crawling(Task {
+                    do {
+                        try await crawlIterations()
+                        iterationChainState = .complete
+                    } catch {
+                        print("Error crawling iterations: \(error)")
+                        iterationChainState = .forwardEditsOnly
+                    }
+                })
+            }
+        case .crawling(let task):
+            /// If we are currently crawling, but the extended cache was just disabled, cancel the crawling process and swap back to the incomplete state. Everything we have should still be valid.
+            if !isExtendedIterationCacheEnabled {
+                /// The state is managed by the task, and doesn't need to be set here, so long as we wait for it to complete up to the cancellation point.
+                task.cancel()
+                await task.value
+            }
+        case .complete:
+            break
+        }
+    }
+    
+    func crawlIterations() async throws {
+        var currentIteration: SnapshotIteration
+        if let currentIterationID = iterationChain.last?.iteration {
+            currentIteration = try self.loadIterationNoCache(for: currentIterationID)
+        } else {
+            // TODO: We need to do this earlier, otheriwse we may end up duplicating an entry or skipping others, as the cached manifest may have changed since the task was initially started
+            /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
+            var manifest = try cachedManifest ?? self.loadManifest()
+            
+            /// If there is no ID here, we are basically done, as we have nothing to crawl
+            guard let currentIterationID = manifest.currentIteration
+            else { return }
+            
+            /// Make sure not to await adding this first entry?
+            currentIteration = try self.loadIterationNoCache(for: currentIterationID)
+            iterationChain.append(iteration: currentIteration)
+        }
+        
+        /// Walk the preceding iteration chain to the oldest iteration we can open, collecting the ones that should be pruned.
+        while let precedingIterationID = currentIteration.precedingIteration, let precedingIteration = try? await loadIteration(for: precedingIterationID) {
+            try Task.checkCancellation()
+            
+            if !iterations.isEmpty || transactionRetentionPolicy.shouldIterationBePruned(creationDate: precedingIteration.creationDate, distance: distance) {
+                iterations.append(precedingIteration.id)
+            } else {
+                mainlineSuccessorIteration = precedingIteration
+            }
+            currentIteration = precedingIteration
+            
+            distance += 1
+            
+            if distance % 5000 == 0 {
+                print("Found \(iterations.count) iterations to prune. Keeping \(distance - iterations.count) iterations.")
+            }
+            
+//                    await Task.yield()
+        }
     }
     
     /// Load an iteration from disk, or create a suitable starting value if such a file does not exist.
-    func loadIteration(for iterationID: SnapshotIterationIdentifier?) async throws -> SnapshotIteration? {
-        guard let iterationID else { return nil }
-        if let iteration = cachedIterations[iterationID] {
-            return iteration
-        }
+    func loadIterationNoCache(for iterationID: SnapshotIterationIdentifier) throws -> SnapshotIteration {
         do {
             let data = try Data(contentsOf: iterationURL(for: iterationID))
             
@@ -159,6 +233,15 @@ extension Snapshot {
         } catch {
             throw error
         }
+    }
+    
+    /// Load an iteration from disk, or create a suitable starting value if such a file does not exist.
+    func loadIteration(for iterationID: SnapshotIterationIdentifier?) async throws -> SnapshotIteration? {
+        guard let iterationID else { return nil }
+        if let iteration = cachedIterations[iterationID] {
+            return iteration
+        }
+        return try loadIterationNoCache(for: iterationID)
     }
     
     func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode, shouldDelete: Bool) async throws {
@@ -358,6 +441,10 @@ extension Snapshot {
             if manifest != cachedManifest {
                 try write(manifest: manifest)
             }
+            
+            /// Add the latest iteration to the chain now that it's been written to disk for this snapshot.
+            iterationChain.prepend(iteration: iteration)
+            // TODO: Update the target pruning snapshotID
             return returnValue
         }
     }
@@ -500,3 +587,114 @@ extension Snapshot {
         }
     }
 }
+
+struct SparseIterationChain {
+    var count: Int
+    var groups: [Group]
+    
+    init() {
+        self.count = 0
+        self.groups = []
+    }
+    
+    struct Group {
+        var first: (iteration: SnapshotIteration.ID, creationDate: Date)
+        var last: (iteration: SnapshotIteration.ID, creationDate: Date)
+        var contents: [(iteration: SnapshotIteration.ID, creationDate: Date)]?
+        var count: Int
+        
+        init(iteration: SnapshotIteration) {
+            first = (iteration.id, iteration.creationDate)
+            last = (iteration.id, iteration.creationDate)
+            contents = [(iteration.id, iteration.creationDate)]
+            count = 1
+        }
+        
+        mutating func prepend(iteration: SnapshotIteration) {
+            if contents != nil {
+                contents?.insert((iteration.id, iteration.creationDate), at: 0)
+            }
+            first = (iteration.id, iteration.creationDate)
+            count += 1
+        }
+        
+        mutating func append(iteration: SnapshotIteration) {
+            if contents != nil {
+                contents?.append((iteration.id, iteration.creationDate))
+            }
+            last = (iteration.id, iteration.creationDate)
+            count += 1
+        }
+    }
+    
+    mutating func prepend(iteration: SnapshotIteration) {
+        count += 1
+        if !groups.isEmpty {
+            /// If the group happens to have room, prepend to it and return.
+            guard groups[0].count >= chunkSize else {
+                groups[0].prepend(iteration: iteration)
+                return
+            }
+            /// Otherwise, empty out the subsequent group, and flow through to create a new one
+            groups[0].contents = nil
+        }
+        groups.insert(Group(iteration: iteration), at: 0)
+    }
+    
+    mutating func append(iteration: SnapshotIteration) {
+        count += 1
+        if !groups.isEmpty {
+            /// If the group happens to have room, append to it and return.
+            guard groups[groups.count-1].count >= chunkSize else {
+                groups[groups.count-1].append(iteration: iteration)
+                return
+            }
+            /// Otherwise, empty out the previous group, and flow through to create a new one
+            groups[groups.count-1].contents = nil
+        }
+        groups.append(Group(iteration: iteration))
+    }
+    
+    mutating func removeIterations(failing snapshotRetentionPolicy: SnapshotRetentionPolicy) -> [Group] {
+        var groupsToRemove: [Group] = []
+        
+        return groupsToRemove
+    }
+    
+    var first: (iteration: SnapshotIteration.ID, creationDate: Date)? {
+        groups.first?.first
+    }
+    
+    var last: (iteration: SnapshotIteration.ID, creationDate: Date)? {
+        groups.last?.last
+    }
+    
+    var chunkSize: Int {
+        1 << max(Int.bitWidth - 1 - count.leadingZeroBitCount - 8, 8)
+    }
+}
+
+enum IterationChainState {
+    case forwardEditsOnly
+    case crawling(Task<Void, Never>)
+    case complete
+}
+
+
+/*
+ 
+ - enforceRetentionPolicy enabled
+   1. iteration chain created
+   2. each new iteration added to the front of it
+   3. iterations are crawled adding to the back of it
+   4. only the first and last chunks are hydrated
+   5. iteration chain owned by an actor so access is safe
+   6. separate flag controls if iterations have been fully crawled
+   7. if iterations are still being crawled, don't do anything
+   8. if iterations completed crawling, scan for first one to delete
+   9. delete from oldest to first item
+   10. if final group is sparse, re-hydrate it
+   11. if deleting, set new final iteration
+   12. if not deleting
+ 
+ */

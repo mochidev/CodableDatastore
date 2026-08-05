@@ -30,8 +30,9 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     
     var _transactionRetentionPolicy: SnapshotRetentionPolicy = .indefinite
     
-    var nextSnapshotIterationCandidateToEnforce: (snapshot: Snapshot<ReadWrite>, iteration: SnapshotIteration)?
+    var nextSnapshotIterationCandidateToEnforce: (snapshot: Snapshot<ReadWrite>, iteration: SnapshotIteration, taskPriority: TaskPriority)?
     var snapshotIterationPruningTask: Task<Void, Never>?
+    var cachedSnapshotIterationChain: [SnapshotIdentifier: [(id: SnapshotIteration.ID, creationDate: Date)]] = [:]
     
     /// Shared caches across all snapshots and datastores.
     var rollingRootObjectCacheIndex = 0
@@ -616,9 +617,12 @@ extension DiskPersistence where AccessMode == ReadWrite {
     /// - SeeAlso: ``SnapshotRetentionPolicy``.
     public func setTransactionRetentionPolicy(_ policy: SnapshotRetentionPolicy) async {
         _transactionRetentionPolicy = policy
+        /// Configure snapshots to start caching iterations to speed up pruning.
         for (_, snapshot) in snapshots {
             await snapshot.setExtendedIterationCacheEnabled(!_transactionRetentionPolicy.isIndefinite)
         }
+        /// Cancel any in-progress pruning tasks
+        snapshotIterationPruningTask?.cancel()
     }
     
     /// Enforce the retention policy on the persistence immediately.
@@ -633,7 +637,7 @@ extension DiskPersistence where AccessMode == ReadWrite {
         }
         
         if let (snapshot, iteration) = info {
-            enforceRetentionPolicy(snapshot: snapshot, fromIteration: iteration)
+            enforceRetentionPolicy(snapshot: snapshot, fromIteration: iteration, taskPriority: Task.currentPriority)
         }
         
         await finishTransactionCleanup()
@@ -642,14 +646,16 @@ extension DiskPersistence where AccessMode == ReadWrite {
 
 extension DiskPersistence {
     /// Internal method to envorce the retention policy after a transaction is written.
-    private func enforceRetentionPolicy(snapshot: Snapshot<ReadWrite>, fromIteration iteration: SnapshotIteration) {
-        nextSnapshotIterationCandidateToEnforce = (snapshot, iteration)
+    private func enforceRetentionPolicy(
+        snapshot: Snapshot<ReadWrite>,
+        fromIteration iteration: SnapshotIteration,
+        taskPriority: TaskPriority = .background
+    ) {
+//        print("Scheduling pruning starting at \(iteration.id)")
+        nextSnapshotIterationCandidateToEnforce = (snapshot, iteration, taskPriority)
         
-        if let snapshotIterationPruningTask {
-            /// Update the next snapshot iteration we should be checking, and cancel the existing task so we can move on to checking this iteration.
-            snapshotIterationPruningTask.cancel()
-            return
-        }
+        /// If a task is on-going, just set the next iteration and stop here — the task should pick up the latest scheduled iteration automatically.
+        guard snapshotIterationPruningTask == nil else { return }
         
         /// Update the next snapshot iteration we should be checking, and enqueue a task since we know one isn't currently running.
         checkNextSnapshotIterationCandidateForPruning()
@@ -661,16 +667,23 @@ extension DiskPersistence {
     /// - Note: This method should only ever be called when it is known that no `snapshotIterationPruningTask` is ongoing (it is nil), or when one just finishes.
     @discardableResult
     private func checkNextSnapshotIterationCandidateForPruning() -> Task<Void, Never>? {
+        print("Checking for pruning work.")
         let transactionRetentionPolicy = _transactionRetentionPolicy
         let iterationCandidate = nextSnapshotIterationCandidateToEnforce
         
         snapshotIterationPruningTask = nil
         nextSnapshotIterationCandidateToEnforce = nil
         
-        guard let (snapshot, iteration) = iterationCandidate, !transactionRetentionPolicy.isIndefinite
-        else { return nil }
+        guard
+            let (snapshot, iteration, taskPriority) = iterationCandidate,
+            !transactionRetentionPolicy.isIndefinite
+        else {
+            print("No more iterations to prune, stopping here.")
+            return nil
+        }
         
-        snapshotIterationPruningTask = Task.detached(priority: .background) {
+        snapshotIterationPruningTask = Task.detached(priority: taskPriority) {
+            print("Pruning started for \(iteration.id).")
             await snapshot.setExtendedIterationCacheEnabled(true)
             do {
                 var iterations: [SnapshotIteration.ID] = []
@@ -678,11 +691,13 @@ extension DiskPersistence {
                 var mainlineSuccessorIteration = iteration
                 var currentIteration = iteration
                 
+                
+                
                 /// First, walk the preceding iteration chain to the oldest iteration we can open, collecting the ones that should be pruned.
                 while let precedingIterationID = currentIteration.precedingIteration, let precedingIteration = try? await snapshot.loadIteration(for: precedingIterationID) {
                     try Task.checkCancellation()
                     
-                    if !iterations.isEmpty || transactionRetentionPolicy.shouldIterationBePruned(iteration: precedingIteration, distance: distance) {
+                    if !iterations.isEmpty || transactionRetentionPolicy.shouldIterationBePruned(creationDate: precedingIteration.creationDate, distance: distance) {
                         iterations.append(precedingIteration.id)
                     } else {
                         mainlineSuccessorIteration = precedingIteration
@@ -691,11 +706,11 @@ extension DiskPersistence {
                     
                     distance += 1
                     
-                    if distance % 1000 == 0 {
+                    if distance % 5000 == 0 {
                         print("Found \(iterations.count) iterations to prune. Keeping \(distance - iterations.count) iterations.")
                     }
                     
-                    await Task.yield()
+//                    await Task.yield()
                 }
                 
                 print("Will prune \(iterations.count) iterations. Keeping \(distance - iterations.count) iterations.")
@@ -704,6 +719,10 @@ extension DiskPersistence {
                 while let iterationID = iterations.popLast(), let iteration = try await snapshot.loadIteration(for: iterationID) {
                     let index = iterations.count /// The current index, since we just removed the last element
                     let mainlineSuccessorIterationID = index > 0 ? iterations[index-1] : mainlineSuccessorIteration.id
+                    
+                    if index % 1000 == 0 {
+                        print("\(index) iterations left to delete.")
+                    }
                     
                     var iterationsToPrune: [SnapshotIteration] = []
                     var successorCandidatesToCheck = iteration.successiveIterations
@@ -732,6 +751,7 @@ extension DiskPersistence {
                 
                 try await snapshot.pruneIteration(mainlineSuccessorIteration, mode: .pruneRemoved, shouldDelete: false)
                 try await snapshot.drainPrunedIterations()
+                print("Pruning complete!")
             } catch {
                 try? await snapshot.drainPrunedIterations()
                 print("Pruning stopped: \(error)")

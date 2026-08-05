@@ -8,10 +8,10 @@ import Foundation
 public struct SnapshotRetentionPolicy: Sendable {
     /// Internal predicate that tests if an iteration should be pruned.
     /// 
-    /// - Parameter iteration: The iteration to check.
+    /// - Parameter creationDate: The creation date to check.
     /// - Parameter distance: How far the iteration is from the current root. The current root is `0` away from itself, while the next oldest iteration has a distance of `1`.
     /// - Returns: `true` if the iteration, all its ancestors, and all it's other decedents should be pruned, `false` if the next iteration should be checked.
-    typealias PrunePredicate = @Sendable (_ iteration: SnapshotIteration, _ distance: Int) -> Bool
+    typealias PrunePredicate = @Sendable (_ creationDate: Date, _ distance: Int) -> Bool
     
     /// Internal marker indicating if the retention policy refers to the ``none`` policy.
     let isNone: Bool
@@ -72,7 +72,7 @@ public struct SnapshotRetentionPolicy: Sendable {
     /// - Parameter timeInterval: The time interval in seconds to indicate an acceptable retention window.
     /// - Returns: A policy retaining transactions as old as the specified `timeInterval`.
     public static func duration(_ timeInterval: TimeInterval) -> Self {
-        SnapshotRetentionPolicy { iteration, _ in iteration.creationDate < Date(timeIntervalSinceNow: -timeInterval)}
+        SnapshotRetentionPolicy { creationDate, _ in creationDate < Date(timeIntervalSinceNow: -timeInterval)}
     }
     
     /// A retention policy that retains transactions younger than a specified duration.
@@ -115,7 +115,7 @@ public struct SnapshotRetentionPolicy: Sendable {
         guard !lhs.isIndefinite, !rhs.isIndefinite else { return .indefinite }
         if lhs.isNone { return rhs }
         if rhs.isNone { return lhs }
-        return SnapshotRetentionPolicy { lhs.shouldIterationBePruned(iteration: $0, distance: $1) && rhs.shouldIterationBePruned(iteration: $0, distance: $1)}
+        return SnapshotRetentionPolicy { lhs.shouldIterationBePruned(creationDate: $0, distance: $1) && rhs.shouldIterationBePruned(creationDate: $0, distance: $1)}
     }
     
     /// A retention policy ensuring either specified policies are enforced before pruning a snapshot.
@@ -134,16 +134,16 @@ public struct SnapshotRetentionPolicy: Sendable {
         guard !lhs.isNone, !rhs.isNone else { return .none }
         if lhs.isIndefinite { return rhs }
         if rhs.isIndefinite { return lhs }
-        return SnapshotRetentionPolicy { lhs.shouldIterationBePruned(iteration: $0, distance: $1) || rhs.shouldIterationBePruned(iteration: $0, distance: $1)}
+        return SnapshotRetentionPolicy { lhs.shouldIterationBePruned(creationDate: $0, distance: $1) || rhs.shouldIterationBePruned(creationDate: $0, distance: $1)}
     }
     
     /// Internal method to check if an iteration should be pruned and removed from disk.
     ///
-    /// - Parameter iteration: The iteration to check.
+    /// - Parameter creationDate: The creation date to check.
     /// - Parameter distance: How far the iteration is from the current root. The current root is `0` away from itself, while the next oldest iteration has a distance of `1`.
     /// - Returns: `true` if the iteration, all its ancestors, and all it's other decedents should be pruned, `false` if the next iteration should be checked.
-    func shouldIterationBePruned(iteration: SnapshotIteration, distance: Int) -> Bool {
-        shouldPrune(iteration, distance)
+    func shouldIterationBePruned(creationDate: Date, distance: Int) -> Bool {
+        shouldPrune(creationDate, distance)
     }
 }
 
