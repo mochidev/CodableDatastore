@@ -32,8 +32,9 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// A cached instance of the manifest as last loaded from disk.
     var cachedManifest: SnapshotManifest?
     
-    /// A cached instance of the current iteration as last loaded from disk.
-    var cachedIteration: SnapshotIteration?
+    /// Cache for the loaded iterations as last loaded from disk. ``isExtendedIterationCacheEnabled`` controls if multiple iterations are cached or not.
+    var cachedIterations: [SnapshotIterationIdentifier : SnapshotIteration] = [:]
+    var isExtendedIterationCacheEnabled: Bool
     
     /// A transaction stream for manifest updates, so reads and writes can be serialized in request order.
     var manifestTransactionStream = TransactionStream()
@@ -41,14 +42,29 @@ actor Snapshot<AccessMode: _AccessMode> {
     /// The loaded datastores.
     var datastores: [DatastoreIdentifier: DiskPersistence<AccessMode>.Datastore] = [:]
     
+    /// The chain of iterations
+    var iterationChain: SparseIterationChain
+    var iterationChainState: IterationChainState
+    
+//    private let (pruningTasksStream, pruningTasksStreamProvider) = AsyncStream.makeStream(of: Task<Void, Error>.self)
+//    private var pruningTasksIterator: AsyncStream<Task<Void, any Error>>.AsyncIterator
+    private var pruningWatermark = 0
+    private var lastPruningTask: Task<Void, Error>?
+    
     init(
         id: SnapshotIdentifier,
         persistence: DiskPersistence<AccessMode>,
-        isBackup: Bool = false
+        isBackup: Bool = false,
+        isExtendedIterationCacheEnabled: Bool = false
     ) {
         self.id = id
         self.persistence = persistence
         self.isBackup = isBackup
+        self.isExtendedIterationCacheEnabled = isExtendedIterationCacheEnabled
+        
+        self.iterationChain = SparseIterationChain()
+        self.iterationChainState = .forwardEditsOnly
+//        prunedIterationIterator = prunedIterationStream.makeAsyncIterator()
     }
 }
 
@@ -126,18 +142,222 @@ extension Snapshot {
         }
     }
     
+    func setExtendedIterationCacheEnabled(_ isEnabled: Bool) async {
+        isExtendedIterationCacheEnabled = isEnabled
+        
+        await invalidateIterationChainState()
+    }
+    
+    private func invalidateIterationChainState() async {
+        switch iterationChainState {
+        case .forwardEditsOnly:
+            /// If we are currently only collecting forward edits, and the extended cache was just enabled, start the crawling process.
+            if isExtendedIterationCacheEnabled {
+                iterationChainState = .crawling(Task {
+                    do {
+                        try await crawlIterations()
+                        iterationChainState = .complete
+                    } catch {
+                        print("Error crawling iterations: \(error)")
+                        iterationChainState = .forwardEditsOnly
+                    }
+                })
+            }
+        case .crawling(let task):
+            /// If we are currently crawling, but the extended cache was just disabled, cancel the crawling process and swap back to the incomplete state. Everything we have should still be valid.
+            if !isExtendedIterationCacheEnabled {
+                /// The state is managed by the task, and doesn't need to be set here, so long as we wait for it to complete up to the cancellation point.
+                task.cancel()
+                await task.value
+            }
+        case .complete:
+            break
+        }
+    }
+    
+    func crawlIterations() async throws {
+        var currentIteration: SnapshotIteration
+        if let currentIterationID = iterationChain.last?.iteration {
+            currentIteration = try self.loadIterationNoCache(for: currentIterationID)
+        } else {
+            // TODO: We need to do this earlier, otheriwse we may end up duplicating an entry or skipping others, as the cached manifest may have changed since the task was initially started
+            /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
+            var manifest = try cachedManifest ?? self.loadManifest()
+            
+            /// If there is no ID here, we are basically done, as we have nothing to crawl
+            guard let currentIterationID = manifest.currentIteration
+            else { return }
+            
+            /// Make sure not to await adding this first entry?
+            currentIteration = try self.loadIterationNoCache(for: currentIterationID)
+            iterationChain.append(iteration: currentIteration)
+        }
+        
+        /// Walk the preceding iteration chain to the oldest iteration we can open, collecting the ones that should be pruned.
+        while let precedingIterationID = currentIteration.precedingIteration, let precedingIteration = try? await loadIteration(for: precedingIterationID) {
+            try Task.checkCancellation()
+            
+            if !iterations.isEmpty || transactionRetentionPolicy.shouldIterationBePruned(creationDate: precedingIteration.creationDate, distance: distance) {
+                iterations.append(precedingIteration.id)
+            } else {
+                mainlineSuccessorIteration = precedingIteration
+            }
+            currentIteration = precedingIteration
+            
+            distance += 1
+            
+            if distance % 5000 == 0 {
+                print("Found \(iterations.count) iterations to prune. Keeping \(distance - iterations.count) iterations.")
+            }
+            
+//                    await Task.yield()
+        }
+    }
+    
     /// Load an iteration from disk, or create a suitable starting value if such a file does not exist.
-    private func loadIteration(for iterationID: SnapshotIterationIdentifier) throws -> SnapshotIteration {
+    func loadIterationNoCache(for iterationID: SnapshotIterationIdentifier) throws -> SnapshotIteration {
         do {
             let data = try Data(contentsOf: iterationURL(for: iterationID))
-
+            
             let iteration = try JSONDecoder.shared.decode(SnapshotIteration.self, from: data)
-
-            cachedIteration = iteration
+            
+            if !isExtendedIterationCacheEnabled {
+                cachedIterations.removeAll()
+            }
+            /// Make sure not to grow the cache unecessarily
+            if cachedIterations.count >= 256, let firstKey = cachedIterations.keys.first {
+                cachedIterations.removeValue(forKey: firstKey)
+            }
+            cachedIterations[iteration.id] = iteration
             return iteration
         } catch {
             throw error
         }
+    }
+    
+    /// Load an iteration from disk, or create a suitable starting value if such a file does not exist.
+    func loadIteration(for iterationID: SnapshotIterationIdentifier?) async throws -> SnapshotIteration? {
+        guard let iterationID else { return nil }
+        if let iteration = cachedIterations[iterationID] {
+            return iteration
+        }
+        return try loadIterationNoCache(for: iterationID)
+    }
+    
+    func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode, shouldDelete: Bool) async throws {
+        let pruneTask = Task {
+            try await pruneIteration(iteration, mode: mode)
+            return iteration
+        }
+        lastPruningTask = Task { [lastPruningTask] in
+            try await lastPruningTask?.value
+            let iteration = try await pruneTask.value
+            if shouldDelete {
+                deleteIteration(iteration)
+            }
+        }
+        pruningWatermark += 1
+        
+        /// If we've enqueued at least 64 tasks, pause before returning control so we can drain the pool, checking for cancellation in the process.
+        if pruningWatermark >= 64 {
+            try Task.checkCancellation()
+            pruningWatermark = 0
+            try await lastPruningTask?.value
+            await Task.yield()
+        }
+    }
+    
+    func drainPrunedIterations() async throws {
+        pruningWatermark = 0
+        try await lastPruningTask?.value
+    }
+    
+    private func pruneIteration(_ iteration: SnapshotIteration, mode: SnapshotPruneMode) async throws {
+        /// Collect the datastores and related roots we'll be deleting.
+        /// - For datastores, only collect the ones we'll be deleting since the ones we are keeping won't be making references to other deletable assets.
+        /// - For the datastore roots, we'll be deleting the entries that are being removed (relative to the direction we are removing from, so the removed ones from the oldest edge, and the added ones from the newest edge, as determined by the caller), while we'll be checking for more assets to remove from entries that have just been added, but only when removing from the oldest edge. We only do this for the oldest edge because entries that have been "removed" from the newest edge are actually being _restored_ and not replaced, which maintains symmetry in a non-obvious way.
+        let datastoresToPruneAndDelete = iteration.datastoresToPrune(for: mode)
+        var datastoreRootsToPruneAndDelete = iteration.datastoreRootsToPrune(for: mode, options: .pruneAndDelete)
+        var datastoreRootsToPrune = iteration.datastoreRootsToPrune(for: mode, options: .pruneOnly)
+        
+        /// Start by deleting and pruning roots as needed. We attempt to do this twice, as older versions of the persistence (prior to 0.4) didn't record the datastore ID along with the root id, which would therefor require extra work.
+        /// First, delete the root entries we know to be removed.
+        for datastoreRoot in datastoreRootsToPruneAndDelete {
+            guard let datastoreID = datastoreRoot.datastoreID else { continue }
+            let datastore = datastores[datastoreID] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreID, snapshot: self)
+            do {
+                try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: true)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                /// This datastore root is already gone.
+            } catch {
+                print("Could not delete datastore root \(datastoreRoot): \(error)")
+                throw error
+            }
+            datastoreRootsToPruneAndDelete.remove(datastoreRoot)
+        }
+        /// Prune the root entries that were just added, as they themselves refer to other deleted assets.
+        for datastoreRoot in datastoreRootsToPrune {
+            guard let datastoreID = datastoreRoot.datastoreID else { continue }
+            let datastore = datastores[datastoreID] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreID, snapshot: self)
+            do {
+                try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: false)
+            } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                /// This datastore root is already gone.
+            } catch {
+                print("Could not prune datastore root \(datastoreRoot): \(error)")
+                throw error
+            }
+            datastoreRootsToPrune.remove(datastoreRoot)
+        }
+        /// If any regerences remain, funnel into this code path for very old persistences.
+        if !datastoreRootsToPruneAndDelete.isEmpty || !datastoreRootsToPrune.isEmpty {
+            for (_, datastoreInfo) in iteration.dataStores {
+                /// Skip any roots for datastores being deleted, since we'll just unlink the whole directory in that case.
+                guard !datastoresToPruneAndDelete.contains(datastoreInfo.id) else { continue }
+                
+                let datastore = datastores[datastoreInfo.id] ?? DiskPersistence<AccessMode>.Datastore(id: datastoreInfo.id, snapshot: self)
+                
+                /// Delete the root entries we know to be removed.
+                for datastoreRoot in datastoreRootsToPruneAndDelete {
+                    do {
+                        try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: true)
+                        datastoreRootsToPruneAndDelete.remove(datastoreRoot)
+                    } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                        /// This datastore did not contain the specified root, skip it for now.
+                    } catch {
+                        print("Could not delete datastore root \(datastoreRoot): \(error).")
+                        throw error
+                    }
+                }
+                
+                /// Prune the root entries that were just added, as they themselves refer to other deleted assets.
+                for datastoreRoot in datastoreRootsToPrune {
+                    do {
+                        try await datastore.pruneRootObject(with: datastoreRoot.datastoreRootID, mode: mode, shouldDelete: false)
+                        datastoreRootsToPrune.remove(datastoreRoot)
+                    } catch URLError.fileDoesNotExist, CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile, POSIXError.ENOENT {
+                        /// This datastore did not contain the specified root, skip it for now.
+                    } catch {
+                        print("Could not prune datastore root \(datastoreRoot): \(error).")
+                        throw error
+                    }
+                }
+            }
+        }
+        
+        /// Delete any datastores in their entirety.
+        for datastoreID in datastoresToPruneAndDelete {
+            try? FileManager.default.removeItem(at: datastoreURL(for: datastoreID))
+        }
+    }
+    
+    /// Delete the iteration. Note that an iteration should be pruned first to delete related files that are specific to the iteration itself.
+    private func deleteIteration(_ iteration: SnapshotIteration) {
+        cachedIterations.removeValue(forKey: iteration.id)
+        
+        let iterationURL = iterationURL(for: iteration.id)
+        try? FileManager.default.removeItem(at: iterationURL)
+        try? FileManager.default.removeDirectoryIfEmpty(url: iterationURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
     }
     
     /// Write the specified manifest to the store, and cache the results in ``Snapshot/cachedManifest``.
@@ -157,7 +377,7 @@ extension Snapshot {
         cachedManifest = manifest
     }
     
-    /// Write the specified iteration to the store, and cache the results in ``Snapshot/cachedIteration``.
+    /// Write the specified iteration to the store, and cache the results in ``Snapshot/cachedIterations``.
     private func write(iteration: SnapshotIteration) throws where AccessMode == ReadWrite {
         let iterationURL = iterationURL(for: iteration.id)
         /// Make sure the directories exists first.
@@ -168,7 +388,10 @@ extension Snapshot {
         try data.write(to: iterationURL, options: .atomic)
 
         /// Update the cache since we know what it should be.
-        cachedIteration = iteration
+        if !isExtendedIterationCacheEnabled {
+            cachedIterations.removeAll()
+        }
+        cachedIterations[iteration.id] = iteration
     }
 
     /// Load and update the manifest in an updater.
@@ -195,15 +418,8 @@ extension Snapshot {
         return try await manifestTransactionStream.withTransaction {
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             var manifest = try cachedManifest ?? self.loadManifest()
-            var iteration: SnapshotIteration
-            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
-                iteration = cachedIteration
-            } else if let iterationID = manifest.currentIteration {
-                iteration = try self.loadIteration(for: iterationID)
-            } else {
-                let date = Date()
-                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
-            }
+            let precedingIteration = try await self.loadIteration(for: manifest.currentIteration)
+            var iteration = precedingIteration ?? SnapshotIteration()
 
             /// Let the updater do something with the manifest, storing the variable on the Task Local stack.
             let returnValue = try await SnapshotTaskLocals.with(manifest: manifest, iteration: iteration, for: persistence) {
@@ -211,10 +427,10 @@ extension Snapshot {
             }
             
             /// Only write to the store if we changed the manifest for any reason
-            if iteration.isMeaningfullyChanged(from: cachedIteration) {
+            if iteration.isMeaningfullyChanged(from: precedingIteration) {
                 iteration.creationDate = Date()
                 iteration.id = SnapshotIterationIdentifier(date: iteration.creationDate)
-                iteration.precedingIteration = cachedIteration?.id
+                iteration.precedingIteration = precedingIteration?.id
                 
                 try write(iteration: iteration)
             }
@@ -225,6 +441,10 @@ extension Snapshot {
             if manifest != cachedManifest {
                 try write(manifest: manifest)
             }
+            
+            /// Add the latest iteration to the chain now that it's been written to disk for this snapshot.
+            iterationChain.prepend(iteration: iteration)
+            // TODO: Update the target pruning snapshotID
             return returnValue
         }
     }
@@ -246,15 +466,7 @@ extension Snapshot {
         return try await manifestTransactionStream.withTransaction {
             /// Load the manifest so we have a fresh copy, unless we have a cached copy already.
             let manifest = try cachedManifest ?? self.loadManifest()
-            var iteration: SnapshotIteration
-            if let cachedIteration, cachedIteration.id == manifest.currentIteration {
-                iteration = cachedIteration
-            } else if let iterationID = manifest.currentIteration {
-                iteration = try self.loadIteration(for: iterationID)
-            } else {
-                let date = Date()
-                iteration = SnapshotIteration(id: SnapshotIterationIdentifier(date: date), creationDate: date)
-            }
+            let iteration = try await self.loadIteration(for: manifest.currentIteration) ?? SnapshotIteration()
 
             /// Let the accessor do something with the manifest, storing the variable on the Task Local stack.
             return try await SnapshotTaskLocals.with(manifest: manifest, iteration: iteration, for: persistence) {
@@ -284,6 +496,16 @@ private enum SnapshotTaskLocals {
         
         return try await $manifestStorage.withValue(currentStorage, operation: operation)
     }
+}
+
+enum SnapshotPruneMode {
+    case pruneRemoved
+    case pruneAdded
+}
+
+enum SnapshotPruneOptions {
+    case pruneAndDelete
+    case pruneOnly
 }
 
 // MARK: - Datastore Management
@@ -365,3 +587,114 @@ extension Snapshot {
         }
     }
 }
+
+struct SparseIterationChain {
+    var count: Int
+    var groups: [Group]
+    
+    init() {
+        self.count = 0
+        self.groups = []
+    }
+    
+    struct Group {
+        var first: (iteration: SnapshotIteration.ID, creationDate: Date)
+        var last: (iteration: SnapshotIteration.ID, creationDate: Date)
+        var contents: [(iteration: SnapshotIteration.ID, creationDate: Date)]?
+        var count: Int
+        
+        init(iteration: SnapshotIteration) {
+            first = (iteration.id, iteration.creationDate)
+            last = (iteration.id, iteration.creationDate)
+            contents = [(iteration.id, iteration.creationDate)]
+            count = 1
+        }
+        
+        mutating func prepend(iteration: SnapshotIteration) {
+            if contents != nil {
+                contents?.insert((iteration.id, iteration.creationDate), at: 0)
+            }
+            first = (iteration.id, iteration.creationDate)
+            count += 1
+        }
+        
+        mutating func append(iteration: SnapshotIteration) {
+            if contents != nil {
+                contents?.append((iteration.id, iteration.creationDate))
+            }
+            last = (iteration.id, iteration.creationDate)
+            count += 1
+        }
+    }
+    
+    mutating func prepend(iteration: SnapshotIteration) {
+        count += 1
+        if !groups.isEmpty {
+            /// If the group happens to have room, prepend to it and return.
+            guard groups[0].count >= chunkSize else {
+                groups[0].prepend(iteration: iteration)
+                return
+            }
+            /// Otherwise, empty out the subsequent group, and flow through to create a new one
+            groups[0].contents = nil
+        }
+        groups.insert(Group(iteration: iteration), at: 0)
+    }
+    
+    mutating func append(iteration: SnapshotIteration) {
+        count += 1
+        if !groups.isEmpty {
+            /// If the group happens to have room, append to it and return.
+            guard groups[groups.count-1].count >= chunkSize else {
+                groups[groups.count-1].append(iteration: iteration)
+                return
+            }
+            /// Otherwise, empty out the previous group, and flow through to create a new one
+            groups[groups.count-1].contents = nil
+        }
+        groups.append(Group(iteration: iteration))
+    }
+    
+    mutating func removeIterations(failing snapshotRetentionPolicy: SnapshotRetentionPolicy) -> [Group] {
+        var groupsToRemove: [Group] = []
+        
+        return groupsToRemove
+    }
+    
+    var first: (iteration: SnapshotIteration.ID, creationDate: Date)? {
+        groups.first?.first
+    }
+    
+    var last: (iteration: SnapshotIteration.ID, creationDate: Date)? {
+        groups.last?.last
+    }
+    
+    var chunkSize: Int {
+        1 << max(Int.bitWidth - 1 - count.leadingZeroBitCount - 8, 8)
+    }
+}
+
+enum IterationChainState {
+    case forwardEditsOnly
+    case crawling(Task<Void, Never>)
+    case complete
+}
+
+
+/*
+ 
+ - enforceRetentionPolicy enabled
+   1. iteration chain created
+   2. each new iteration added to the front of it
+   3. iterations are crawled adding to the back of it
+   4. only the first and last chunks are hydrated
+   5. iteration chain owned by an actor so access is safe
+   6. separate flag controls if iterations have been fully crawled
+   7. if iterations are still being crawled, don't do anything
+   8. if iterations completed crawling, scan for first one to delete
+   9. delete from oldest to first item
+   10. if final group is sparse, re-hydrate it
+   11. if deleting, set new final iteration
+   12. if not deleting
+ 
+ */
