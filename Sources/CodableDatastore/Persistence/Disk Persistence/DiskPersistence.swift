@@ -141,7 +141,7 @@ extension DiskPersistence {
 
 extension DiskPersistence {
     /// Load the store info from disk, or create a suitable starting value if such a file does not exist.
-    private func loadStoreInfo(now: Date = Date()) throws -> StoreInfo {
+    private func loadStoreInfo() throws -> StoreInfo? {
         do {
             let data = try Data(contentsOf: storeInfoURL)
             
@@ -150,7 +150,7 @@ extension DiskPersistence {
             cachedStoreInfo = storeInfo
             return storeInfo
         } catch URLError.fileDoesNotExist, CocoaError.fileNoSuchFile, CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
-            return StoreInfo(modificationDate: now)
+            return nil
         } catch {
             throw error
         }
@@ -180,19 +180,20 @@ extension DiskPersistence {
         updater: (_ storeInfo: inout StoreInfo) async throws -> T
     ) async throws -> T where AccessMode == ReadWrite {
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
-            var updatedStoreInfo = storeInfo
+            guard var updatedStoreInfo = storeInfo
+            else { throw DiskPersistenceInternalError.nestedStoreWrite }
+            
             let returnValue = try await updater(&updatedStoreInfo)
             
-            guard updatedStoreInfo == storeInfo else {
-                throw DiskPersistenceInternalError.nestedStoreWrite
-            }
+            guard updatedStoreInfo == storeInfo
+            else { throw DiskPersistenceInternalError.nestedStoreWrite }
             
             return returnValue
         }
         
         return try await storeInfoTransactionStream.withTransaction {
             /// Load the store info so we have a fresh copy, unless we have a cached copy already.
-            var storeInfo = try cachedStoreInfo ?? self.loadStoreInfo()
+            var storeInfo = try cachedStoreInfo ?? self.loadStoreInfo() ?? StoreInfo(modificationDate: Date())
             
             /// Let the updater do something with the store info, storing the variable on the Task Local stack.
             let returnValue = try await DiskPersistenceTaskLocals.with(storeInfo: storeInfo, for: self) {
@@ -224,7 +225,7 @@ extension DiskPersistence {
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
     func withStoreInfo<T: Sendable>(
-        accessor: (_ storeInfo: StoreInfo) async throws -> T
+        accessor: (_ storeInfo: StoreInfo?) async throws -> T
     ) async throws -> T {
         if let storeInfo = DiskPersistenceTaskLocals.storeInfo(for: self) {
             return try await accessor(storeInfo)
@@ -308,12 +309,16 @@ extension DiskPersistence {
     /// - Returns: The value returned from the `accessor`.
     @_disfavoredOverload
     func readingCurrentSnapshot<T: Sendable>(
-        accessor: sending @Sendable (_ snapshot: Snapshot<AccessMode>) async throws -> T
+        accessor: sending @Sendable (_ snapshot: Snapshot<AccessMode>?) async throws -> T
     ) async throws -> T {
         /// Grab access to the store info to load and update it.
         try await withStoreInfo { storeInfo in
             /// Grab the current snapshot from the store info
-            let snapshot = self.loadSnapshot(from: storeInfo)
+            let snapshot = if let storeInfo {
+                self.loadSnapshot(from: storeInfo)
+            } else {
+                Snapshot<AccessMode>?.none
+            }
             
             /// Let the accessor do what it needs to do with the snapshot
             return try await accessor(snapshot)
@@ -330,16 +335,18 @@ extension DiskPersistence {
     func _takeSnapshot(
         newSnapshotIdentifier: SnapshotIdentifier?
     ) async throws where AccessMode == ReadWrite { // TODO: return new snapshot iteration
-        let readSnapshot = try await currentSnapshot
+        guard let readSnapshot = try await currentSnapshot
+        else { return }
+        
         let newSnapshot = try await createSnapshot(from: readSnapshot, newSnapshotIdentifier: newSnapshotIdentifier)
         try await setCurrentSnapshot(snapshot: newSnapshot)
     }
     
     /// Load the current snapshot the persistence is reading and writing to.
-    var currentSnapshot: Snapshot<AccessMode> {
+    var currentSnapshot: Snapshot<AccessMode>? {
         // TODO: This should return a readonly snapshot, but we need to be able to make a read-only copy from the persistence first.
         get async throws {
-            try await withStoreInfo { loadSnapshot(from: $0) }
+            try await withStoreInfo { $0.flatMap { loadSnapshot(from: $0) } }
         }
     }
     
@@ -448,7 +455,7 @@ extension DiskPersistence {
     
     func persistenceDatastore(
         for datastoreKey: DatastoreKey
-    ) async throws -> (Datastore, DatastoreRootIdentifier?) {
+    ) async throws -> (datastore: Datastore, rootID: DatastoreRootIdentifier?)? {
         guard registeredDatastores[datastoreKey] != nil else {
             throw DatastoreInterfaceError.datastoreNotFound
         }
@@ -463,7 +470,8 @@ extension DiskPersistence {
             return (datastore as! DiskPersistence<AccessMode>.Datastore, rootID)
         } else {
             return try await readingCurrentSnapshot { snapshot in
-                try await snapshot.readingManifest { snapshotManifest, currentIteration in
+                guard let snapshot else { return nil }
+                return try await snapshot.readingManifest { snapshotManifest, currentIteration in
                     await snapshot.loadDatastore(for: datastoreKey, from: currentIteration)
                 }
             }
@@ -560,7 +568,8 @@ extension DiskPersistence {
         removedDatastoreRoots: Set<DatastoreRootReference>
     ) async throws {
         let containsEdits = try await readingCurrentSnapshot { snapshot in
-            try await snapshot.readingManifest { manifest, iteration in
+            guard let snapshot else { return false }
+            return try await snapshot.readingManifest { manifest, iteration in
                 for (key, root) in roots {
                     guard iteration.dataStores[key]?.root == root.id
                     else { return true }
@@ -687,20 +696,22 @@ enum ModificationUpdate {
 
 private enum DiskPersistenceTaskLocals {
     @TaskLocal
-    static var storeInfoStorage: [ObjectIdentifier : StoreInfo] = [:]
+    static var storeInfoStorage: [ObjectIdentifier : StoreInfo?] = [:]
     
-    static func storeInfo<AccessMode: _AccessMode>(for persistence: DiskPersistence<AccessMode>) -> StoreInfo? {
+    /// Read the `storeInfo` for the current task hierarchy. Note that `.some(nil)` represents that we are in a hierarchy that explicitely doesn't have a valid store info.
+    static func storeInfo<AccessMode: _AccessMode>(for persistence: DiskPersistence<AccessMode>) -> StoreInfo?? {
         storeInfoStorage[ObjectIdentifier(persistence)]
     }
     
+    /// Set a `storeInfo` for the current task hierarchy.
     static func with<AccessMode: _AccessMode, R>(
         isolation actor: isolated (any Actor)? = #isolation,
-        storeInfo: StoreInfo,
+        storeInfo: StoreInfo?,
         for persistence: DiskPersistence<AccessMode>,
         operation: () async throws -> R
     ) async rethrows -> R {
         var currentStorage = storeInfoStorage
-        currentStorage[ObjectIdentifier(persistence)] = storeInfo
+        currentStorage[ObjectIdentifier(persistence)] = .some(storeInfo)
         
         return try await $storeInfoStorage.withValue(currentStorage, operation: operation)
     }

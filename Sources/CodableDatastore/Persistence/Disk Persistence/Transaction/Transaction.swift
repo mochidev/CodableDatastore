@@ -259,14 +259,12 @@ extension DiskPersistence {
             
             var datastores: [DatastoreKey : Datastore] = [:]
             for (datastoreKey, event) in entryMutations {
-                let datastore: Datastore
-                if let cachedDatastore = datastores[datastoreKey] {
-                    datastore = cachedDatastore
-                } else {
-                    datastore = try await persistence.persistenceDatastore(for: datastoreKey).0
+                if let datastore = datastores[datastoreKey] {
+                    await datastore.emit(event)
+                } else if let datastore = try await persistence.persistenceDatastore(for: datastoreKey)?.datastore {
                     datastores[datastoreKey] = datastore
+                    await datastore.emit(event)
                 }
-                await datastore.emit(event)
             }
         }
         
@@ -295,9 +293,10 @@ extension DiskPersistence {
                 return rootObject
             }
             
-            let (persistenceDatastore, rootID) = try await persistence.persistenceDatastore(for: datastoreKey)
-            
-            guard let rootID else { return nil }
+            guard
+                let (persistenceDatastore, rootID) = try await persistence.persistenceDatastore(for: datastoreKey),
+                let rootID
+            else { return nil }
             
             let rootObject = await persistenceDatastore.rootObject(for: rootID)
             rootObjects[datastoreKey] = rootObject
@@ -315,7 +314,8 @@ extension DiskPersistence {
                 return hasObservers
             }
             
-            let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+            guard let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+            else { return false }
             let hasObservers = await datastore.hasObservers
             observerCache[datastoreKey] = hasObservers
             return hasObservers
@@ -393,7 +393,8 @@ extension DiskPersistence.Transaction: DatastoreInterfaceProtocol {
             await datastore.adopt(rootObject: newRootObject)
             rootObjects[datastoreKey] = newRootObject
         } else {
-            let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+            guard let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+            else { return }
             
             /// Create index objects first so they are available when requested.
             let primaryManifestIdentifier = DatastoreIndexManifestIdentifier()
@@ -1343,7 +1344,8 @@ extension DiskPersistence.Transaction {
     ) async throws -> AsyncCompactMapSequence<AsyncStream<ObservedEvent<Data, ObservationEntry>>, ObservedEvent<IdentifierType, ObservationEntry>> {
         let (stream, observer) = AsyncStream.makeStream(of: ObservedEvent<Data, ObservationEntry>.self, bufferingPolicy: .init(limit))
         
-        let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+        guard let (datastore, _) = try await persistence.persistenceDatastore(for: datastoreKey)
+        else { return stream.compactMap { _ in nil } }
         
         await datastore.register(observer: observer)
         
