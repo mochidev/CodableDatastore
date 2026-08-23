@@ -141,7 +141,7 @@ extension DiskPersistence {
 
 extension DiskPersistence {
     /// Load the store info from disk, or create a suitable starting value if such a file does not exist.
-    private func loadStoreInfo() throws -> StoreInfo {
+    private func loadStoreInfo(now: Date = Date()) throws -> StoreInfo {
         do {
             let data = try Data(contentsOf: storeInfoURL)
             
@@ -150,7 +150,7 @@ extension DiskPersistence {
             cachedStoreInfo = storeInfo
             return storeInfo
         } catch URLError.fileDoesNotExist, CocoaError.fileNoSuchFile, CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
-            return StoreInfo(modificationDate: Date())
+            return StoreInfo(modificationDate: now)
         } catch {
             throw error
         }
@@ -199,9 +199,18 @@ extension DiskPersistence {
                 try await updater(&storeInfo)
             }
             
-            /// Only write to the store if we changed the store info for any reason
+            /// Only write to the store if we changed the store info for any reason.
             if storeInfo != cachedStoreInfo {
-                try write(storeInfo: storeInfo)
+                do {
+                    try write(storeInfo: storeInfo)
+                } catch {
+                    /// Only throw an error if the snapshot identifier could not be updated — If `cachedStoreInfo` was `nil`, then we are working from a non-persisted instance which should also fail under this check.
+                    if cachedStoreInfo?.currentSnapshot != storeInfo.currentSnapshot {
+                        throw error
+                    } else {
+                        print("Store info was updated in a non-critical way, but could not be persisted: \(error). Old Store Info: \(String(describing: cachedStoreInfo)), New Store Info: \(storeInfo). Check the disk to ensure it can be reliably written to.")
+                    }
+                }
             }
             return returnValue
         }
