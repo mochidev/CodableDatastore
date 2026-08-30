@@ -149,7 +149,7 @@ extension DiskPersistence {
             
             cachedStoreInfo = storeInfo
             return storeInfo
-        } catch URLError.fileDoesNotExist, CocoaError.fileNoSuchFile, CocoaError.fileReadNoSuchFile, POSIXError.ENOENT {
+        } catch FileNotFoundError() {
             return nil
         } catch {
             throw error
