@@ -92,21 +92,11 @@ extension DiskPersistence.Datastore.Page {
 // MARK: - Persistence
 
 extension DiskPersistence.Datastore.Page {
-    private var readableSequence: AnyReadableSequence<Byte, any Error> {
-        get throws {
-#if canImport(Darwin)
-            if #available(macOS 12.0, iOS 15, watchOS 8, tvOS 15, *) {
-                return AnyReadableSequence(pageURL.resourceBytes)
-            } else {
-                return AnyReadableSequence(try Data(contentsOf: pageURL))
-            }
-#else
-            return AnyReadableSequence(try Data(contentsOf: pageURL))
-#endif
-        }
+    private var readableSequence: AsyncFileReader {
+        AsyncFileReader(contentsOf: pageURL)
     }
     
-    private nonisolated func performRead(sequence: AnyReadableSequence<Byte, any Error>) async throws -> MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock, any Error>> {
+    private nonisolated func performRead(sequence: AsyncFileReader) async throws -> MultiplexedAsyncSequence<AnyReadableSequence<DatastorePageEntryBlock, any Error>> {
         var iterator = sequence.makeBufferedIterator()
         
         try await iterator.check(Self.header)
@@ -146,7 +136,7 @@ extension DiskPersistence.Datastore.Page {
             }
             
             let readerTask = Task {
-                try await performRead(sequence: try readableSequence)
+                try await performRead(sequence: readableSequence)
             }
             isPersisted = true
             blocksReaderTask = readerTask
