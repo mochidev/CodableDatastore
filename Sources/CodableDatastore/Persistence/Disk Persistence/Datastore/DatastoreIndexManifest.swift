@@ -95,18 +95,10 @@ extension DatastoreIndexManifest {
 
 extension DatastoreIndexManifest {
     init(contentsOf url: URL, id: ID) async throws {
-#if canImport(Darwin)
-        if #available(macOS 12.0, iOS 15, watchOS 8, tvOS 15, *) {
-            try await self.init(sequence: AnyReadableSequence(url.resourceBytes), id: id)
-        } else {
-            try await self.init(sequence: AnyReadableSequence(try Data(contentsOf: url)), id: id)
-        }
-#else
-        try await self.init(sequence: AnyReadableSequence(try Data(contentsOf: url)), id: id)
-#endif
+        try await self.init(sequence: AsyncFileReader(contentsOf: url), id: id)
     }
     
-    init(sequence: AnyReadableSequence<Byte, any Error>, id: ID) async throws {
+    init(sequence: AsyncFileReader, id: ID) async throws {
         self.id = id
         
         var iterator = sequence.makeAsyncIterator()
