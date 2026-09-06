@@ -30,6 +30,8 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     
     var _transactionRetentionPolicy: SnapshotRetentionPolicy = .indefinite
     
+    let directoriesToRemove = URLCollector()
+    
     /// Shared caches across all snapshots and datastores.
     var rollingRootObjectCacheIndex = 0
     var rollingRootObjectCache: [Datastore.RootObject] = []
@@ -660,6 +662,22 @@ extension DiskPersistence where AccessMode == ReadWrite {
         
         if let (snapshot, iteration) = info {
             await snapshot.enforce(retentionPolicy: _transactionRetentionPolicy, fromIteration: iteration.id, taskPriority: Task.currentPriority).value
+        }
+    }
+    
+    func removeEmptyDirectories() {
+        var directoriesToRemove = directoriesToRemove.removeAllURLs()
+        var allDirectories = Set(directoriesToRemove)
+        
+        while let directory = allDirectories.popFirst() {
+            guard (try? FileManager.default.removeDirectoryIfEmpty(url: directory, recursivelyRemoveParents: false)) == true
+            else { continue }
+            
+            let parent = directory.deletingLastPathComponent()
+            if !allDirectories.contains(parent) {
+                directoriesToRemove.append(parent)
+                allDirectories.insert(parent)
+            }
         }
     }
 }

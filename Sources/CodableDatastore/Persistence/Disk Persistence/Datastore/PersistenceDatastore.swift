@@ -205,7 +205,7 @@ extension DiskPersistence.Datastore {
                 let pageURL = pageURL(for: indexedPageID)
                 
                 try? fileManager.removeItem(at: pageURL)
-                try? fileManager.removeDirectoryIfEmpty(url: pageURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+                snapshot.persistence.directoriesToRemove.insertURL(pageURL.deletingLastPathComponent())
             }
             
             try? fileManager.removeItem(at: manifestURL)
@@ -242,7 +242,7 @@ extension DiskPersistence.Datastore {
                 let pageURL = pageURL(for: indexedPageID)
                 
                 try? fileManager.removeItem(at: pageURL)
-                try? fileManager.removeDirectoryIfEmpty(url: pageURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+                snapshot.persistence.directoriesToRemove.insertURL(pageURL.deletingLastPathComponent())
             }
         }
         
@@ -258,7 +258,7 @@ extension DiskPersistence.Datastore {
             
             let rootURL = rootURL(for: rootObject.id)
             try? fileManager.removeItem(at: rootURL)
-            try? fileManager.removeDirectoryIfEmpty(url: rootURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+            snapshot.persistence.directoriesToRemove.insertURL(rootURL.deletingLastPathComponent())
         }
     }
     

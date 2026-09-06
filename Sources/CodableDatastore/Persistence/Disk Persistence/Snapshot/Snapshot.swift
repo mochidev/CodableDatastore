@@ -396,6 +396,8 @@ extension Snapshot {
         try await pruneIteration(mainlineRootIteration, mode: .pruneRemoved, shouldDelete: false)
         /// Wait for all in-progress pruning operations to finish.
         try await drainPrunedIterations()
+        
+        await persistence.removeEmptyDirectories()
         print("Pruning complete!")
     }
     
@@ -557,7 +559,7 @@ extension Snapshot {
         
         let iterationURL = iterationURL(for: iteration.id)
         try? FileManager.default.removeItem(at: iterationURL)
-        try? FileManager.default.removeDirectoryIfEmpty(url: iterationURL.deletingLastPathComponent(), recursivelyRemoveParents: true)
+        persistence.directoriesToRemove.insertURL(iterationURL.deletingLastPathComponent())
     }
     
     /// Write the specified manifest to the store, and cache the results in ``Snapshot/cachedManifest``.
