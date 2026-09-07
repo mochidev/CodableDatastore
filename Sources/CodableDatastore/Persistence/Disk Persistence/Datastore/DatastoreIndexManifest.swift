@@ -13,6 +13,10 @@ import Foundation
 
 typealias DatastoreIndexManifestIdentifier = DatedIdentifier<DatastoreIndexManifest>
 
+@DebugDescription extension DatastoreIndexManifestIdentifier {
+    var debugDescription: String { "DatastoreIndexManifestIdentifier(\(rawValue))" }
+}
+
 struct DatastoreIndexManifest: Equatable, Identifiable {
     /// The identifier for this manifest.
     var id: DatastoreIndexManifestIdentifier

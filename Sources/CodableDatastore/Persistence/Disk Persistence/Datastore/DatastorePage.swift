@@ -13,6 +13,10 @@ import Foundation
 
 typealias DatastorePageIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Datastore.Page>
 
+@DebugDescription extension DatastorePageIdentifier {
+    var debugDescription: String { "DatastorePageIdentifier(\(rawValue))" }
+}
+
 extension DiskPersistence.Datastore {
     actor Page: Identifiable {
         let datastore: DiskPersistence<AccessMode>.Datastore

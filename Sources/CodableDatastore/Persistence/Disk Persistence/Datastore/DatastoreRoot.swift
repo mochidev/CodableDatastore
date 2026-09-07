@@ -11,6 +11,10 @@ import Foundation
 
 typealias DatastoreRootIdentifier = DatedIdentifier<DiskPersistence<ReadOnly>.Datastore.RootObject>
 
+@DebugDescription extension DatastoreRootIdentifier {
+    var debugDescription: String { "DatastoreRootIdentifier(\(rawValue))" }
+}
+
 /// A reference to a particular root within a datastore.
 ///
 /// Prior to version 0.4 (2024-10-11), only the root ID was stored in the snapshot iteration manifest's root file, which meant one would need to guess which datastore it belonged to. This type thus tries to decode both a single ``DatastoreRootIdentifier`` and a pair of ``DatastoreIdentifier`` and ``DatastoreRootIdentifier``s.

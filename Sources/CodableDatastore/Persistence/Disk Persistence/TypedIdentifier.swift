@@ -17,7 +17,7 @@ struct TypedIdentifier<T>: TypedIdentifierProtocol {
     }
 }
 
-protocol TypedIdentifierProtocol: RawRepresentable, Codable, Equatable, Hashable, CustomStringConvertible, Comparable, Sendable {
+protocol TypedIdentifierProtocol: RawRepresentable, Codable, Equatable, Hashable, CustomStringConvertible, CustomDebugStringConvertible, Comparable, Sendable {
     var rawValue: String { get }
     init(rawValue: String)
 }
@@ -34,6 +34,7 @@ extension TypedIdentifierProtocol {
     }
     
     var description: String { rawValue }
+    var debugDescription: String { "\(Self.self)(\(rawValue))" }
 }
 
 extension TypedIdentifierProtocol {
