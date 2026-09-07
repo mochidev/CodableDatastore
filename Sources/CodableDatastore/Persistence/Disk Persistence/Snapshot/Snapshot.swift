@@ -12,6 +12,10 @@ import QuestionableConcurrency
 
 typealias SnapshotIdentifier = DatedIdentifier<Snapshot<ReadOnly>>
 
+@DebugDescription extension SnapshotIdentifier {
+    var debugDescription: String { "SnapshotIdentifier(\(rawValue))" }
+}
+
 /// A type that manages access to a snapshot on disk.
 actor Snapshot<AccessMode: _AccessMode> {
     /// The identifier of the snapshot.

@@ -11,6 +11,10 @@ import Foundation
 
 typealias DatastoreIdentifier = TypedIdentifier<DiskPersistence<ReadOnly>.Datastore>
 
+@DebugDescription extension DatastoreIdentifier {
+    var debugDescription: String { "DatastoreIdentifier(\(rawValue))" }
+}
+
 struct WeakValue<T: AnyObject> {
     weak var value: T?
     

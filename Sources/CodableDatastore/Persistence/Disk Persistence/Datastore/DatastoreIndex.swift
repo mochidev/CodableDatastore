@@ -16,6 +16,10 @@ import Bytes
 
 typealias DatastoreIndexIdentifier = TypedIdentifier<DiskPersistence<ReadOnly>.Datastore.Index>
 
+@DebugDescription extension DatastoreIndexIdentifier {
+    var debugDescription: String { "DatastoreIndexIdentifier(\(rawValue))" }
+}
+
 extension DiskPersistence.Datastore {
     actor Index: Identifiable {
         let datastore: DiskPersistence<AccessMode>.Datastore

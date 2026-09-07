@@ -11,6 +11,10 @@ import Foundation
 
 typealias SnapshotIterationIdentifier = DatedIdentifier<SnapshotIteration>
 
+@DebugDescription extension SnapshotIterationIdentifier {
+    var debugDescription: String { "SnapshotIterationIdentifier(\(rawValue))" }
+}
+
 /// Versions supported by ``DiskPersisitence``.
 ///
 /// These are used when dealing with format changes at the library level.
