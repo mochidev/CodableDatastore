@@ -131,7 +131,7 @@ extension DiskPersistence.Datastore.RootObject {
         
         /// Encode the provided manifest, and write it to disk.
         let data = try JSONEncoder.shared.encode(rootObject)
-        try data.write(to: rootObjectURL, options: .atomic)
+        try data.write(to: rootObjectURL, options: [])
         isPersisted = true
         await datastore.mark(identifier: id, asLoaded: true)
     }
