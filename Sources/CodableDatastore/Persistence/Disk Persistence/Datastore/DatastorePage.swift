@@ -156,7 +156,7 @@ extension DiskPersistence.Datastore.Page {
         try FileManager.default.createDirectory(at: pageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         
         /// Write the bytes for the page to disk.
-        try Data(bytes).write(to: pageURL, options: .atomic)
+        try Data(bytes).write(to: pageURL, options: [])
         isPersisted = true
         await datastore.mark(identifier: id, asLoaded: true)
     }

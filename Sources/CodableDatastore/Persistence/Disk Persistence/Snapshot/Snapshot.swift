@@ -169,7 +169,7 @@ extension Snapshot {
 
         /// Encode the provided iteration, and write it to disk.
         let data = try JSONEncoder.shared.encode(iteration)
-        try data.write(to: iterationURL, options: .atomic)
+        try data.write(to: iterationURL, options: [])
 
         /// Update the cache since we know what it should be.
         cachedIteration = iteration

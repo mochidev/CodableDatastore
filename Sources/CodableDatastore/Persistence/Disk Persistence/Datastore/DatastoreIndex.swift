@@ -153,7 +153,7 @@ extension DiskPersistence.Datastore.Index {
         
         /// Encode the provided manifest, and write it to disk.
         let data = Data(manifest.bytes)
-        try data.write(to: manifestURL, options: .atomic)
+        try data.write(to: manifestURL, options: [])
         isPersisted = true
         await datastore.mark(identifier: id, asLoaded: true)
     }
