@@ -12,6 +12,7 @@
 #endif
 import XCTest
 @testable import CodableDatastore
+import os
 
 final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Sendable {
     var temporaryStoreURL: URL = FileManager.default.temporaryDirectory
@@ -45,6 +46,10 @@ final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Senda
         }
         
         let max = 1000
+        
+        let signposter = OSSignposter(subsystem: "DiskPersistenceDatastoreRetentionTests", category: .pointsOfInterest)
+        let signpostID = signposter.makeSignpostID()
+        let signpost = signposter.beginInterval("writeDatastore", id: signpostID)
         
         do {
             let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
@@ -81,8 +86,11 @@ final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Senda
             let count = try await datastore.count
             XCTAssertEqual(count, max)
             
+            print("Starting final enforcement")
             await persistence.enforceRetentionPolicy()
+            print("Finished final enforcement")
         }
+        signposter.endInterval("writeDatastore", signpost)
         
         do {
             let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
@@ -100,6 +108,10 @@ final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Senda
             let count = try await datastore.count
             XCTAssertEqual(count, max)
             
+            print("Starting read")
+            let signpostID = signposter.makeSignpostID()
+            let signpost = signposter.beginInterval("readDatastore", id: signpostID)
+            
             let all = datastore.load(...)
             var entries = 0
             
@@ -107,6 +119,9 @@ final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Senda
                 XCTAssertEqual(entry.value, "Twenty Three is Number One")
                 entries += 1
             }
+            
+            signposter.endInterval("readDatastore", signpost)
+            print("Finished read")
             
             XCTAssertEqual(entries, max)
             
@@ -298,8 +313,15 @@ final class DiskPersistenceDatastoreRetentionTests: XCTestCase, @unchecked Senda
             let count = try await datastore.count
             XCTAssertEqual(count, max)
             
+            let signposter = OSSignposter(subsystem: "DiskPersistenceDatastoreRetentionTests", category: .pointsOfInterest)
+            let signpostID = signposter.makeSignpostID()
+            
+            let signpost = signposter.beginInterval("enforceRetentionPolicy", id: signpostID)
+            
             await persistence.setTransactionRetentionPolicy(.transactionCount(0))
             await persistence.enforceRetentionPolicy()
+            
+            signposter.endInterval("enforceRetentionPolicy", signpost)
             
             let count2 = try await datastore.count
             XCTAssertEqual(count2, max)
