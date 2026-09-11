@@ -8,10 +8,41 @@
 //
 
 #if compiler(<6.2)
-extension Task where Failure == Never {
+extension Task {
     @discardableResult
-    init(name: String?, priority: TaskPriority? = nil, operation: sending @escaping @isolated(any) () async -> Success) {
+    init(
+        name: String?,
+        priority: TaskPriority? = nil,
+        @_inheritActorContext @_implicitSelfCapture operation: sending @escaping @isolated(any) () async -> Success
+    ) where Failure == Never {
         self.init(priority: priority, operation: operation)
+    }
+    
+    @discardableResult
+    init(
+        name: String?,
+        priority: TaskPriority? = nil,
+        @_inheritActorContext @_implicitSelfCapture operation: sending @escaping @isolated(any) () async throws -> Success
+    ) where Failure == any Error {
+        self.init(priority: priority, operation: operation)
+    }
+    
+    @discardableResult
+    public static func detached(
+        name: String?,
+        priority: TaskPriority? = nil,
+        operation: sending @escaping @isolated(any) () async -> Success
+    ) -> Task<Success, Failure> where Failure == Never {
+        Task.detached(priority: priority, operation: operation)
+    }
+    
+    @discardableResult
+    public static func detached(
+        name: String?,
+        priority: TaskPriority? = nil,
+        operation: sending @escaping @isolated(any) () async throws -> Success
+    ) -> Task<Success, Failure> where Failure == any Error {
+        Task.detached(priority: priority, operation: operation)
     }
 }
 
