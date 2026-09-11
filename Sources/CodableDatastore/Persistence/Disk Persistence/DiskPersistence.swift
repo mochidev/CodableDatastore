@@ -28,6 +28,10 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     var lastMutatingTransaction: Transaction?
     var rootTransactionStream = TransactionStream()
     
+    var _transactionRetentionPolicy: SnapshotRetentionPolicy = .indefinite
+    
+    let directoriesToRemove = URLCollector()
+    
     /// Shared caches across all snapshots and datastores.
     var rollingRootObjectCacheIndex = 0
     var rollingRootObjectCache: [Datastore.RootObject] = []
@@ -59,6 +63,12 @@ public actor DiskPersistence<AccessMode: _AccessMode>: Persistence {
     /// Use this initializer when you want to access a persistence that is owned by another primary process, which is commonly the case with extensions of apps. This gives you a safe read-only view of the persistence store with no risk of losing data should the main app be active at the same time.
     public init(readOnlyURL: URL) where AccessMode == ReadOnly {
         storeURL = readOnlyURL
+    }
+    
+    deinit {
+        for (_, snapshot) in snapshots {
+            snapshot.cancelPruning()
+        }
     }
     
     /// The default URL to use for disk persistences.
@@ -262,7 +272,7 @@ extension DiskPersistence {
             return snapshot
         }
         
-        let snapshot = Snapshot(id: snapshotID, persistence: self)
+        let snapshot = Snapshot(id: snapshotID, persistence: self, isExtendedIterationCacheEnabled: !_transactionRetentionPolicy.isIndefinite)
         snapshots[snapshotID] = snapshot
         
         return snapshot
@@ -588,7 +598,7 @@ extension DiskPersistence {
         else { throw DiskPersistenceError.cannotWrite }
         
         /// If we are read-write, apply the updated root objects to the snapshot.
-        try await self.updatingCurrentSnapshot { snapshot in
+        let (currentSnapshot, persistedIteration) = try await self.updatingCurrentSnapshot { snapshot in
             try await snapshot.updatingManifest { manifest, iteration in
                 iteration.actionName = actionName
                 iteration.addedDatastoreRoots = addedDatastoreRoots
@@ -600,7 +610,87 @@ extension DiskPersistence {
                         root: root.id
                     )
                 }
+                return (snapshot, iteration)
             }
+        }
+        
+        /// Let the snapshot know it should start pruning from the iteration we just persisted.
+        await currentSnapshot.enforce(retentionPolicy: _transactionRetentionPolicy, fromIteration: persistedIteration.id)
+    }
+}
+
+// MARK: - Retention Policy
+
+extension DiskPersistence where AccessMode == ReadWrite {
+    /// The current transaction retention policy for snapshot iterations written to disk.
+    public var transactionRetentionPolicy: SnapshotRetentionPolicy {
+        get async {
+            _transactionRetentionPolicy
+        }
+    }
+    
+    /// Update the transaction retention policy for snapshot iterations written to disk.
+    ///
+    /// If a snapshot is currently pruning old iterations, it will be allowed to finish with the retention policy in place at the time of the transaction that triggered the policy enforcement. The new policy takes effect once the next transaction is written.
+    ///
+    /// - Parameter policy: The new policy to enforce on write.
+    ///
+    /// - SeeAlso: ``SnapshotRetentionPolicy``.
+    public func setTransactionRetentionPolicy(_ policy: SnapshotRetentionPolicy) async {
+        _transactionRetentionPolicy = policy
+        let currentSnapshot = try? await self.readingCurrentSnapshot { $0 }
+        /// Configure snapshots to start caching iterations to speed up pruning.
+        for (_, snapshot) in snapshots {
+            if snapshot === currentSnapshot {
+                await snapshot.setExtendedIterationCacheEnabled(!_transactionRetentionPolicy.isIndefinite)
+            } else {
+                await snapshot.setExtendedIterationCacheEnabled(false)
+            }
+        }
+    }
+    
+    /// Enforce the retention policy on the persistence immediately.
+    ///
+    /// - Note: Transaction retention policies are enforced after every write transaction, so calling this method directly is often unecessary. However, it can be useful if the user requires disk resources immediately.
+    public func enforceRetentionPolicy() async {
+        let info = try? await self.readingCurrentSnapshot { snapshot -> (snapshot: Snapshot<AccessMode>, iteration: SnapshotIteration)? in
+            guard let snapshot else { return nil }
+            return try await snapshot.readingManifest { manifest, iteration in
+                (snapshot: snapshot, iteration: iteration)
+            }
+        }
+        
+        if let (snapshot, iteration) = info {
+            await snapshot.enforce(retentionPolicy: _transactionRetentionPolicy, fromIteration: iteration.id, taskPriority: Task.currentPriority).value
+        }
+    }
+    
+    func removeEmptyDirectories() {
+        var directoriesToRemove = directoriesToRemove.removeAllURLs()
+        var allDirectories = Set(directoriesToRemove)
+        
+        while let directory = allDirectories.popFirst() {
+            guard (try? FileManager.default.removeDirectoryIfEmpty(url: directory, recursivelyRemoveParents: false)) == true
+            else { continue }
+            
+            let parent = directory.deletingLastPathComponent()
+            if !allDirectories.contains(parent) {
+                directoriesToRemove.append(parent)
+                allDirectories.insert(parent)
+            }
+        }
+    }
+}
+
+extension DiskPersistence {
+    /// Await any cleanup since the last complete write transaction to the persistence.
+    ///
+    /// - Note: An application is not required to await cleanup, as it'll be eventually completed on future runs. It is however useful to wait for this to complete in cases when disk resources must be cleared before progressing.
+    public func checkTransactionCleanupFinished() async {
+        for (_, snapshot) in snapshots {
+            /// Await it twice so we catch any immediately scheduled work since we first suspended.
+            await snapshot.checkPruningFinished()
+            await snapshot.checkPruningFinished()
         }
     }
 }
