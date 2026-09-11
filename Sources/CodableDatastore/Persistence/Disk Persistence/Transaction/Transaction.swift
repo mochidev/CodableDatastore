@@ -56,8 +56,8 @@ extension DiskPersistence {
             self.options = options
             self.transactionIndex = transactionIndex
             
-            let workDidFinishPromise = Promise(name: "DiskPersistence.Transaction.workDidFinish - \"\(actionName ?? "")\"")
-            let transactionDidPersistPromise = Promise(name: "DiskPersistence.Transaction.transactionDidPersist - \"\(actionName ?? "")\"")
+            let workDidFinishPromise = Promise(name: "CodableDatastore.DiskPersistence.Transaction.init(...).workDidFinish - Action: \"\(actionName ?? "")\"")
+            let transactionDidPersistPromise = Promise(name: "CodableDatastore.DiskPersistence.Transaction.init(...).transactionDidPersist - Action: \"\(actionName ?? "")\"")
             
             self.workDidFinishResult = workDidFinishPromise.future
             self.transactionDidPersistResult = transactionDidPersistPromise.future
@@ -107,7 +107,7 @@ extension DiskPersistence {
             /// Persist the work that was just completed to signal to the next transaction that it can start, but check for the requested timing option first. ``persist()`` takes care of signaling when the persistence is finished.
             if options.contains(.collateWrites) {
                 /// If we are skipping immediate writes, kick off persistence in a separate task.
-                Task {
+                Task(name: "CodableDatastore.DiskPersistence.Transaction.run()") {
                     try await self.persist()
                 }
             } else {
