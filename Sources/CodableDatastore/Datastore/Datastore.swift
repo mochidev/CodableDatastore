@@ -160,7 +160,7 @@ extension Datastore {
             if let progressHandler {
                 warmupProgressHandlers.append(progressHandler)
             }
-            let warmupTask = Task {
+            let warmupTask = Task(name: "CodableDatastore.Datastore.warmupIfNeeded(progressHandler:) - Datastore: \(key)") {
                 try await persistence._withTransaction(
                     actionName: "Migrate \(key) Instances",
                     options: []

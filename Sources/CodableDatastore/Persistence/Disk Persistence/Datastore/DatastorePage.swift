@@ -35,7 +35,7 @@ extension DiskPersistence.Datastore {
             self.datastore = datastore
             self.id = id
             self.blocksReaderTask = blocks.map { blocks in
-                Task {
+                Task(name: "CodableDatastore.DiskPersistence.Datastore.Page.init(...) - Page: \(id)") {
                     MultiplexedAsyncSequence(base: AnyReadableSequence(blocks))
                 }
             }
@@ -43,7 +43,7 @@ extension DiskPersistence.Datastore {
         }
         
         deinit {
-            Task { [id, datastore] in
+            Task(name: "CodableDatastore.DiskPersistence.Datastore.Page.deinit - Page: \(id)") { [id, datastore] in
                 await datastore.invalidate(id)
             }
         }
@@ -135,7 +135,7 @@ extension DiskPersistence.Datastore.Page {
                 return try await blocksReaderTask.value
             }
             
-            let readerTask = Task {
+            let readerTask = Task(name: "CodableDatastore.DiskPersistence.Datastore.Page.blocks - Page: \(id)") {
                 try await performRead(sequence: readableSequence)
             }
             isPersisted = true
@@ -192,7 +192,7 @@ actor MultiplexedAsyncSequence<Base: AsyncSequence & Sendable>: AsyncSequence wh
             
             let lastTask: Task<Element?, any Error>? = cachedEntries.last
             
-            let newTask = Task {
+            let newTask = Task(name: "CodableDatastore.MultiplexedAsyncSequence.subscript(_:)") {
                 /// Make sure previous iteration finished before sourcing the next one.
                 _ = try? await lastTask?.value
                 

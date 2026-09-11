@@ -45,7 +45,7 @@ extension DiskPersistence.Datastore {
         }
         
         deinit {
-            Task { [id, datastore] in
+            Task(name: "CodableDatastore.DiskPersistence.Datastore.Index.deinit - Index: \(id)") { [id, datastore] in
                 await datastore.invalidate(id)
             }
         }
@@ -124,7 +124,7 @@ extension DiskPersistence.Datastore.Index {
         get async throws {
             if let manifestTask { return try await manifestTask.value }
             
-            let loader = Task {
+            let loader = Task(name: "CodableDatastore.DiskPersistence.Datastore.Index.manifest - Index: \(id)") {
                 if let _manifest { return _manifest }
                 
                 let manifest = try await DatastoreIndexManifest(contentsOf: manifestURL, id: id.manifestID)

@@ -91,7 +91,7 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
                     }
                 }
             } onCancel: {
-                Task { await cancelPendingRead() }
+                Task(name: "CodableDatastore.AsyncThrowingBackpressureStream.consumeNext()") { await cancelPendingRead() }
             }
         }
         
@@ -119,7 +119,7 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
                         continuation.resume(throwing: CancellationError())
                         return
                     }
-                    Task {
+                    Task(name: "CodableDatastore.AsyncThrowingBackpressureStream.Continuation.yield()") {
                         await stateMachine.provide(.success(value), in: continuation)
                     }
                 } as Void
@@ -133,7 +133,7 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
                 guard let stateMachine else { continuation.resume(throwing: CancellationError())
                     return
                 }
-                Task {
+                Task(name: "CodableDatastore.AsyncThrowingBackpressureStream.Continuation.finish(throwing:)") {
                     if let error {
                         await stateMachine.provide(.failure(error), in: continuation)
                     } else {
@@ -150,7 +150,7 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
         stateMachine = StateMachine()
         
         let continuation = Continuation(stateMachine: stateMachine)
-        Task {
+        Task(name: "CodableDatastore.AsyncThrowingBackpressureStream.init(provider:)") {
             do {
                 try await provider(continuation)
                 try await continuation.finish()

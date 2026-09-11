@@ -27,7 +27,7 @@ class AsyncFileReader: @unchecked Sendable {
     
     init(contentsOf url: URL) {
         self.url = url
-        self.readerTask = Task(name: "AsyncFileReader") { await self.startReading() }
+        self.readerTask = Task(name: "CodableDatastore.AsyncFileReader.init(contentsOf:) - File: \(url.lastPathComponent)") { await self.startReading() }
     }
     
     func startReading() async {

@@ -71,7 +71,7 @@ extension DiskPersistence.Datastore {
         }
         
         deinit {
-            Task { [id, datastore] in
+            Task(name: "CodableDatastore.DiskPersistence.Datastore.RootObject.deinit - RootObject: \(id)") { [id, datastore] in
                 await datastore.invalidate(id)
             }
         }

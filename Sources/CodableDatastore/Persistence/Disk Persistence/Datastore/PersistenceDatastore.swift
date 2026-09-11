@@ -138,13 +138,13 @@ extension DiskPersistence.Datastore {
 //        print("🤷 Cache Miss: Root \(identifier)")
         let rootObject = RootObject(datastore: self, id: identifier)
         trackedRootObjects[identifier] = WeakValue(rootObject)
-        Task { await snapshot.persistence.cache(rootObject) }
+        Task(name: "CodableDatastore.DiskPersistence.Datastore.rootObject(for:).cache - Datastore: \(id)") { await snapshot.persistence.cache(rootObject) }
         return rootObject
     }
     
     func adopt(rootObject: RootObject) {
         trackedRootObjects[rootObject.id] = WeakValue(rootObject)
-        Task { await snapshot.persistence.cache(rootObject) }
+        Task(name: "CodableDatastore.DiskPersistence.Datastore.adopt(rootObject:).cache - Datastore: \(id)") { await snapshot.persistence.cache(rootObject) }
     }
     
     func invalidate(_ identifier: RootObject.ID) {
@@ -166,13 +166,13 @@ extension DiskPersistence.Datastore {
 //        print("🤷 Cache Miss: Index \(identifier)")
         let index = Index(datastore: self, id: identifier)
         trackedIndexes[identifier] = WeakValue(index)
-        Task { await snapshot.persistence.cache(index) }
+        Task(name: "CodableDatastore.DiskPersistence.Datastore.index(for:).cache - Datastore: \(id)") { await snapshot.persistence.cache(index) }
         return index
     }
     
     func adopt(index: Index) {
         trackedIndexes[index.id] = WeakValue(index)
-        Task { await snapshot.persistence.cache(index) }
+        Task(name: "CodableDatastore.DiskPersistence.Datastore.adopt(index:).cache - Datastore: \(id)") { await snapshot.persistence.cache(index) }
     }
     
     func invalidate(_ identifier: Index.ID) {
@@ -194,13 +194,13 @@ extension DiskPersistence.Datastore {
 //        print("🤷 Cache Miss: Page \(identifier.page)")
         let page = Page(datastore: self, id: identifier)
         trackedPages[identifier.withoutManifest] = WeakValue(page)
-        Task { await snapshot.persistence.cache(page) }
+        Task(name: "CodableDatastore.DiskPersistence.Datastore.page(for:).cache - Datastore: \(id)") { await snapshot.persistence.cache(page) }
         return page
     }
     
     func adopt(page: Page) {
         trackedPages[page.id.withoutManifest] = WeakValue(page)
-        Task { await snapshot.persistence.cache(page) }
+        Task(name: "CodableDatastore.DiskPersistence.Datastore.adopt(page:).cache - Datastore: \(id)") { await snapshot.persistence.cache(page) }
     }
     
     func invalidate(_ identifier: Page.ID) {
@@ -262,7 +262,7 @@ extension DiskPersistence.Datastore {
         nextObserverID += 1
         observers[id] = observer
         observer.onTermination = { _ in
-            Task {
+            Task(name: "CodableDatastore.DiskPersistence.Datastore.register(observer:).onTermination - Datastore: \(self.id), Observer: \(id)") {
                 await self.unregisterObserver(for: id)
             }
         }
