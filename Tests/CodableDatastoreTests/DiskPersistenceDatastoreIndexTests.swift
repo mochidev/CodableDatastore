@@ -423,7 +423,7 @@ final class DiskPersistenceDatastoreIndexTests: XCTestCase, @unchecked Sendable 
             let exp = expectation(description: "Finished")
             Task { [pageInfos, pageLookup] in
                 for _ in 0..<1000 {
-                    _ = try await index.pageIndex(for: UInt64.random(in: 0..<1000000), in: pageInfos, requiresCompleteEntries: false) { pageID in
+                    _ = try? await index.pageIndex(for: UInt64.random(in: 0..<1000000), in: pageInfos, requiresCompleteEntries: false) { pageID in
                         pageLookup[pageID]!
                     } comparator: { lhs, rhs in
                         lhs.sortOrder(comparedTo: try UInt64(bigEndianBytes: rhs.headers[0]))
