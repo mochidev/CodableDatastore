@@ -13,6 +13,9 @@ extension AsyncInstances {
     /// Returns the first instance of the sequence, if it exists.
     ///
     /// - Returns: The first instance of the sequence, or `nil` if the sequence is empty.
+    #if compiler(>=6.2)
+    @concurrent
+    #endif
     public var firstInstance: Element? {
         get async throws { try await first { _ in true } }
     }
@@ -24,6 +27,9 @@ extension AsyncInstances {
     /// - Warning: This method is only safe to use from sequences vended by a Datastore ranged ``Datastore/load(range:order:)-(IndexRangeExpression<IdentifierType>,_)`` operation as they guarantee that the returned sequence won't stall due to unavailable instances. Do not use it when collecting observations as there is no guarantee observations will be returned!
     /// - Parameter collectionLimit: The maximum amount of entries to collect. Specify `.infinity` to _questionably_ collect all instances.
     /// - Returns: An array of instances up to the collection limit.
+    #if compiler(>=6.2)
+    @concurrent
+    #endif
     public func collectInstances(upTo collectionLimit: Int) async throws -> [Element] {
         var instances: [Element] = []
         for try await instance in self {
@@ -42,6 +48,9 @@ extension AsyncInstances {
     /// - Warning: This method is only safe to use from sequences vended by a Datastore ranged ``Datastore/load(range:order:)-(IndexRangeExpression<IdentifierType>,_)`` operation as they guarantee that the returned sequence won't stall due to unavailable instances. Do not use it when collecting observations as there is no guarantee observations will be returned!
     /// - Parameter collectionLimit: The maximum amount of entries to collect. Specify `.infinity` to _questionably_  collect all instances.
     /// - Returns: An array of instances up to the collection limit.
+    #if compiler(>=6.2)
+    @concurrent
+    #endif
     public func collectInstances(upTo collectionLimit: AsyncInstancesLimit) async throws -> [Element] {
         try await collectInstances(upTo: .max)
     }
