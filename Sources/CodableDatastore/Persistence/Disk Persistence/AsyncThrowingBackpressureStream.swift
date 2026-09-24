@@ -128,9 +128,11 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
             }
         }
         
-        fileprivate func finish(throwing error: (any Error)? = nil) async throws {
-            try await withCheckedThrowingContinuation { continuation in
-                guard let stateMachine else { continuation.resume(throwing: CancellationError())
+        fileprivate func finish(throwing error: (any Error)? = nil) async {
+            /// Do nothing if the continuation fails, as the stream was already consumed or cancelled.
+            try? await withCheckedThrowingContinuation { continuation in
+                guard let stateMachine else {
+                    continuation.resume(throwing: CancellationError())
                     return
                 }
                 Task(name: "CodableDatastore.AsyncThrowingBackpressureStream.Continuation.finish(throwing:)") {
@@ -153,9 +155,9 @@ struct AsyncThrowingBackpressureStream<Element: Sendable>: Sendable {
         Task(name: "CodableDatastore.AsyncThrowingBackpressureStream.init(provider:)") {
             do {
                 try await provider(continuation)
-                try await continuation.finish()
+                await continuation.finish()
             } catch {
-                try await continuation.finish(throwing: error)
+                await continuation.finish(throwing: error)
             }
         }
     }
