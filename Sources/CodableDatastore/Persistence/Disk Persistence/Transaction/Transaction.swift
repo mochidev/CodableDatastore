@@ -108,7 +108,8 @@ extension DiskPersistence {
             if options.contains(.collateWrites) {
                 /// If we are skipping immediate writes, kick off persistence in a separate task.
                 Task(name: "CodableDatastore.DiskPersistence.Transaction.run()") {
-                    try await self.persist()
+                    // TODO: Rethink collated writes here…
+                    try? await self.persist()
                 }
             } else {
                 /// If we don't care to collate our writes, go ahead and wait for the persistence to stick
