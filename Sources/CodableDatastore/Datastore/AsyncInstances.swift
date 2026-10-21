@@ -7,7 +7,7 @@
 //  mochidev-codable-datastore: 8A3D87799CB24B2BA7A7661369B88325
 //
 
-public protocol AsyncInstances<Element>: AsyncSequence, Sendable {}
+public protocol AsyncInstances<Element>: AsyncSequence, Sendable where AsyncIterator: Sendable {}
 
 extension AsyncInstances {
     /// Returns the first instance of the sequence, if it exists.
