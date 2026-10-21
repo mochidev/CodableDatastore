@@ -157,6 +157,42 @@ jobs:
       run: |
         swift build --configuration debug
 
+  Build-Release-6-5:
+    name: Build Swift 6.5 Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v6
+    - name: Set Swift Version
+      uses: vapor/swiftly-action@v0.2
+      with:
+        toolchain: "6.5.x-snapshot"
+    - name: Swift Version
+      run: |
+        swift --version
+    - name: Build
+      run: |
+        swift build --configuration release
+
+  Build-Debug-6-5:
+    name: Build Swift 6.5 Debug
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v6
+    - name: Set Swift Version
+      uses: vapor/swiftly-action@v0.2
+      with:
+        toolchain: "6.5.x-snapshot"
+    - name: Swift Version
+      run: |
+        swift --version
+    - name: Build
+      run: |
+        swift build --configuration debug
+
   Build-Release-main:
     name: Build Swift main Release
     runs-on: ubuntu-latest
