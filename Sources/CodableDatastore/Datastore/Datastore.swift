@@ -204,7 +204,7 @@ extension Datastore {
         
         /// Check the primary index for compatibility.
         if persistedDescriptor.identifierType != updatedDescriptor.identifierType {
-            try await transaction.resetPrimaryIndex(datastoreKey: key)
+            /// Defer resetting the index until we finished reading it.
             rebuildPrimaryIndex = true
         }
         
@@ -257,14 +257,26 @@ extension Datastore {
         
         /// Only perform work if we need to rebuild anything.
         if rebuildPrimaryIndex || !directIndexesToBuild.isEmpty || !secondaryIndexesToBuild.isEmpty {
-            /// Create any missing indexes and prime the datastore for writing.
-            try await transaction.apply(descriptor: updatedDescriptor, for: key)
-            
-            let primaryIndex = _load(range: IndexRange(), order: .ascending, awaitWarmup: false)
+            var appliedDescriptor = false
             
             let versionData = try Data(self.version)
             
+            /// Grab a read pointer to the primary index as it exists on disk.
+            let primaryIndex = _load(range: IndexRange.unbounded, order: .ascending, awaitWarmup: false)
             for try await (identifier, instance) in primaryIndex {
+                /// Wait until we synchronize with the first read attempt before applying the new descriptor.
+                if !appliedDescriptor {
+                    appliedDescriptor = true
+                    
+                    /// Actually rebuild the primary index if needed.
+                    if rebuildPrimaryIndex {
+                        try await transaction.resetPrimaryIndex(datastoreKey: key)
+                    }
+                    
+                    /// Create any missing indexes and prime the datastore for writing.
+                    try await transaction.apply(descriptor: updatedDescriptor, for: key)
+                }
+                
                 defer { index += 1 }
                 
                 /// Notify progress handlers we are starting an entry.
