@@ -1096,4 +1096,1041 @@ final class DiskPersistenceDatastoreTests: XCTestCase, @unchecked Sendable {
             XCTAssertEqual(count, 101)
         }
     }
+    
+    func testWarmingDatastore() async throws {
+        struct TestFormat: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormat.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormat.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormat.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+    }
+    
+    func testMigratingDatastoreMembers() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Double
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreCreatingReferenceIndex() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            var byValue = Index(\.value)
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .working(current: 0, total: 1),
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreRemovingReferenceIndex() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            var byValue = Index(\.value)
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreChangingReferenceIndex() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            var byValue = Index(\.value)
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Double
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            var byValue = Index(\.value)
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .working(current: 0, total: 1),
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreCreatingDirectIndex() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            @Direct var byValue = Index(\.value)
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .working(current: 0, total: 1),
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreRemovingDirectIndex() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            @Direct var byValue = Index(\.value)
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreChangingDirectIndex() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            @Direct var byValue = Index(\.value)
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Double
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            @Direct var byValue = Index(\.value)
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .working(current: 0, total: 1),
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreChangingIndexToDirect() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            var byValue = Index(\.value)
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            @Direct var byValue = Index(\.value)
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .working(current: 0, total: 1),
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreChangingIndexToReference() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            @Direct var byValue = Index(\.value)
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+            
+            var byValue = Index(\.value)
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: "0", value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .working(current: 0, total: 1),
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: "0", value: 0)
+            ])
+        }
+    }
+    
+    func testMigratingDatastoreChangingPrimaryIndex() async throws {
+        struct TestFormatA: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: String
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        struct TestFormatB: DatastoreFormat {
+            enum Version: Int, CaseIterable {
+                case zero
+            }
+            
+            struct Instance: Codable, Identifiable, Hashable {
+                var id: UUID
+                var value: Int
+            }
+            
+            static let defaultKey: DatastoreKey = "test"
+            static let currentVersion = Version.zero
+        }
+        
+        let id = UUID()
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatA.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatA.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 0)
+            }
+            
+            try await datastore.persist(.init(id: id.uuidString, value: 0))
+            
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+        }
+        
+        do {
+            let persistence = try DiskPersistence(readWriteURL: temporaryStoreURL)
+            
+            let datastore = Datastore.JSONStore(
+                persistence: persistence,
+                format: TestFormatB.self,
+                migrations: [
+                    .zero: { try $0.decode(TestFormatB.Instance.self, from: $1) }
+                ]
+            )
+            
+            nonisolated(unsafe) var progressEvents: [CodableDatastore.Progress] = []
+            
+            try await datastore.warm { progress in
+                progressEvents.append(progress)
+            }
+            
+            XCTAssertEqual(progressEvents, [
+                .evaluating,
+                .working(current: 0, total: 1),
+                .complete(total: 1),
+            ])
+            do {
+                let count = try await datastore.count
+                XCTAssertEqual(count, 1)
+            }
+            
+            let instances = try await datastore.load(...).collectInstances(upTo: .infinity)
+            XCTAssertEqual(instances, [
+                .init(id: id, value: 0)
+            ])
+        }
+    }
 }
