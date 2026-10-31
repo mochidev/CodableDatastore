@@ -11,7 +11,7 @@ import Foundation
 
 public typealias ProgressHandler = @Sendable (_ progress: Progress) async -> Void
 
-public enum Progress: Sendable {
+public enum Progress: Sendable, Hashable {
     case evaluating
     case working(current: Int, total: Int)
     case complete(total: Int)
