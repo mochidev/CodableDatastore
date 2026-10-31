@@ -15,7 +15,7 @@ concurrency:
 jobs:
   Build-Release-6-1:
     name: Build Swift 6.1 Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
     - name: Checkout Source
@@ -33,7 +33,7 @@ jobs:
 
   Build-Debug-6-1:
     name: Build Swift 6.1 Debug
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
     - name: Checkout Source
@@ -51,7 +51,7 @@ jobs:
 
   Build-Release-6-2:
     name: Build Swift 6.2 Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
     - name: Checkout Source
@@ -69,7 +69,7 @@ jobs:
 
   Build-Debug-6-2:
     name: Build Swift 6.2 Debug
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
     - name: Checkout Source
@@ -87,7 +87,7 @@ jobs:
 
   Build-Release-6-3:
     name: Build Swift 6.3 Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
     - name: Checkout Source
@@ -105,7 +105,7 @@ jobs:
 
   Build-Debug-6-3:
     name: Build Swift 6.3 Debug
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
     - name: Checkout Source
